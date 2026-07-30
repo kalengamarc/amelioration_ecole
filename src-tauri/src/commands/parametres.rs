@@ -71,80 +71,25 @@ pub fn save_parametres(
     let now = now_iso();
     let id = generate_id();
     let taux = taux_change_usd_bif.unwrap_or(2500.0);
-    let devise = devise_defaut.clone().unwrap_or_else(|| "BIF".to_string());
+    let devise = devise_defaut.unwrap_or_else(|| "BIF".to_string());
 
     let conn = db.lock()?;
 
-    let existing_id: Option<String> = {
-        let mut sql = "SELECT id FROM ParametreEtablissement WHERE etablissement_id = ?".to_string();
-        let mut param_s: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(etablissement_id.clone())];
+    // Check if configuration already exists for this etablissement_id (regardless of annee_scolaire_id)
+    let existing_id: Option<String> = conn.query_row(
+        "SELECT id FROM ParametreEtablissement WHERE etablissement_id = ?",
+        params![etablissement_id],
+        |row| row.get(0),
+    ).ok();
 
-        if let Some(ref asid) = annee_scolaire_id {
-            sql.push_str(" AND annee_scolaire_id = ?");
-            param_s.push(Box::new(asid.clone()));
-        } else {
-            sql.push_str(" AND annee_scolaire_id IS NULL");
-        }
-
-        let refs: Vec<&dyn rusqlite::types::ToSql> = param_s.iter().map(|p| p.as_ref()).collect();
-        conn.query_row(&sql, refs.as_slice(), |row| row.get::<_, String>(0)).ok()
-    };
-
-    let result = if let Some(existing) = existing_id {
-        let mut sets = vec!["updated_at = ?".to_string()];
-        let mut vals: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
-
-        if let Some(ref v) = annee_scolaire_id {
-            sets.push("annee_scolaire_id = ?".into());
-            vals.push(Box::new(v.clone()));
-        }
-        if let Some(ref v) = mentions_legales {
-            sets.push("mentions_legales = ?".into());
-            vals.push(Box::new(v.clone()));
-        }
-        if let Some(ref v) = pied_page_recu {
-            sets.push("pied_page_recu = ?".into());
-            vals.push(Box::new(v.clone()));
-        }
-        if let Some(ref v) = nom_imprimante {
-            sets.push("nom_imprimante = ?".into());
-            vals.push(Box::new(v.clone()));
-        }
-        if taux_change_usd_bif.is_some() {
-            sets.push("taux_change_usd_bif = ?".into());
-            vals.push(Box::new(taux));
-        }
-        if devise_defaut.is_some() {
-            sets.push("devise_defaut = ?".into());
-            vals.push(Box::new(devise));
-        }
-
-        vals.push(Box::new(existing.clone()));
-
-        let sql = format!("UPDATE ParametreEtablissement SET {} WHERE id = ?", sets.join(", "));
-        let refs: Vec<&dyn rusqlite::types::ToSql> = vals.iter().map(|p| p.as_ref()).collect();
-        conn.execute(&sql, refs.as_slice())?;
-
-        drop(conn);
-        log_audit(&db, None, "UPDATE", "parametre_etablissement", Some(&etablissement_id), None);
-
-        let conn = db.lock()?;
-        conn.query_row(
-            "SELECT id, etablissement_id, annee_scolaire_id, mentions_legales, pied_page_recu, \
-             nom_imprimante, taux_change_usd_bif, devise_defaut \
-             FROM ParametreEtablissement WHERE id = ?",
-            params![existing],
-            |row| Ok(ParametresResponse {
-                id: row.get(0)?,
-                etablissement_id: row.get(1)?,
-                annee_scolaire_id: row.get(2)?,
-                mentions_legales: row.get(3)?,
-                pied_page_recu: row.get(4)?,
-                nom_imprimante: row.get(5)?,
-                taux_change_usd_bif: row.get(6)?,
-                devise_defaut: row.get(7)?,
-            }),
-        )?
+    if let Some(existing) = existing_id {
+        conn.execute(
+            "UPDATE ParametreEtablissement SET \
+             annee_scolaire_id = ?1, mentions_legales = ?2, pied_page_recu = ?3, \
+             nom_imprimante = ?4, taux_change_usd_bif = ?5, devise_defaut = ?6, updated_at = ?7 \
+             WHERE id = ?8",
+            params![annee_scolaire_id, mentions_legales, pied_page_recu, nom_imprimante, taux, devise, now, existing],
+        )?;
     } else {
         conn.execute(
             "INSERT INTO ParametreEtablissement (id, etablissement_id, annee_scolaire_id, mentions_legales, \
@@ -153,28 +98,28 @@ pub fn save_parametres(
             params![id, etablissement_id, annee_scolaire_id, mentions_legales, pied_page_recu,
                     nom_imprimante, taux, devise, now, now],
         )?;
+    }
 
-        drop(conn);
-        log_audit(&db, None, "CREATE", "parametre_etablissement", Some(&etablissement_id), None);
+    drop(conn);
+    log_audit(&db, None, "UPDATE", "parametre_etablissement", Some(&etablissement_id), None);
 
-        let conn = db.lock()?;
-        conn.query_row(
-            "SELECT id, etablissement_id, annee_scolaire_id, mentions_legales, pied_page_recu, \
-             nom_imprimante, taux_change_usd_bif, devise_defaut \
-             FROM ParametreEtablissement WHERE id = ?",
-            params![id],
-            |row| Ok(ParametresResponse {
-                id: row.get(0)?,
-                etablissement_id: row.get(1)?,
-                annee_scolaire_id: row.get(2)?,
-                mentions_legales: row.get(3)?,
-                pied_page_recu: row.get(4)?,
-                nom_imprimante: row.get(5)?,
-                taux_change_usd_bif: row.get(6)?,
-                devise_defaut: row.get(7)?,
-            }),
-        )?
-    };
+    let conn = db.lock()?;
+    let result = conn.query_row(
+        "SELECT id, etablissement_id, annee_scolaire_id, mentions_legales, pied_page_recu, \
+         nom_imprimante, taux_change_usd_bif, devise_defaut \
+         FROM ParametreEtablissement WHERE etablissement_id = ?",
+        params![etablissement_id],
+        |row| Ok(ParametresResponse {
+            id: row.get(0)?,
+            etablissement_id: row.get(1)?,
+            annee_scolaire_id: row.get(2)?,
+            mentions_legales: row.get(3)?,
+            pied_page_recu: row.get(4)?,
+            nom_imprimante: row.get(5)?,
+            taux_change_usd_bif: row.get(6)?,
+            devise_defaut: row.get(7)?,
+        }),
+    )?;
 
     Ok(api_response(Ok(result)))
 }

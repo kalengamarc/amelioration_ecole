@@ -7,6 +7,7 @@ use crate::utils::{id::generate_id, audit_logger::log_audit};
 use serde::Serialize;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncStatus {
     pub configured: bool,
     pub last_sync: Option<String>,
@@ -44,8 +45,8 @@ pub fn sync_status(db: State<'_, DbConn>) -> Result<serde_json::Value, AppError>
 
     drop(conn);
 
-    let configured = supabase_url.is_some() && supabase_url.as_ref().map_or(false, |u| !u.is_empty())
-        && supabase_key.is_some() && supabase_key.as_ref().map_or(false, |k| !k.is_empty());
+    let configured = supabase_url.is_some() && supabase_url.as_ref().map_or(false, |u| !u.trim().is_empty())
+        && supabase_key.is_some() && supabase_key.as_ref().map_or(false, |k| !k.trim().is_empty());
 
     let status = SyncStatus {
         configured,
@@ -77,27 +78,33 @@ pub fn save_sync_config(
     supabase_url: String,
     supabase_key: String,
 ) -> Result<serde_json::Value, AppError> {
-    let conn = db.lock()?;
+    let url_clean = supabase_url.trim().to_string();
+    let key_clean = supabase_key.trim().to_string();
+
+    if url_clean.is_empty() || key_clean.is_empty() {
+        return Err(AppError::Internal("L'URL et la clé Supabase ne peuvent pas être vides".to_string()));
+    }
 
     let now = now_iso();
+    let conn = db.lock()?;
 
     // UPSERT SUPABASE_URL
     conn.execute(
         "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
          VALUES (?1, 'SUPABASE_URL', ?2, ?3, ?3) \
          ON CONFLICT(cle) DO UPDATE SET valeur = ?2, updated_at = ?3",
-        params![generate_id(), supabase_url, now],
+        params![generate_id(), url_clean, now],
     )
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    .map_err(|e| AppError::Database(format!("Erreur enregistrement SUPABASE_URL: {}", e)))?;
 
     // UPSERT SUPABASE_KEY
     conn.execute(
         "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
          VALUES (?1, 'SUPABASE_KEY', ?2, ?3, ?3) \
          ON CONFLICT(cle) DO UPDATE SET valeur = ?2, updated_at = ?3",
-        params![generate_id(), supabase_key, now],
+        params![generate_id(), key_clean, now],
     )
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    .map_err(|e| AppError::Database(format!("Erreur enregistrement SUPABASE_KEY: {}", e)))?;
 
     drop(conn);
 
@@ -107,8 +114,8 @@ pub fn save_sync_config(
         "UPDATE",
         "ConfigSysteme",
         None,
-        Some("Updated sync configuration"), // Corrigé : Option<&str>
+        Some("Updated sync configuration"),
     );
 
-    Ok(api_response(Ok("Sync configuration saved successfully")))
+    Ok(api_response(Ok("Configuration enregistrée avec succès")))
 }
