@@ -288,6 +288,16 @@ CREATE TABLE IF NOT EXISTS ConfigSysteme (
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS SyncLog (
+    id            TEXT PRIMARY KEY,
+    table_name    TEXT NOT NULL,
+    last_sync_at  TEXT NOT NULL,
+    direction     TEXT NOT NULL DEFAULT 'BIDIRECTIONAL',
+    status        TEXT NOT NULL DEFAULT 'SUCCESS',
+    details       TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 "#;
 
 pub fn get_db_path() -> String {

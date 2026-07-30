@@ -290,6 +290,17 @@ CREATE TABLE IF NOT EXISTS ConfigSysteme (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ============= JOURNAL DE SYNCHRONISATION =============
+CREATE TABLE IF NOT EXISTS SyncLog (
+    id            TEXT PRIMARY KEY,
+    table_name    TEXT NOT NULL,
+    last_sync_at  TIMESTAMPTZ NOT NULL,
+    direction     TEXT NOT NULL DEFAULT 'BIDIRECTIONAL',
+    status        TEXT NOT NULL DEFAULT 'SUCCESS',
+    details       TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Habiliter les requêtes sur ces tables depuis PostgREST (Supabase)
 -- Si l'accès est refusé publiquement, vous pouvez désactiver RLS ou ajouter des politiques de sécurité (Policies).
 -- Pour un fonctionnement direct de type prototype/fermé, nous pouvons désactiver RLS sur ces tables :
@@ -310,3 +321,4 @@ ALTER TABLE Depense DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ParametreEtablissement DISABLE ROW LEVEL SECURITY;
 ALTER TABLE AuditLog DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ConfigSysteme DISABLE ROW LEVEL SECURITY;
+ALTER TABLE SyncLog DISABLE ROW LEVEL SECURITY;

@@ -27,6 +27,10 @@ struct TableConfig {
     pk_cols: Vec<&'static str>,
 }
 
+fn encode_param(s: &str) -> String {
+    s.replace('+', "%2B").replace(' ', "%20")
+}
+
 // Map local entity names in AuditLog to SQLite / PostgreSQL table names
 fn map_entity_to_table(entity: &str) -> Option<&'static str> {
     match entity.to_lowercase().as_str() {
@@ -75,6 +79,8 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     if supabase_url.is_empty() || supabase_key.is_empty() {
         return Err(AppError::Internal("URL ou clé Supabase vide".to_string()));
     }
+
+    let supabase_url = supabase_url.trim_end_matches('/').to_string();
 
     // 2. Retrieve last sync time
     let last_sync: String = conn.query_row(
@@ -209,7 +215,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     // ==========================================
 
     // A. Pull Deletions from Remote AuditLog
-    let url_del = format!("{}/rest/v1/AuditLog?action=eq.DELETE&created_at=gt.{}", supabase_url, last_sync);
+    let url_del = format!("{}/rest/v1/AuditLog?action=eq.DELETE&created_at=gt.{}", supabase_url, encode_param(&last_sync));
     let res_del = client.get(&url_del)
         .header("apikey", &supabase_key)
         .header("Authorization", format!("Bearer {}", supabase_key))
@@ -244,7 +250,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             "created_at"
         };
 
-        let url = format!("{}/rest/v1/{}?{}=gt.{}", supabase_url, t.name, timestamp_col, last_sync);
+        let url = format!("{}/rest/v1/{}?{}=gt.{}", supabase_url, t.name, timestamp_col, encode_param(&last_sync));
         let res = client.get(&url)
             .header("apikey", &supabase_key)
             .header("Authorization", format!("Bearer {}", supabase_key))
@@ -330,11 +336,11 @@ fn query_table_since(
     has_updated_at: bool,
 ) -> Result<Vec<Value>, AppError> {
     let query = if has_updated_at {
-        format!("SELECT * FROM {} WHERE updated_at > ?", table_name)
+        format!("SELECT * FROM \"{}\" WHERE updated_at > ?", table_name)
     } else if table_name == "EleveClasse" {
-        format!("SELECT * FROM {} WHERE date_inscription > ?", table_name)
+        format!("SELECT * FROM \"{}\" WHERE date_inscription > ?", table_name)
     } else {
-        format!("SELECT * FROM {} WHERE created_at > ?", table_name)
+        format!("SELECT * FROM \"{}\" WHERE created_at > ?", table_name)
     };
 
     let mut stmt = conn.prepare(&query)?;
@@ -413,26 +419,27 @@ fn upsert_row(
 
     if cols.is_empty() { return Ok(()); }
 
-    let pk_clause = pk_cols.join(", ");
+    let quoted_cols: Vec<String> = cols.iter().map(|c| format!("\"{}\"", c)).collect();
+    let pk_clause = pk_cols.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ");
 
     let update_parts: Vec<String> = cols.iter()
         .filter(|&&c| !pk_cols.contains(&c))
-        .map(|&c| format!("{}=excluded.{}", c, c))
+        .map(|&c| format!("\"{}\"=excluded.\"{}\"", c, c))
         .collect();
 
     let sql = if update_parts.is_empty() {
         format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT({}) DO NOTHING",
+            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT({}) DO NOTHING",
             table_name,
-            cols.join(", "),
+            quoted_cols.join(", "),
             val_placeholders.join(", "),
             pk_clause
         )
     } else {
         format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT({}) DO UPDATE SET {}",
+            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT({}) DO UPDATE SET {}",
             table_name,
-            cols.join(", "),
+            quoted_cols.join(", "),
             val_placeholders.join(", "),
             pk_clause,
             update_parts.join(", ")
