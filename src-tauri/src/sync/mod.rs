@@ -57,6 +57,9 @@ fn map_entity_to_table(entity: &str) -> Option<&'static str> {
 pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError> {
     let start_time = now_iso();
 
+    // Disable SQLite foreign keys temporarily during sync to allow safe upserts
+    let _ = conn.execute_batch("PRAGMA foreign_keys=OFF;");
+
     // 1. Retrieve Supabase config
     let supabase_url: String = match conn.query_row(
         "SELECT valeur FROM ConfigSysteme WHERE cle = 'SUPABASE_URL'",
@@ -315,6 +318,9 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         }
     }
 
+    // Re-enable foreign keys after sync
+    let _ = conn.execute_batch("PRAGMA foreign_keys=ON;");
+
     // Convert stats hashmap to sorted vector
     let mut stats_vec: Vec<TableSyncStats> = stats.into_values().collect();
     stats_vec.sort_by(|a, b| a.table_name.cmp(&b.table_name));
@@ -423,7 +429,7 @@ fn upsert_row(
     let pk_clause = pk_cols.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ");
 
     let update_parts: Vec<String> = cols.iter()
-        .filter(|&&c| !pk_cols.contains(&c))
+        .filter(|&&c| !pk_cols.contains(&c) && c != "id")
         .map(|&c| format!("\"{}\"=excluded.\"{}\"", c, c))
         .collect();
 
