@@ -84,7 +84,8 @@ export default function ParametresPage() {
       toast.success("Configuration de synchronisation enregistrée.")
       fetchSyncStatus()
     } catch (err: any) {
-      toast.error(err.message || "Erreur lors de l'enregistrement.")
+      const msg = typeof err === 'string' ? err : (err?.message || err?.error || JSON.stringify(err))
+      toast.error(msg || "Erreur lors de l'enregistrement.")
     } finally {
       setSaving(false)
     }
@@ -104,7 +105,8 @@ export default function ParametresPage() {
         toast.error(data.message || "La synchronisation a échoué.")
       }
     } catch (err: any) {
-      toast.error(err.message || "Erreur réseau ou connexion Supabase impossible.")
+      const msg = typeof err === 'string' ? err : (err?.message || err?.error || (typeof err === 'object' ? JSON.stringify(err) : String(err)))
+      toast.error(msg || "Erreur réseau ou connexion Supabase impossible.")
     } finally {
       setSyncing(false)
     }

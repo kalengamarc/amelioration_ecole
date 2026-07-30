@@ -80,7 +80,10 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         return Err(AppError::Internal("URL ou clé Supabase vide".to_string()));
     }
 
-    let supabase_url = supabase_url.trim_end_matches('/').to_string();
+    let mut supabase_url = supabase_url.trim_end_matches('/').to_string();
+    if !supabase_url.starts_with("http://") && !supabase_url.starts_with("https://") {
+        supabase_url = format!("https://{}", supabase_url);
+    }
 
     // 2. Retrieve last sync time
     let last_sync: String = conn.query_row(
