@@ -2,28 +2,48 @@
 -- Ce script crée l'ensemble des tables requises pour la synchronisation bidirectionnelle.
 -- Exécutez ce script dans l'éditeur SQL de votre projet Supabase.
 
--- ============= DÉSACTIVATION ÉVENTUELLE DE LA VÉRIFICATION DES CLÉS (POUR LA RE-CRÉATION) =============
--- DROP TABLE IF EXISTS SyncLog CASCADE;
--- DROP TABLE IF EXISTS ConfigSysteme CASCADE;
--- DROP TABLE IF EXISTS AuditLog CASCADE;
--- DROP TABLE IF EXISTS ParametreEtablissement CASCADE;
--- DROP TABLE IF EXISTS Depense CASCADE;
--- DROP TABLE IF EXISTS AnnulationRecu CASCADE;
--- DROP TABLE IF EXISTS Paiement CASCADE;
--- DROP TABLE IF EXISTS Echeance CASCADE;
--- DROP TABLE IF EXISTS FraisClasse CASCADE;
--- DROP TABLE IF EXISTS FraisScolaire CASCADE;
--- DROP TABLE IF EXISTS EleveClasse CASCADE;
--- DROP TABLE IF EXISTS TuteurEleve CASCADE;
--- DROP TABLE IF EXISTS Tuteur CASCADE;
--- DROP TABLE IF EXISTS Eleve CASCADE;
--- DROP TABLE IF EXISTS "User" CASCADE;
--- DROP TABLE IF EXISTS Classe CASCADE;
--- DROP TABLE IF EXISTS AnneeScolaire CASCADE;
--- DROP TABLE IF EXISTS Etablissement CASCADE;
+-- ============= SUPPRESSION ÉVENTUELLE DES ANCIENNES TABLES (MINUSCULES OU SANS GUILLEMETS) =============
+DROP TABLE IF EXISTS "SyncLog" CASCADE;
+DROP TABLE IF EXISTS "ConfigSysteme" CASCADE;
+DROP TABLE IF EXISTS "AuditLog" CASCADE;
+DROP TABLE IF EXISTS "ParametreEtablissement" CASCADE;
+DROP TABLE IF EXISTS "Depense" CASCADE;
+DROP TABLE IF EXISTS "AnnulationRecu" CASCADE;
+DROP TABLE IF EXISTS "Paiement" CASCADE;
+DROP TABLE IF EXISTS "Echeance" CASCADE;
+DROP TABLE IF EXISTS "FraisClasse" CASCADE;
+DROP TABLE IF EXISTS "FraisScolaire" CASCADE;
+DROP TABLE IF EXISTS "EleveClasse" CASCADE;
+DROP TABLE IF EXISTS "TuteurEleve" CASCADE;
+DROP TABLE IF EXISTS "Tuteur" CASCADE;
+DROP TABLE IF EXISTS "Eleve" CASCADE;
+DROP TABLE IF EXISTS "User" CASCADE;
+DROP TABLE IF EXISTS "Classe" CASCADE;
+DROP TABLE IF EXISTS "AnneeScolaire" CASCADE;
+DROP TABLE IF EXISTS "Etablissement" CASCADE;
+
+-- Supprimer aussi les tables en minuscules si elles ont été créées sans guillemets auparavant
+DROP TABLE IF EXISTS synclog CASCADE;
+DROP TABLE IF EXISTS configsysteme CASCADE;
+DROP TABLE IF EXISTS auditlog CASCADE;
+DROP TABLE IF EXISTS parametreetablissement CASCADE;
+DROP TABLE IF EXISTS depense CASCADE;
+DROP TABLE IF EXISTS annulationrecu CASCADE;
+DROP TABLE IF EXISTS paiement CASCADE;
+DROP TABLE IF EXISTS echeance CASCADE;
+DROP TABLE IF EXISTS fraisclasse CASCADE;
+DROP TABLE IF EXISTS fraisscolaire CASCADE;
+DROP TABLE IF EXISTS eleveclasse CASCADE;
+DROP TABLE IF EXISTS tuteureleve CASCADE;
+DROP TABLE IF EXISTS tuteur CASCADE;
+DROP TABLE IF EXISTS eleve CASCADE;
+DROP TABLE IF EXISTS "user" CASCADE;
+DROP TABLE IF EXISTS classe CASCADE;
+DROP TABLE IF EXISTS anneescolaire CASCADE;
+DROP TABLE IF EXISTS etablissement CASCADE;
 
 -- ============= ÉTABLISSEMENTS =============
-CREATE TABLE IF NOT EXISTS Etablissement (
+CREATE TABLE IF NOT EXISTS "Etablissement" (
     id                  TEXT PRIMARY KEY,
     nom                 TEXT NOT NULL,
     type                TEXT NOT NULL DEFAULT 'PRIMAIRE', -- MATERNELLE | PRIMAIRE | SECONDAIRE | COMPLEXE
@@ -39,13 +59,13 @@ CREATE TABLE IF NOT EXISTS Etablissement (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_etab_actif ON Etablissement(actif);
+CREATE INDEX IF NOT EXISTS idx_etab_actif ON "Etablissement"(actif);
 
 -- ============= ANNÉES SCOLAIRES =============
-CREATE TABLE IF NOT EXISTS AnneeScolaire (
+CREATE TABLE IF NOT EXISTS "AnneeScolaire" (
     id                  TEXT PRIMARY KEY,
     libelle             TEXT NOT NULL,
-    etablissement_id    TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE CASCADE,
+    etablissement_id    TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE CASCADE,
     date_debut          TEXT NOT NULL,
     date_fin            TEXT NOT NULL,
     active              INTEGER NOT NULL DEFAULT 1,
@@ -53,22 +73,22 @@ CREATE TABLE IF NOT EXISTS AnneeScolaire (
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(etablissement_id, libelle)
 );
-CREATE INDEX IF NOT EXISTS idx_annee_etab_active ON AnneeScolaire(etablissement_id, active);
+CREATE INDEX IF NOT EXISTS idx_annee_etab_active ON "AnneeScolaire"(etablissement_id, active);
 
 -- ============= CLASSES =============
-CREATE TABLE IF NOT EXISTS Classe (
+CREATE TABLE IF NOT EXISTS "Classe" (
     id                  TEXT PRIMARY KEY,
     nom                 TEXT NOT NULL,
     niveau              TEXT NOT NULL,
-    etablissement_id    TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE CASCADE,
-    annee_scolaire_id   TEXT NOT NULL REFERENCES AnneeScolaire(id) ON DELETE CASCADE,
+    etablissement_id    TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE CASCADE,
+    annee_scolaire_id   TEXT NOT NULL REFERENCES "AnneeScolaire"(id) ON DELETE CASCADE,
     effectif_max        INTEGER NOT NULL DEFAULT 40,
     actif               INTEGER NOT NULL DEFAULT 1,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(nom, etablissement_id, annee_scolaire_id)
 );
-CREATE INDEX IF NOT EXISTS idx_classe_etab_annee ON Classe(etablissement_id, annee_scolaire_id);
+CREATE INDEX IF NOT EXISTS idx_classe_etab_annee ON "Classe"(etablissement_id, annee_scolaire_id);
 
 -- ============= UTILISATEURS (RBAC) =============
 CREATE TABLE IF NOT EXISTS "User" (
@@ -77,7 +97,7 @@ CREATE TABLE IF NOT EXISTS "User" (
     password_hash       TEXT NOT NULL,
     nom_complet         TEXT NOT NULL,
     role                TEXT NOT NULL, -- COORDINATEUR | SECRETAIRE_MATERNELLE | SECRETAIRE_PRIMAIRE | SECRETAIRE_SECONDAIRE
-    etablissement_id    TEXT REFERENCES Etablissement(id) ON DELETE SET NULL,
+    etablissement_id    TEXT REFERENCES "Etablissement"(id) ON DELETE SET NULL,
     actif               INTEGER NOT NULL DEFAULT 1,
     dernier_login       TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -86,7 +106,7 @@ CREATE TABLE IF NOT EXISTS "User" (
 CREATE INDEX IF NOT EXISTS idx_user_etab_actif ON "User"(etablissement_id, actif);
 
 -- ============= ÉLÈVES =============
-CREATE TABLE IF NOT EXISTS Eleve (
+CREATE TABLE IF NOT EXISTS "Eleve" (
     id                   TEXT PRIMARY KEY,
     matricule            TEXT NOT NULL UNIQUE,
     nom                  TEXT NOT NULL,
@@ -98,17 +118,17 @@ CREATE TABLE IF NOT EXISTS Eleve (
     ecole_de_provenance  TEXT,
     photo_url            TEXT,
     statut               TEXT NOT NULL DEFAULT 'ACTIF',
-    etablissement_id     TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE CASCADE,
-    annee_scolaire_id    TEXT REFERENCES AnneeScolaire(id) ON DELETE SET NULL,
+    etablissement_id     TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE CASCADE,
+    annee_scolaire_id    TEXT REFERENCES "AnneeScolaire"(id) ON DELETE SET NULL,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_eleve_etab_statut ON Eleve(etablissement_id, statut);
-CREATE INDEX IF NOT EXISTS idx_eleve_annee ON Eleve(annee_scolaire_id);
-CREATE INDEX IF NOT EXISTS idx_eleve_nom_prenom ON Eleve(nom, prenom);
+CREATE INDEX IF NOT EXISTS idx_eleve_etab_statut ON "Eleve"(etablissement_id, statut);
+CREATE INDEX IF NOT EXISTS idx_eleve_annee ON "Eleve"(annee_scolaire_id);
+CREATE INDEX IF NOT EXISTS idx_eleve_nom_prenom ON "Eleve"(nom, prenom);
 
 -- ============= TUTEURS =============
-CREATE TABLE IF NOT EXISTS Tuteur (
+CREATE TABLE IF NOT EXISTS "Tuteur" (
     id          TEXT PRIMARY KEY,
     nom         TEXT NOT NULL,
     prenom      TEXT NOT NULL,
@@ -120,63 +140,63 @@ CREATE TABLE IF NOT EXISTS Tuteur (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_tuteur_tel ON Tuteur(telephone);
+CREATE INDEX IF NOT EXISTS idx_tuteur_tel ON "Tuteur"(telephone);
 
 -- ============= TUTEUR-ÉLÈVE (Junction) =============
-CREATE TABLE IF NOT EXISTS TuteurEleve (
-    eleve_id     TEXT NOT NULL REFERENCES Eleve(id) ON DELETE CASCADE,
-    tuteur_id    TEXT NOT NULL REFERENCES Tuteur(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS "TuteurEleve" (
+    eleve_id     TEXT NOT NULL REFERENCES "Eleve"(id) ON DELETE CASCADE,
+    tuteur_id    TEXT NOT NULL REFERENCES "Tuteur"(id) ON DELETE CASCADE,
     is_principal INTEGER NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (eleve_id, tuteur_id)
 );
-CREATE INDEX IF NOT EXISTS idx_tuteur_eleve_tuteur ON TuteurEleve(tuteur_id);
+CREATE INDEX IF NOT EXISTS idx_tuteur_eleve_tuteur ON "TuteurEleve"(tuteur_id);
 
 -- ============= INSCRIPTIONS (CLASSES DES ÉLÈVES) =============
-CREATE TABLE IF NOT EXISTS EleveClasse (
-    eleve_id          TEXT NOT NULL REFERENCES Eleve(id) ON DELETE CASCADE,
-    classe_id         TEXT NOT NULL REFERENCES Classe(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS "EleveClasse" (
+    eleve_id          TEXT NOT NULL REFERENCES "Eleve"(id) ON DELETE CASCADE,
+    classe_id         TEXT NOT NULL REFERENCES "Classe"(id) ON DELETE CASCADE,
     date_inscription  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     date_sortie       TEXT,
     statut            TEXT NOT NULL DEFAULT 'ACTIF',
     PRIMARY KEY (eleve_id, classe_id)
 );
-CREATE INDEX IF NOT EXISTS idx_eleve_classe_classe_statut ON EleveClasse(classe_id, statut);
+CREATE INDEX IF NOT EXISTS idx_eleve_classe_classe_statut ON "EleveClasse"(classe_id, statut);
 
 -- ============= FRAIS SCOLAIRES =============
-CREATE TABLE IF NOT EXISTS FraisScolaire (
+CREATE TABLE IF NOT EXISTS "FraisScolaire" (
     id                  TEXT PRIMARY KEY,
     libelle             TEXT NOT NULL,
     type                TEXT NOT NULL,
     montant             DOUBLE PRECISION NOT NULL,
     devise              TEXT NOT NULL DEFAULT 'CDF',
-    etablissement_id    TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE CASCADE,
-    annee_scolaire_id   TEXT NOT NULL REFERENCES AnneeScolaire(id) ON DELETE CASCADE,
+    etablissement_id    TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE CASCADE,
+    annee_scolaire_id   TEXT NOT NULL REFERENCES "AnneeScolaire"(id) ON DELETE CASCADE,
     tranche             INTEGER,
     date_echeance       TEXT,
     actif               INTEGER NOT NULL DEFAULT 1,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_frais_etab_annee_actif ON FraisScolaire(etablissement_id, annee_scolaire_id, actif);
-CREATE INDEX IF NOT EXISTS idx_frais_type ON FraisScolaire(type);
+CREATE INDEX IF NOT EXISTS idx_frais_etab_annee_actif ON "FraisScolaire"(etablissement_id, annee_scolaire_id, actif);
+CREATE INDEX IF NOT EXISTS idx_frais_type ON "FraisScolaire"(type);
 
 -- ============= FRAIS-CLASSE (Junction) =============
-CREATE TABLE IF NOT EXISTS FraisClasse (
-    frais_scolaire_id  TEXT NOT NULL REFERENCES FraisScolaire(id) ON DELETE CASCADE,
-    classe_id          TEXT NOT NULL REFERENCES Classe(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS "FraisClasse" (
+    frais_scolaire_id  TEXT NOT NULL REFERENCES "FraisScolaire"(id) ON DELETE CASCADE,
+    classe_id          TEXT NOT NULL REFERENCES "Classe"(id) ON DELETE CASCADE,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (frais_scolaire_id, classe_id)
 );
-CREATE INDEX IF NOT EXISTS idx_frais_classe_classe ON FraisClasse(classe_id);
+CREATE INDEX IF NOT EXISTS idx_frais_classe_classe ON "FraisClasse"(classe_id);
 
 -- ============= ÉCHÉANCES PAR ÉLÈVE =============
-CREATE TABLE IF NOT EXISTS Echeance (
+CREATE TABLE IF NOT EXISTS "Echeance" (
     id                      TEXT PRIMARY KEY,
-    eleve_id                TEXT NOT NULL REFERENCES Eleve(id) ON DELETE CASCADE,
-    frais_scolaire_id       TEXT NOT NULL REFERENCES FraisScolaire(id) ON DELETE CASCADE,
-    etablissement_id        TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE CASCADE,
-    annee_scolaire_id       TEXT NOT NULL REFERENCES AnneeScolaire(id) ON DELETE CASCADE,
+    eleve_id                TEXT NOT NULL REFERENCES "Eleve"(id) ON DELETE CASCADE,
+    frais_scolaire_id       TEXT NOT NULL REFERENCES "FraisScolaire"(id) ON DELETE CASCADE,
+    etablissement_id        TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE CASCADE,
+    annee_scolaire_id       TEXT NOT NULL REFERENCES "AnneeScolaire"(id) ON DELETE CASCADE,
     montant_du              DOUBLE PRECISION NOT NULL,
     montant_paye            DOUBLE PRECISION NOT NULL DEFAULT 0,
     statut                  TEXT NOT NULL DEFAULT 'EN_ATTENTE',
@@ -186,19 +206,19 @@ CREATE TABLE IF NOT EXISTS Echeance (
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(eleve_id, frais_scolaire_id)
 );
-CREATE INDEX IF NOT EXISTS idx_echeance_eleve_statut ON Echeance(eleve_id, statut);
-CREATE INDEX IF NOT EXISTS idx_echeance_frais ON Echeance(frais_scolaire_id);
-CREATE INDEX IF NOT EXISTS idx_echeance_annee_statut ON Echeance(annee_scolaire_id, statut);
-CREATE INDEX IF NOT EXISTS idx_echeance_etab ON Echeance(etablissement_id);
+CREATE INDEX IF NOT EXISTS idx_echeance_eleve_statut ON "Echeance"(eleve_id, statut);
+CREATE INDEX IF NOT EXISTS idx_echeance_frais ON "Echeance"(frais_scolaire_id);
+CREATE INDEX IF NOT EXISTS idx_echeance_annee_statut ON "Echeance"(annee_scolaire_id, statut);
+CREATE INDEX IF NOT EXISTS idx_echeance_etab ON "Echeance"(etablissement_id);
 
 -- ============= PAIEMENTS (ENCAISSEMENTS) =============
-CREATE TABLE IF NOT EXISTS Paiement (
+CREATE TABLE IF NOT EXISTS "Paiement" (
     id                    TEXT PRIMARY KEY,
     numero_recu           TEXT NOT NULL UNIQUE,
-    eleve_id              TEXT NOT NULL REFERENCES Eleve(id) ON DELETE RESTRICT,
-    echeance_id           TEXT REFERENCES Echeance(id) ON DELETE SET NULL,
-    etablissement_id      TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE RESTRICT,
-    annee_scolaire_id     TEXT NOT NULL REFERENCES AnneeScolaire(id) ON DELETE RESTRICT,
+    eleve_id              TEXT NOT NULL REFERENCES "Eleve"(id) ON DELETE RESTRICT,
+    echeance_id           TEXT REFERENCES "Echeance"(id) ON DELETE SET NULL,
+    etablissement_id      TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE RESTRICT,
+    annee_scolaire_id     TEXT NOT NULL REFERENCES "AnneeScolaire"(id) ON DELETE RESTRICT,
     user_id               TEXT NOT NULL REFERENCES "User"(id) ON DELETE RESTRICT,
     motif                 TEXT NOT NULL,
     montant               DOUBLE PRECISION NOT NULL,
@@ -214,15 +234,15 @@ CREATE TABLE IF NOT EXISTS Paiement (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_paiement_eleve_date ON Paiement(eleve_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_paiement_etab_date ON Paiement(etablissement_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_paiement_annee_date ON Paiement(annee_scolaire_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_paiement_annule ON Paiement(annule);
+CREATE INDEX IF NOT EXISTS idx_paiement_eleve_date ON "Paiement"(eleve_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_paiement_etab_date ON "Paiement"(etablissement_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_paiement_annee_date ON "Paiement"(annee_scolaire_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_paiement_annule ON "Paiement"(annule);
 
 -- ============= ANNULATIONS DE REÇUS =============
-CREATE TABLE IF NOT EXISTS AnnulationRecu (
+CREATE TABLE IF NOT EXISTS "AnnulationRecu" (
     id              TEXT PRIMARY KEY,
-    paiement_id     TEXT NOT NULL UNIQUE REFERENCES Paiement(id) ON DELETE CASCADE,
+    paiement_id     TEXT NOT NULL UNIQUE REFERENCES "Paiement"(id) ON DELETE CASCADE,
     user_id         TEXT NOT NULL REFERENCES "User"(id) ON DELETE RESTRICT,
     motif           TEXT NOT NULL,
     date_annulation TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -230,10 +250,10 @@ CREATE TABLE IF NOT EXISTS AnnulationRecu (
 );
 
 -- ============= DÉPENSES =============
-CREATE TABLE IF NOT EXISTS Depense (
+CREATE TABLE IF NOT EXISTS "Depense" (
     id                   TEXT PRIMARY KEY,
-    etablissement_id     TEXT NOT NULL REFERENCES Etablissement(id) ON DELETE RESTRICT,
-    annee_scolaire_id    TEXT NOT NULL REFERENCES AnneeScolaire(id) ON DELETE RESTRICT,
+    etablissement_id     TEXT NOT NULL REFERENCES "Etablissement"(id) ON DELETE RESTRICT,
+    annee_scolaire_id    TEXT NOT NULL REFERENCES "AnneeScolaire"(id) ON DELETE RESTRICT,
     created_by_id        TEXT REFERENCES "User"(id) ON DELETE SET NULL,
     categorie            TEXT NOT NULL,
     libelle              TEXT NOT NULL,
@@ -247,14 +267,14 @@ CREATE TABLE IF NOT EXISTS Depense (
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_depense_etab_date ON Depense(etablissement_id, date_depense);
-CREATE INDEX IF NOT EXISTS idx_depense_annee_statut ON Depense(annee_scolaire_id, statut);
+CREATE INDEX IF NOT EXISTS idx_depense_etab_date ON "Depense"(etablissement_id, date_depense);
+CREATE INDEX IF NOT EXISTS idx_depense_annee_statut ON "Depense"(annee_scolaire_id, statut);
 
 -- ============= PARAMÈTRES PAR ÉTABLISSEMENT =============
-CREATE TABLE IF NOT EXISTS ParametreEtablissement (
+CREATE TABLE IF NOT EXISTS "ParametreEtablissement" (
     id                    TEXT PRIMARY KEY,
-    etablissement_id     TEXT NOT NULL UNIQUE REFERENCES Etablissement(id) ON DELETE CASCADE,
-    annee_scolaire_id    TEXT REFERENCES AnneeScolaire(id) ON DELETE SET NULL,
+    etablissement_id     TEXT NOT NULL UNIQUE REFERENCES "Etablissement"(id) ON DELETE CASCADE,
+    annee_scolaire_id    TEXT REFERENCES "AnneeScolaire"(id) ON DELETE SET NULL,
     mentions_legales      TEXT,
     pied_page_recu        TEXT,
     nom_imprimante        TEXT,
@@ -264,10 +284,10 @@ CREATE TABLE IF NOT EXISTS ParametreEtablissement (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_params_annee ON ParametreEtablissement(annee_scolaire_id);
+CREATE INDEX IF NOT EXISTS idx_params_annee ON "ParametreEtablissement"(annee_scolaire_id);
 
 -- ============= JOURNAL D'AUDIT =============
-CREATE TABLE IF NOT EXISTS AuditLog (
+CREATE TABLE IF NOT EXISTS "AuditLog" (
     id           TEXT PRIMARY KEY,
     user_id      TEXT REFERENCES "User"(id) ON DELETE SET NULL,
     action       TEXT NOT NULL,
@@ -277,12 +297,12 @@ CREATE TABLE IF NOT EXISTS AuditLog (
     adresse_ip   TEXT,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_audit_user_date ON AuditLog(user_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_audit_entite ON AuditLog(entite, entite_id);
-CREATE INDEX IF NOT EXISTS idx_audit_action_date ON AuditLog(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_user_date ON "AuditLog"(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_entite ON "AuditLog"(entite, entite_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action_date ON "AuditLog"(action, created_at);
 
 -- ============= CONFIGURATION GÉNÉRALE =============
-CREATE TABLE IF NOT EXISTS ConfigSysteme (
+CREATE TABLE IF NOT EXISTS "ConfigSysteme" (
     id          TEXT PRIMARY KEY,
     cle         TEXT NOT NULL UNIQUE,
     valeur      TEXT NOT NULL,
@@ -291,7 +311,7 @@ CREATE TABLE IF NOT EXISTS ConfigSysteme (
 );
 
 -- ============= JOURNAL DE SYNCHRONISATION =============
-CREATE TABLE IF NOT EXISTS SyncLog (
+CREATE TABLE IF NOT EXISTS "SyncLog" (
     id            TEXT PRIMARY KEY,
     table_name    TEXT NOT NULL,
     last_sync_at  TIMESTAMPTZ NOT NULL,
@@ -302,23 +322,22 @@ CREATE TABLE IF NOT EXISTS SyncLog (
 );
 
 -- Habiliter les requêtes sur ces tables depuis PostgREST (Supabase)
--- Si l'accès est refusé publiquement, vous pouvez désactiver RLS ou ajouter des politiques de sécurité (Policies).
--- Pour un fonctionnement direct de type prototype/fermé, nous pouvons désactiver RLS sur ces tables :
-ALTER TABLE Etablissement DISABLE ROW LEVEL SECURITY;
-ALTER TABLE AnneeScolaire DISABLE ROW LEVEL SECURITY;
-ALTER TABLE Classe DISABLE ROW LEVEL SECURITY;
+-- Desactivation explicite du Row Level Security (RLS) sur toutes les tables pour l'accès REST direct
+ALTER TABLE "Etablissement" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "AnneeScolaire" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "Classe" DISABLE ROW LEVEL SECURITY;
 ALTER TABLE "User" DISABLE ROW LEVEL SECURITY;
-ALTER TABLE Eleve DISABLE ROW LEVEL SECURITY;
-ALTER TABLE Tuteur DISABLE ROW LEVEL SECURITY;
-ALTER TABLE TuteurEleve DISABLE ROW LEVEL SECURITY;
-ALTER TABLE EleveClasse DISABLE ROW LEVEL SECURITY;
-ALTER TABLE FraisScolaire DISABLE ROW LEVEL SECURITY;
-ALTER TABLE FraisClasse DISABLE ROW LEVEL SECURITY;
-ALTER TABLE Echeance DISABLE ROW LEVEL SECURITY;
-ALTER TABLE Paiement DISABLE ROW LEVEL SECURITY;
-ALTER TABLE AnnulationRecu DISABLE ROW LEVEL SECURITY;
-ALTER TABLE Depense DISABLE ROW LEVEL SECURITY;
-ALTER TABLE ParametreEtablissement DISABLE ROW LEVEL SECURITY;
-ALTER TABLE AuditLog DISABLE ROW LEVEL SECURITY;
-ALTER TABLE ConfigSysteme DISABLE ROW LEVEL SECURITY;
-ALTER TABLE SyncLog DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "Eleve" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "Tuteur" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "TuteurEleve" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "EleveClasse" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "FraisScolaire" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "FraisClasse" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "Echeance" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "Paiement" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "AnnulationRecu" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "Depense" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "ParametreEtablissement" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "AuditLog" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "ConfigSysteme" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "SyncLog" DISABLE ROW LEVEL SECURITY;
