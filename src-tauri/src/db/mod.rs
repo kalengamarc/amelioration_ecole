@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS AnneeScolaire (
     active              INTEGER NOT NULL DEFAULT 1,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE CASCADE,
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE CASCADE,
     UNIQUE(etablissement_id, libelle)
 );
 CREATE INDEX IF NOT EXISTS idx_annee_etab_active ON AnneeScolaire(etablissement_id, active);
@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS Classe (
     actif               INTEGER NOT NULL DEFAULT 1,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE CASCADE,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE CASCADE,
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE CASCADE,
     UNIQUE(nom, etablissement_id, annee_scolaire_id)
 );
 CREATE INDEX IF NOT EXISTS idx_classe_etab_annee ON Classe(etablissement_id, annee_scolaire_id);
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS User (
     dernier_login       TEXT,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE SET NULL
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_user_etab_actif ON User(etablissement_id, actif);
 
@@ -87,8 +87,8 @@ CREATE TABLE IF NOT EXISTS Eleve (
     annee_scolaire_id    TEXT,
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE CASCADE,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE SET NULL
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_eleve_etab_statut ON Eleve(etablissement_id, statut);
 CREATE INDEX IF NOT EXISTS idx_eleve_annee ON Eleve(annee_scolaire_id);
@@ -114,8 +114,8 @@ CREATE TABLE IF NOT EXISTS TuteurEleve (
     is_principal INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (eleve_id, tuteur_id),
-    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON DELETE CASCADE,
-    FOREIGN KEY (tuteur_id) REFERENCES Tuteur(id) ON DELETE CASCADE
+    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (tuteur_id) REFERENCES Tuteur(id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_tuteur_eleve_tuteur ON TuteurEleve(tuteur_id);
 
@@ -126,8 +126,8 @@ CREATE TABLE IF NOT EXISTS EleveClasse (
     date_sortie       TEXT,
     statut            TEXT NOT NULL DEFAULT 'ACTIF',
     PRIMARY KEY (eleve_id, classe_id),
-    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON DELETE CASCADE,
-    FOREIGN KEY (classe_id) REFERENCES Classe(id) ON DELETE CASCADE
+    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (classe_id) REFERENCES Classe(id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_eleve_classe_classe_statut ON EleveClasse(classe_id, statut);
 
@@ -144,8 +144,8 @@ CREATE TABLE IF NOT EXISTS FraisScolaire (
     actif               INTEGER NOT NULL DEFAULT 1,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE CASCADE,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE CASCADE
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_frais_etab_annee_actif ON FraisScolaire(etablissement_id, annee_scolaire_id, actif);
 CREATE INDEX IF NOT EXISTS idx_frais_type ON FraisScolaire(type);
@@ -155,8 +155,8 @@ CREATE TABLE IF NOT EXISTS FraisClasse (
     classe_id          TEXT NOT NULL,
     created_at         TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (frais_scolaire_id, classe_id),
-    FOREIGN KEY (frais_scolaire_id) REFERENCES FraisScolaire(id) ON DELETE CASCADE,
-    FOREIGN KEY (classe_id) REFERENCES Classe(id) ON DELETE CASCADE
+    FOREIGN KEY (frais_scolaire_id) REFERENCES FraisScolaire(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (classe_id) REFERENCES Classe(id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_frais_classe_classe ON FraisClasse(classe_id);
 
@@ -173,9 +173,9 @@ CREATE TABLE IF NOT EXISTS Echeance (
     date_paiement_complet   TEXT,
     created_at              TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at              TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON DELETE CASCADE,
-    FOREIGN KEY (frais_scolaire_id) REFERENCES FraisScolaire(id) ON DELETE CASCADE,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE CASCADE,
+    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (frais_scolaire_id) REFERENCES FraisScolaire(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE CASCADE,
     UNIQUE(eleve_id, frais_scolaire_id)
 );
 CREATE INDEX IF NOT EXISTS idx_echeance_eleve_statut ON Echeance(eleve_id, statut);
@@ -204,11 +204,11 @@ CREATE TABLE IF NOT EXISTS Paiement (
     date_annulation       TEXT,
     created_at            TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON DELETE RESTRICT,
-    FOREIGN KEY (echeance_id) REFERENCES Echeance(id) ON DELETE SET NULL,
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE RESTRICT,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE RESTRICT,
-    FOREIGN KEY (user_id) REFERENCES User(id) ON DELETE RESTRICT
+    FOREIGN KEY (eleve_id) REFERENCES Eleve(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY (echeance_id) REFERENCES Echeance(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY (user_id) REFERENCES User(id) ON UPDATE CASCADE ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_paiement_eleve_date ON Paiement(eleve_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_paiement_etab_date ON Paiement(etablissement_id, created_at);
@@ -222,8 +222,8 @@ CREATE TABLE IF NOT EXISTS AnnulationRecu (
     motif           TEXT NOT NULL,
     date_annulation TEXT NOT NULL DEFAULT (datetime('now')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (paiement_id) REFERENCES Paiement(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES User(id) ON DELETE RESTRICT
+    FOREIGN KEY (paiement_id) REFERENCES Paiement(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES User(id) ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS Depense (
@@ -242,9 +242,9 @@ CREATE TABLE IF NOT EXISTS Depense (
     statut               TEXT NOT NULL DEFAULT 'VALIDE',
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE RESTRICT,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE RESTRICT,
-    FOREIGN KEY (created_by_id) REFERENCES User(id) ON DELETE SET NULL
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY (created_by_id) REFERENCES User(id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_depense_etab_date ON Depense(etablissement_id, date_depense);
 CREATE INDEX IF NOT EXISTS idx_depense_annee_statut ON Depense(annee_scolaire_id, statut);
@@ -261,8 +261,8 @@ CREATE TABLE IF NOT EXISTS ParametreEtablissement (
     created_by            TEXT,
     created_at            TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON DELETE CASCADE,
-    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON DELETE SET NULL
+    FOREIGN KEY (etablissement_id) REFERENCES Etablissement(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (annee_scolaire_id) REFERENCES AnneeScolaire(id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_params_annee ON ParametreEtablissement(annee_scolaire_id);
 
@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS AuditLog (
     details      TEXT,
     adresse_ip   TEXT,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES User(id) ON DELETE SET NULL
+    FOREIGN KEY (user_id) REFERENCES User(id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_user_date ON AuditLog(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_entite ON AuditLog(entite, entite_id);
