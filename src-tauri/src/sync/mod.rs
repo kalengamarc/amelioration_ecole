@@ -112,7 +112,11 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         TableConfig { name: "AuditLog", has_updated_at: false, pk_cols: vec!["id"] },
     ];
 
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("SGFS-ME/1.0")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| AppError::Internal(format!("Impossible d'initialiser le client HTTP : {}", e)))?;
     let mut stats = HashMap::new();
 
     // Initialize stats
