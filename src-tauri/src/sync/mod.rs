@@ -125,91 +125,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     }
 
     // ==========================================
-    // PHASE 1 : PUSH (Local -> Remote)
-    // ==========================================
-
-    // A. Push Deletions
-    // Find deletions logged locally since last sync
-    let mut stmt_del = conn.prepare(
-        "SELECT entite, entite_id FROM AuditLog WHERE action = 'DELETE' AND created_at > ?"
-    )?;
-    let mut rows_del = stmt_del.query(params![last_sync])?;
-    let mut deletions_by_table: HashMap<String, Vec<String>> = HashMap::new();
-    while let Some(row) = rows_del.next()? {
-        let entite: String = row.get(0)?;
-        let entite_id: String = row.get(1)?;
-        if let Some(table_name) = map_entity_to_table(&entite) {
-            deletions_by_table.entry(table_name.to_string()).or_default().push(entite_id);
-        }
-    }
-    drop(rows_del);
-    drop(stmt_del);
-
-    // Propagate deletions to Supabase
-    for (table_name, ids) in deletions_by_table {
-        if ids.is_empty() { continue; }
-        // Postgres PostgREST syntax for DELETE in: ?id=in.(id1,id2)
-        let ids_filter = ids.join(",");
-        let url = format!("{}/rest/v1/{}?id=in.({})", supabase_url, table_name, ids_filter);
-        let res = client.delete(&url)
-            .header("apikey", &supabase_key)
-            .header("Authorization", format!("Bearer {}", supabase_key))
-            .send();
-        
-        match res {
-            Ok(resp) => {
-                if !resp.status().is_success() {
-                    let err_text = resp.text().unwrap_or_default();
-                    println!("Erreur lors de la suppression distante sur {} : {}", table_name, err_text);
-                }
-            }
-            Err(e) => println!("Erreur HTTP lors de la suppression sur {} : {}", table_name, e),
-        }
-    }
-
-    // B. Push Inserts & Updates
-    for t in &tables {
-        // Skip pushing AuditLog directly during push to prevent redundant logs, or push it normally.
-        // We push it normally so the remote database has the complete logs.
-        let local_rows = query_table_since(conn, t.name, &last_sync, t.has_updated_at)?;
-        if local_rows.is_empty() { continue; }
-
-        let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
-
-        let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
-        let res = client.post(&url)
-            .header("apikey", &supabase_key)
-            .header("Authorization", format!("Bearer {}", supabase_key))
-            .header("Content-Type", "application/json")
-            .header("Prefer", "resolution=merge-duplicates")
-            .json(&local_rows)
-            .send();
-
-        match res {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    if let Some(stat) = stats.get_mut(t.name) {
-                        stat.pushed = local_rows.len();
-                    }
-                } else {
-                    let status = resp.status();
-                    let err_text = resp.text().unwrap_or_default();
-                    return Err(AppError::Internal(format!(
-                        "Erreur push table {} : Code {}, Détails: {}",
-                        t.name, status, err_text
-                    )));
-                }
-            }
-            Err(e) => {
-                return Err(AppError::Internal(format!(
-                    "Erreur HTTP push table {} : {}", t.name, e
-                )));
-            }
-        }
-    }
-
-    // ==========================================
-    // PHASE 2 : PULL (Remote -> Local)
+    // PHASE 1 : PULL (Remote -> Local)
     // ==========================================
 
     // A. Pull Deletions from Remote AuditLog
@@ -228,7 +144,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         del.get("entite_id").and_then(|v| v.as_str())
                     ) {
                         if let Some(table_name) = map_entity_to_table(entite) {
-                            let sql_del = format!("DELETE FROM {} WHERE id = ?", table_name);
+                            let sql_del = format!("DELETE FROM \"{}\" WHERE id = ?", table_name);
                             let _ = conn.execute(&sql_del, params![entite_id]);
                         }
                     }
@@ -281,6 +197,88 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             Err(e) => {
                 return Err(AppError::Internal(format!(
                     "Erreur HTTP pull table {} : {}", t.name, e
+                )));
+            }
+        }
+    }
+
+    // ==========================================
+    // PHASE 2 : PUSH (Local -> Remote)
+    // ==========================================
+
+    // A. Push Deletions
+    // Find deletions logged locally since last sync
+    let mut stmt_del = conn.prepare(
+        "SELECT entite, entite_id FROM \"AuditLog\" WHERE action = 'DELETE' AND created_at > ?"
+    )?;
+    let mut rows_del = stmt_del.query(params![last_sync])?;
+    let mut deletions_by_table: HashMap<String, Vec<String>> = HashMap::new();
+    while let Some(row) = rows_del.next()? {
+        let entite: String = row.get(0)?;
+        let entite_id: String = row.get(1)?;
+        if let Some(table_name) = map_entity_to_table(&entite) {
+            deletions_by_table.entry(table_name.to_string()).or_default().push(entite_id);
+        }
+    }
+    drop(rows_del);
+    drop(stmt_del);
+
+    // Propagate deletions to Supabase
+    for (table_name, ids) in deletions_by_table {
+        if ids.is_empty() { continue; }
+        // Postgres PostgREST syntax for DELETE in: ?id=in.(id1,id2)
+        let ids_filter = ids.join(",");
+        let url = format!("{}/rest/v1/{}?id=in.({})", supabase_url, table_name, ids_filter);
+        let res = client.delete(&url)
+            .header("apikey", &supabase_key)
+            .header("Authorization", format!("Bearer {}", supabase_key))
+            .send();
+        
+        match res {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let err_text = resp.text().unwrap_or_default();
+                    println!("Erreur lors de la suppression distante sur {} : {}", table_name, err_text);
+                }
+            }
+            Err(e) => println!("Erreur HTTP lors de la suppression sur {} : {}", table_name, e),
+        }
+    }
+
+    // B. Push Inserts & Updates
+    for t in &tables {
+        let local_rows = query_table_since(conn, t.name, &last_sync, t.has_updated_at)?;
+        if local_rows.is_empty() { continue; }
+
+        let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
+
+        let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
+        let res = client.post(&url)
+            .header("apikey", &supabase_key)
+            .header("Authorization", format!("Bearer {}", supabase_key))
+            .header("Content-Type", "application/json")
+            .header("Prefer", "resolution=merge-duplicates")
+            .json(&local_rows)
+            .send();
+
+        match res {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    if let Some(stat) = stats.get_mut(t.name) {
+                        stat.pushed = local_rows.len();
+                    }
+                } else {
+                    let status = resp.status();
+                    let err_text = resp.text().unwrap_or_default();
+                    return Err(AppError::Internal(format!(
+                        "Erreur push table {} : Code {}, Détails: {}",
+                        t.name, status, err_text
+                    )));
+                }
+            }
+            Err(e) => {
+                return Err(AppError::Internal(format!(
+                    "Erreur HTTP push table {} : {}", t.name, e
                 )));
             }
         }
