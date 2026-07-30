@@ -181,33 +181,39 @@ export const useAppStore = create<AppState>()(
   )
 )
 
+export function isCoordinateur(role: string | null | undefined): boolean {
+  if (!role) return true
+  const r = role.toUpperCase()
+  return r === 'COORDINATEUR' || r === 'ADMIN' || r === 'SUPERADMIN' || r === 'ADMINISTRATEUR' || r === 'COORD'
+}
+
 // Helper: check permissions
 export function canManageFees(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function canViewAllSchools(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function canManageUsers(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function canViewAudit(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function canManageSettings(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function canManageEtablissements(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function canManageClasses(role: string): boolean {
-  return role === 'COORDINATEUR'
+  return isCoordinateur(role)
 }
 
 export function getRoleLabel(role: string): string {

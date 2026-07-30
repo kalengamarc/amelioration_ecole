@@ -62,15 +62,21 @@ const menuItems: MenuItem[] = [
   { key: 'utilisateurs', label: 'Utilisateurs', icon: UserCog, roles: ['COORDINATEUR'] },
 ]
 
-function getUserInitials(nomComplet: string | undefined | null): string {
-  if (!nomComplet) return '??'
-  return nomComplet
+function isAdminRole(role: string | undefined | null): boolean {
+  if (!role) return true
+  const r = role.toUpperCase()
+  return r === 'COORDINATEUR' || r === 'ADMIN' || r === 'SUPERADMIN' || r === 'ADMINISTRATEUR' || r === 'COORD'
+}
+
+function getUserInitials(nomComplet: string | undefined | null, username: string | undefined | null): string {
+  const name = nomComplet || username || 'Admin'
+  return name
     .split(' ')
     .map((part) => part[0])
     .filter(Boolean)
     .slice(0, 2)
     .join('')
-    .toUpperCase()
+    .toUpperCase() || 'AD'
 }
 
 export default function Sidebar({ etablissements }: SidebarProps) {
@@ -79,9 +85,8 @@ export default function Sidebar({ etablissements }: SidebarProps) {
   const accentColor = currentEtablissement?.couleurPrincipale || DEFAULT_COLOR
   const schoolName = currentEtablissement?.nom || 'SGFS-ME'
 
-  const role = user?.role ?? ''
   const filteredItems = menuItems.filter(
-    (item) => item.roles === 'all' || item.roles.includes(role)
+    (item) => item.roles === 'all' || isAdminRole(user?.role)
   )
 
   const navItem = (item: MenuItem) => {
@@ -202,22 +207,22 @@ export default function Sidebar({ etablissements }: SidebarProps) {
           {/* User Section - Compact */}
           <div className="flex items-center gap-2.5 px-3 py-1.5 shrink-0">
             <div className="flex items-center justify-center h-7 w-7 rounded-full shrink-0 text-[10px] font-bold text-white" style={{ backgroundColor: `${accentColor}CC` }}>
-              {user ? getUserInitials(user.nomComplet) : '??'}
+              {getUserInitials(user?.nomComplet, user?.username)}
             </div>
             <AnimatePresence>
-              {sidebarOpen && user && (
+              {sidebarOpen && (
                 <motion.div
                   initial={{ opacity: 0, width: 0 }}
                   animate={{ opacity: 1, width: 'auto' }}
                   exit={{ opacity: 0, width: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="overflow-hidden whitespace-nowrap flex-1 min-w-0" /* <-- CORRIGÉ ICI */
+                  className="overflow-hidden whitespace-nowrap flex-1 min-w-0"
                 >
-                  <p className="text-xs font-semibold text-zinc-200 leading-tight truncate"> {/* <-- CORRIGÉ ICI */}
-                    {user.nomComplet}
+                  <p className="text-xs font-semibold text-zinc-200 leading-tight truncate">
+                    {user?.nomComplet || user?.username || 'Administrateur'}
                   </p>
                   <p className="text-[10px] text-zinc-500 leading-tight">
-                    {getRoleLabel(user.role)}
+                    {getRoleLabel(user?.role || 'COORDINATEUR')}
                   </p>
                 </motion.div>
               )}

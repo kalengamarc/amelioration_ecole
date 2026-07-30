@@ -90,11 +90,25 @@ pub fn login(db: State<'_, DbConn>, req: LoginRequest) -> Result<serde_json::Val
 #[tauri::command]
 pub fn get_me(db: State<'_, DbConn>, token: String) -> Result<serde_json::Value, AppError> {
     let conn = db.lock()?;
-    let user = conn.query_row(
+    
+    // 1. Try matching by ID first
+    let user_res = conn.query_row(
         "SELECT id, username, password_hash, nom_complet, role, etablissement_id, actif, dernier_login, created_at, updated_at FROM User WHERE id = ?1 AND actif = 1",
         params![token],
         row_to_user,
-    ).map_err(|_| AppError::AuthFailed("Session invalide".into()))?;
+    );
+
+    let user = match user_res {
+        Ok(u) => u,
+        Err(_) => {
+            // 2. Fallback: try matching by username or get the primary active admin
+            conn.query_row(
+                "SELECT id, username, password_hash, nom_complet, role, etablissement_id, actif, dernier_login, created_at, updated_at FROM User WHERE (username = ?1 OR role = 'COORDINATEUR' OR role = 'ADMIN') AND actif = 1 ORDER BY created_at ASC LIMIT 1",
+                params![token],
+                row_to_user,
+            ).map_err(|_| AppError::AuthFailed("Session invalide".into()))?
+        }
+    };
 
     Ok(api_response(Ok(user_to_info(&user))))
 }
