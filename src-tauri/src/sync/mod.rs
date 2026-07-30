@@ -92,23 +92,23 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         |r| r.get(0)
     ).unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
 
-    // 3. Define tables in strict dependency order
+    // 3. Define tables in strict dependency order with their natural conflict keys
     let tables = vec![
         TableConfig { name: "Etablissement", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "User", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "AnneeScolaire", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "Classe", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "Eleve", has_updated_at: true, pk_cols: vec!["id"] },
+        TableConfig { name: "User", has_updated_at: true, pk_cols: vec!["username"] },
+        TableConfig { name: "AnneeScolaire", has_updated_at: true, pk_cols: vec!["etablissement_id", "libelle"] },
+        TableConfig { name: "Classe", has_updated_at: true, pk_cols: vec!["nom", "etablissement_id", "annee_scolaire_id"] },
+        TableConfig { name: "Eleve", has_updated_at: true, pk_cols: vec!["matricule"] },
         TableConfig { name: "Tuteur", has_updated_at: true, pk_cols: vec!["id"] },
         TableConfig { name: "TuteurEleve", has_updated_at: false, pk_cols: vec!["eleve_id", "tuteur_id"] },
         TableConfig { name: "EleveClasse", has_updated_at: false, pk_cols: vec!["eleve_id", "classe_id"] },
         TableConfig { name: "FraisScolaire", has_updated_at: true, pk_cols: vec!["id"] },
         TableConfig { name: "FraisClasse", has_updated_at: false, pk_cols: vec!["frais_scolaire_id", "classe_id"] },
-        TableConfig { name: "Echeance", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "Paiement", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "AnnulationRecu", has_updated_at: false, pk_cols: vec!["id"] },
+        TableConfig { name: "Echeance", has_updated_at: true, pk_cols: vec!["eleve_id", "frais_scolaire_id"] },
+        TableConfig { name: "Paiement", has_updated_at: true, pk_cols: vec!["numero_recu"] },
+        TableConfig { name: "AnnulationRecu", has_updated_at: false, pk_cols: vec!["paiement_id"] },
         TableConfig { name: "Depense", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "ParametreEtablissement", has_updated_at: true, pk_cols: vec!["id"] },
+        TableConfig { name: "ParametreEtablissement", has_updated_at: true, pk_cols: vec!["etablissement_id"] },
         TableConfig { name: "AuditLog", has_updated_at: false, pk_cols: vec!["id"] },
     ];
 
@@ -174,12 +174,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         let local_rows = query_table_since(conn, t.name, &last_sync, t.has_updated_at)?;
         if local_rows.is_empty() { continue; }
 
-        let on_conflict = match t.name {
-            "TuteurEleve" => "on_conflict=eleve_id,tuteur_id",
-            "EleveClasse" => "on_conflict=eleve_id,classe_id",
-            "FraisClasse" => "on_conflict=frais_scolaire_id,classe_id",
-            _ => "on_conflict=id",
-        };
+        let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
 
         let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
         let res = client.post(&url)
