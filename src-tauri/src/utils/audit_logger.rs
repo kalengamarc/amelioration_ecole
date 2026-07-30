@@ -18,6 +18,12 @@ pub fn log_audit(
         "INSERT INTO AuditLog (id, user_id, action, entite, entite_id, details, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![id, user_id, action, entite, entite_id, details, now],
     );
+
+    // Keep only the 200 most recent audit logs to prevent database bloat
+    let _ = conn.execute(
+        "DELETE FROM AuditLog WHERE id NOT IN (SELECT id FROM AuditLog ORDER BY created_at DESC LIMIT 200)",
+        [],
+    );
 }
 
 /// Convenience overload: log_audit with entity+action+details (no user_id, no entite_id)

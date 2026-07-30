@@ -107,6 +107,35 @@ export default function Home() {
       .catch(() => {})
   }, [isAuthenticated, user, etablissements])
 
+  // --- SYNCHRONISATION AUTOMATIQUE EN ARRIÈRE-PLAN (TOUTES LES 5 MINUTES) ---
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const runAutoSync = async () => {
+      try {
+        const statusRes = await tc.syncStatus()
+        const status = statusRes?.data ?? statusRes ?? {}
+        if (status.configured) {
+          console.log('[Auto-Sync] Synchronisation automatique en cours...')
+          await tc.syncPush()
+          console.log('[Auto-Sync] Synchronisation automatique réussie.')
+        }
+      } catch (err) {
+        console.warn('[Auto-Sync] Erreur en arrière-plan :', err)
+      }
+    }
+
+    // Premier déclenchement après 15 secondes
+    const initialTimer = setTimeout(runAutoSync, 15000)
+    // Boucle toutes les 5 minutes
+    const interval = setInterval(runAutoSync, 5 * 60 * 1000)
+
+    return () => {
+      clearTimeout(initialTimer)
+      clearInterval(interval)
+    }
+  }, [isAuthenticated])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8faf9]">

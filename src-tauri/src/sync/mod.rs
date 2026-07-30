@@ -318,6 +318,12 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         }
     }
 
+    // Prune AuditLog to keep only 200 most recent records
+    let _ = conn.execute(
+        "DELETE FROM \"AuditLog\" WHERE id NOT IN (SELECT id FROM \"AuditLog\" ORDER BY created_at DESC LIMIT 200)",
+        [],
+    );
+
     // Re-enable foreign keys after sync
     let _ = conn.execute_batch("PRAGMA foreign_keys=ON;");
 

@@ -611,6 +611,16 @@ export default function ParametresPage() {
                         <p className="text-xs text-gray-500 mt-1">
                           Dernière synchronisation réussie : <span className="font-semibold text-gray-700 dark:text-gray-300">{syncStatus.lastSync ? new Date(syncStatus.lastSync).toLocaleString('fr-FR') : "Jamais"}</span>
                         </p>
+                        {syncStatus.configured && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
+                            <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 gap-1 font-normal">
+                              <RefreshCw className="w-3 h-3 text-emerald-600 animate-spin" /> Synchro automatique activée (toutes les 5 min)
+                            </Badge>
+                            <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 gap-1 font-normal">
+                              <Database className="w-3 h-3 text-blue-600" /> Rétention AuditLog : max 200 entrées
+                            </Badge>
+                          </div>
+                        )}
                       </div>
 
                       <Button
