@@ -209,6 +209,12 @@ pub fn update_frais(
         if let Some(v) = montant {
             sets.push("montant = ?".to_string());
             param_values.push(Box::new(v));
+
+            // Mettre à jour automatiquement le montant dû sur toutes les échéances associées
+            let _ = conn.execute(
+                "UPDATE Echeance SET montant_du = ?, updated_at = ? WHERE frais_scolaire_id = ?",
+                params![v, now_iso(), id],
+            );
         }
         if let Some(ref v) = devise {
             sets.push("devise = ?".to_string());
@@ -221,6 +227,11 @@ pub fn update_frais(
         if let Some(ref v) = date_echeance {
             sets.push("date_echeance = ?".to_string());
             param_values.push(Box::new(v.clone()));
+
+            let _ = conn.execute(
+                "UPDATE Echeance SET date_echeance = ?, updated_at = ? WHERE frais_scolaire_id = ?",
+                params![v, now_iso(), id],
+            );
         }
         if let Some(v) = actif {
             sets.push("actif = ?".to_string());

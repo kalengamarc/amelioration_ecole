@@ -6,7 +6,6 @@ import { useAppStore, DEFAULT_COLOR } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
 import { toast } from 'sonner'
 import Image from 'next/image'
-import Link from 'next/link'
 import {
   User,
   Lock,
@@ -14,6 +13,8 @@ import {
   EyeOff,
   LogIn,
   Loader2,
+  Sparkles,
+  ArrowLeft
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,10 +57,11 @@ export default function LoginPage() {
 
     try {
       const response = await tc.login(username, password)
+      const data = (response as any)?.data ?? response ?? {}
+      const token = data.token
+      const user = data.user
 
-      if (response.success) {
-        const { token, user } = response.data
-
+      if (token && user) {
         login(user, token)
 
         try {
@@ -102,7 +104,7 @@ export default function LoginPage() {
         toast.success(`Bienvenue, ${user.nomComplet} !`)
         router.push('/')
       } else {
-        toast.error(response.error || 'Identifiants incorrects.')
+        toast.error((response as any)?.error || 'Identifiants incorrects.')
       }
     } catch (err: unknown) {
       const errorMessage =
@@ -117,136 +119,125 @@ export default function LoginPage() {
 
   return (
     <div
-      className="relative flex flex-col min-h-screen font-poppins overflow-hidden bg-cover bg-center bg-no-repeat"
+      className="relative flex flex-col h-screen w-screen font-poppins overflow-hidden bg-cover bg-center bg-no-repeat text-white"
       style={{ backgroundImage: `url(${backgroundImage.src})` }}
     >
-      {/* Overlay sombre pour lisibilité */}
-      <div className="absolute inset-0 bg-black/40 z-0" />
+      {/* Léger filtre pour préserver la clarté et la visibilité intégrale de l'image de Jésus */}
+      <div className="absolute inset-0 bg-black/30 z-0" />
 
-      <main className="relative flex-1 flex items-center justify-left px-4 py-12 z-10 ml-16">
-        <div className="w-full max-w-md">
-          <div className="bg-amber-400/20 overflow-hidden rounded-2xl shadow-2xl">
+      {/* Disposition : Carte positionnée sur le CÔTÉ DROIT pour ne JAMAIS masquer le visage de Jésus au centre */}
+      <main className="relative flex-1 flex items-center justify-center sm:justify-end px-4 sm:px-12 lg:px-20 py-4 z-10">
+        <div className="w-full max-w-[370px]">
+          {/* Carte compacte en verre sombre décalée sur la droite */}
+          <div className="bg-[#0c241f]/90 backdrop-blur-md overflow-hidden rounded-3xl border border-white/15 shadow-2xl p-5 sm:p-6">
             {/* ── Logo & Branding ── */}
-            <div className="p-6 text-center">
-              <div className="flex justify-center mb-4">
-                <div className="relative">
+            <div className="text-center mb-4">
+              <div className="flex justify-center mb-2">
+                <div className="relative h-14 w-14 rounded-2xl bg-white border border-amber-500/30 p-1.5 shadow-md flex items-center justify-center">
                   <Image
                     src={logoSrc}
                     alt="Logo Complexe Scolaire Le Bon Berger"
-                    width={90}
-                    height={90}
-                    className="rounded-full relative z-10"
+                    width={52}
+                    height={72}
+                    className="object-contain"
                   />
                 </div>
               </div>
-              <h2 className="text-xl font-bold text-[#73FBFD]">
-                Complexe Scolaire Le Bon Berger
+              
+              <h2 className="text-base font-extrabold text-white tracking-tight leading-snug">
+                CS. Le Bon Berger Dav/ KAHINDA
               </h2>
-              <p className="text-white text-sm mt-1">
-                Système de Gestion Financière et Scolaire
+              <p className="text-stone-300 text-[11px] mt-0.5 font-medium">
+                Gestion Financière & Scolaire
               </p>
             </div>
 
             {/* ── Formulaire ── */}
-            <div className="px-12 py-1">
-              <div className="text-center mb-6">
-                <h3 className="text-2xl font-bold text-[#73FBFD]">Connexion</h3>
-                <p className="text-gray-300 text-sm mt-1">
-                  Accédez à votre espace de travail
-                </p>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {/* Nom d'utilisateur */}
+              <div>
+                <Label className="block text-stone-200 font-semibold mb-1 text-[11px]">
+                  Nom d&apos;utilisateur *
+                </Label>
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                  <Input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full text-xs text-white pl-9 pr-3 h-9 border border-stone-600 rounded-xl bg-black/30 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 outline-none transition font-medium"
+                    placeholder="Identifiant"
+                    required
+                    autoComplete="username"
+                  />
+                </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Nom d'utilisateur */}
-                <div>
-                  <Label className="block text-gray-300 font-medium mb-2 text-sm">
-                    Nom d&apos;utilisateur
-                  </Label>
-                  <div className="relative">
-                    <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <Input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      disabled={isLoading}
-                      className="w-full text-[13px] text-white pl-10 pr-4 py-2 border border-gray-300 rounded-full bg-transparent focus:border-blue-900 focus:ring-2 focus:ring-blue-900/20 outline-none transition"
-                      placeholder="Entrez votre nom d'utilisateur"
-                      required
-                      autoComplete="username"
-                    />
-                  </div>
+              {/* Mot de passe */}
+              <div>
+                <Label className="block text-stone-200 font-semibold mb-1 text-[11px]">
+                  Mot de passe *
+                </Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full text-xs text-white pl-9 pr-10 h-9 border border-stone-600 rounded-xl bg-black/30 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 outline-none transition font-medium"
+                    placeholder="Mot de passe"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white transition"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 </div>
+              </div>
 
-             {/* Mot de passe */}
-                <div>
-                  <Label className="block text-gray-300 font-medium mb-2 text-sm">
-                    Mot de passe
-                  </Label>
-                  <div className="relative">
-                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={isLoading}
-                      className="w-full text-[13px] text-white pl-10 pr-12 py-2 border border-gray-300 rounded-full bg-transparent focus:border-blue-900 focus:ring-2 focus:ring-blue-900/20 outline-none transition"
-                      placeholder="Entrez votre mot de passe"
-                      required
-                      autoComplete="new-password"  // ← CHANGEMENT ICI
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                      tabIndex={-1}
-                      aria-label={
-                        showPassword
-                          ? 'Masquer le mot de passe'
-                          : 'Afficher le mot de passe'
-                      }
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                {/* Bouton de connexion */}
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-[#73FBFD] text-black text-[13px] py-2.5 rounded-full font-semibold hover:bg-blue-800 hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed h-11"
-                >
-                  {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Connexion en cours...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <LogIn className="h-4 w-4" />
-                      Se connecter
-                    </span>
-                  )}
-                </Button>
-              </form>
-            </div>
+              {/* Bouton de connexion */}
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-bold rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 h-9 mt-2"
+              >
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Connexion...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <LogIn className="h-3.5 w-3.5" />
+                    Se Connecter
+                  </span>
+                )}
+              </Button>
+            </form>
 
-                    {/* ── Footer ── */}
-            <div className="px-6 pt-6 pb-2 text-center space-y-2">
+            {/* ── Footer ── */}
+            <div className="mt-4 pt-3 border-t border-white/10 text-center space-y-1.5">
               <button
                 type="button"
                 onClick={() => window.dispatchEvent(new Event('go-to-accueil'))}
-                className="inline-flex items-center gap-1 text-white/60 hover:text-white text-sm font-medium transition-colors duration-200"
+                className="inline-flex items-center gap-1 text-stone-300 hover:text-amber-400 text-xs font-semibold transition-colors duration-200"
               >
-                ← Retour à l&apos;accueil
+                <ArrowLeft className="h-3.5 w-3.5" /> Retour à l&apos;accueil
               </button>
-              <p className="text-xs text-white/40">
+              <p className="text-[10px] text-stone-400 font-medium block">
                 © {new Date().getFullYear()}{" "}
-                <span className="text-white/50">CS. Le Bon Berger</span> —
-                Tous droits réservés
+                <span className="text-amber-400 font-bold">CS. Le Bon Berger Dav/ KAHINDA</span>
               </p>
             </div>
           </div>

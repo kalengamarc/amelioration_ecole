@@ -537,14 +537,29 @@ pub fn get_dashboard_stats(
     }
 
     /* ── Élèves en ordre / en retard ────────────────────────────────
-     * Un élève est en ordre s'il n'a d'impayé dans AUCUNE devise.
+     * Un élève est en retard si son statut dans Echeance est 'EN_RETARD'
+     * (date_echeance dépassée ET montant impayé).
      * ─────────────────────────────────────────────────────────────*/
-    let eleves_en_dette: HashSet<&String> = reste_par_eleve
-        .iter()
-        .filter(|(_, r)| **r > 0.009)
-        .map(|((e, _), _)| e)
-        .collect();
-    let eleves_en_retard = eleves_en_dette.len() as i64;
+    let eleves_en_retard_set: HashSet<String> = if has_echeance {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT ech.eleve_id \
+             FROM Echeance ech \
+             JOIN Eleve e ON e.id = ech.eleve_id \
+             WHERE e.etablissement_id = ?1 AND ech.annee_scolaire_id = ?2 \
+               AND COALESCE(ech.montant_paye, 0) < COALESCE(ech.montant_du, 0) \
+               AND ech.date_echeance IS NOT NULL \
+               AND date(ech.date_echeance) < date('now') \
+               AND e.statut NOT IN ('TRANSFÉRÉ', 'TRANSFERE')"
+        )?;
+        let rows = stmt.query_map(params![etablissement_id, annee_scolaire_id], |r| {
+            Ok(r.get::<_, String>(0)?)
+        })?;
+        rows.collect::<Result<HashSet<_>, _>>().unwrap_or_default()
+    } else {
+        HashSet::new()
+    };
+    
+    let eleves_en_retard = eleves_en_retard_set.len() as i64;
     let eleves_en_ordre = (total_eleves - eleves_en_retard).max(0);
 
     /* ── Retard moyen, en jours ─────────────────────────────────────── */
@@ -679,7 +694,7 @@ pub fn get_dashboard_stats(
         // élève -> liste (devise, reste)
         let mut par_eleve: HashMap<String, Vec<(String, f64)>> = HashMap::new();
         for ((eleve, devise), reste) in &reste_par_eleve {
-            if *reste > 0.009 {
+            if *reste > 0.009 && eleves_en_retard_set.contains(eleve) {
                 par_eleve
                     .entry(eleve.clone())
                     .or_default()
@@ -731,7 +746,7 @@ pub fn get_dashboard_stats(
         out
     };
 
-    /* ── Bons payeurs : aucun impayé, quelle que soit la devise ─────── */
+    /* ── Bons payeurs : aucun retard détecté, quelle que soit la devise ─────── */
     let bons_payeurs = {
         let mut stmt = conn.prepare(&format!(
             "SELECT e.id, e.nom, e.prenom, e.matricule \
@@ -747,11 +762,11 @@ pub fn get_dashboard_stats(
                 break;
             }
             let id: String = row.get(0)?;
-            // A payé quelque chose et ne doit plus rien.
-            let doit = eleves_en_dette.contains(&id);
+            // Pas en retard (statut EN_RETARD) ET a payé quelque chose
+            let en_retard = eleves_en_retard_set.contains(&id);
             let a_paye = reste_par_eleve.keys().any(|(e, _)| e == &id)
                 || paiements_par_devise.values().any(|v| *v > 0.0);
-            if !doit && a_paye {
+            if !en_retard && a_paye {
                 out.push(BonPayeur {
                     eleve: EleveNom {
                         nom: row.get(1)?,

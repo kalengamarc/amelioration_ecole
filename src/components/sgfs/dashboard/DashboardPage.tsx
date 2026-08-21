@@ -5,19 +5,21 @@ import { motion, type Variants } from 'framer-motion'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend,
+  PieChart, Pie, Cell, AreaChart, Area, Legend,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Banknote, Users, TrendingUp, TrendingDown, AlertTriangle,
   CheckCircle, Clock, ArrowUpRight, School, Wallet,
+  Plus, Receipt, ShieldCheck, Sparkles, Building2
 } from 'lucide-react'
 import { useAppStore, getSchoolFilter } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Types — tout est ventilé par devise, aucune conversion
+ * Types — ventilés par devise
  * ──────────────────────────────────────────────────────────────────────────*/
 
 interface DeviseMontant {
@@ -87,25 +89,24 @@ interface DashboardData {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Constantes
+ * Palette de couleurs (inspirée du design de référence)
  * ──────────────────────────────────────────────────────────────────────────*/
 
-const COLORS_MODE = ['#075e54', '#25d366', '#128c7e', '#34b7f1']
-const COLORS_MOTIF = ['#075e54', '#25d366', '#128c7e', '#34b7f1', '#ffc107', '#f97316']
+const COLORS_MODE = ['#0c241f', '#d97706', '#124e3f', '#0284c7', '#7c3aed']
+const COLORS_MOTIF = ['#0c241f', '#d97706', '#059669', '#0284c7', '#d97706', '#475569']
 
-/** Une couleur par devise, pour la distinguer d'un coup d'œil. */
 const COULEUR_DEVISE: Record<string, { badge: string; texte: string; barre: string }> = {
-  CDF: { badge: 'bg-emerald-100 text-emerald-800', texte: 'text-emerald-700', barre: '#25d366' },
-  USD: { badge: 'bg-sky-100 text-sky-800', texte: 'text-sky-700', barre: '#0284c7' },
-  BIF: { badge: 'bg-violet-100 text-violet-800', texte: 'text-violet-700', barre: '#7c3aed' },
+  CDF: { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', texte: 'text-emerald-700', barre: '#059669' },
+  USD: { badge: 'bg-amber-100 text-amber-900 border-amber-200', texte: 'text-amber-800', barre: '#d97706' },
+  BIF: { badge: 'bg-violet-100 text-violet-800 border-violet-200', texte: 'text-violet-700', barre: '#7c3aed' },
 }
 
 function couleurDevise(d: string) {
   return (
     COULEUR_DEVISE[d] ?? {
-      badge: 'bg-slate-100 text-slate-700',
-      texte: 'text-slate-700',
-      barre: '#64748b',
+      badge: 'bg-stone-100 text-stone-700 border-stone-200',
+      texte: 'text-stone-700',
+      barre: '#0c241f',
     }
   )
 }
@@ -127,14 +128,6 @@ const itemVariants: Variants = {
 const LOCALES: Record<string, string> = { CDF: 'fr-CD', BIF: 'fr-BI', USD: 'en-US' }
 const SANS_DECIMALES = ['CDF', 'BIF']
 
-/**
- * Montant + code devise, format homogène quelle que soit la devise.
- *
- * On n'utilise pas `style: 'currency'` : Intl produit « 20 000 FC » pour CDF
- * et « $180.00 » pour USD — symbole tantôt suffixe, tantôt préfixe. Associé
- * à un badge, cela donnait « CDF20 000 FC ». Ici le code suit toujours le
- * nombre, et le badge devient inutile.
- */
 function formatCurrency(value: number | null | undefined, devise: string): string {
   const v = Number(value ?? 0)
   const sansDec = SANS_DECIMALES.includes(devise)
@@ -145,7 +138,6 @@ function formatCurrency(value: number | null | undefined, devise: string): strin
   return `${n} ${devise}`
 }
 
-/** Axes des graphiques : « 1,2 M » au lieu de « 1 200 000 ». */
 function formatCompact(value: number): string {
   const abs = Math.abs(value)
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace('.0', '')} M`
@@ -171,16 +163,12 @@ function formatMois(mois: string): string {
 
 function DeviseBadge({ devise }: { devise: string }) {
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${couleurDevise(devise).badge}`}>
+    <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${couleurDevise(devise).badge}`}>
       {devise}
     </span>
   )
 }
 
-/**
- * Bloc de montants pour une devise donnée.
- * Aucun total inter-devises : chaque colonne est autonome.
- */
 function CarteDevise({
   devise,
   encaisse,
@@ -199,44 +187,44 @@ function CarteDevise({
   const pct = dette?.tauxRecouvrement ?? 0
 
   return (
-    <Card className="overflow-hidden rounded-xl border-gray-100 bg-white shadow-sm">
-      <div className="h-1" style={{ backgroundColor: c.barre }} />
+    <Card className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-sm hover:shadow-md transition-all duration-200">
+      <div className="h-1.5" style={{ backgroundColor: c.barre }} />
       <CardContent className="space-y-4 p-5">
         <div className="flex items-center justify-between">
-          <span className={`rounded-md px-2 py-1 text-xs font-bold ${c.badge}`}>{devise}</span>
+          <span className={`rounded-lg px-2.5 py-1 text-xs font-bold border ${c.badge}`}>{devise}</span>
           {dette ? (
-            <span className="text-[11px] text-gray-400">
-              {Math.round(pct)} % recouvré
+            <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
+              {Math.round(pct)}% recouvré
             </span>
           ) : null}
         </div>
 
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Encaissé
+            <span className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
+              <Banknote className="h-4 w-4 text-emerald-600" /> Encaissé
             </span>
-            <span className="text-base font-bold tabular-nums text-gray-900">
+            <span className="text-base font-bold tabular-nums text-stone-900">
               {formatCurrency(encaisse?.montant ?? 0, devise)}
             </span>
           </div>
 
           <div className="flex items-baseline justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <TrendingDown className="h-3.5 w-3.5 text-red-500" /> Dépensé
+            <span className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
+              <TrendingDown className="h-4 w-4 text-rose-500" /> Dépensé
             </span>
-            <span className="text-base font-bold tabular-nums text-gray-900">
+            <span className="text-base font-bold tabular-nums text-stone-900">
               {formatCurrency(depense?.montant ?? 0, devise)}
             </span>
           </div>
 
-          <div className="flex items-baseline justify-between gap-2 border-t border-gray-100 pt-2.5">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
-              <Wallet className="h-3.5 w-3.5 text-teal-600" /> Solde
+          <div className="flex items-baseline justify-between gap-2 border-t border-stone-100 pt-3">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
+              <Wallet className="h-4 w-4 text-[#0c241f]" /> Solde Net
             </span>
             <span
               className={`text-lg font-bold tabular-nums ${
-                benef >= 0 ? 'text-emerald-600' : 'text-red-600'
+                benef >= 0 ? 'text-emerald-700' : 'text-rose-600'
               }`}
             >
               {formatCurrency(benef, devise)}
@@ -245,29 +233,29 @@ function CarteDevise({
         </div>
 
         {dette ? (
-          <div className="space-y-1.5 border-t border-gray-100 pt-3">
+          <div className="space-y-2 border-t border-stone-100 pt-3">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-xs text-gray-500">
-                <AlertTriangle className="h-3.5 w-3.5 text-orange-500" /> Reste à percevoir
+              <span className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Reste à percevoir
               </span>
               <span
-                className={`text-base font-bold tabular-nums ${
-                  dette.reste > 0.009 ? 'text-orange-600' : 'text-emerald-600'
+                className={`text-sm font-bold tabular-nums ${
+                  dette.reste > 0.009 ? 'text-amber-700' : 'text-emerald-700'
                 }`}
               >
                 {formatCurrency(dette.reste, devise)}
               </span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-2 overflow-hidden rounded-full bg-stone-100">
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${Math.min(100, pct)}%`,
-                  backgroundColor: dette.reste > 0.009 ? '#fb923c' : '#10b981',
+                  backgroundColor: dette.reste > 0.009 ? '#d97706' : '#10b981',
                 }}
               />
             </div>
-            <div className="flex justify-between text-[10px] text-gray-400">
+            <div className="flex justify-between text-[11px] text-stone-400 font-medium">
               <span>
                 {formatCurrency(dette.totalPaye, devise)} / {formatCurrency(dette.totalDu, devise)}
               </span>
@@ -285,7 +273,7 @@ function CarteDevise({
 }
 
 function CircularProgress({
-  value, size = 64, strokeWidth = 6, color = '#25d366',
+  value, size = 56, strokeWidth = 5, color = '#d97706',
 }: {
   value: number
   size?: number
@@ -298,7 +286,7 @@ function CircularProgress({
   const offset = circumference - (pct / 100) * circumference
   return (
     <svg width={size} height={size} className="-rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth={strokeWidth} />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f3f0ea" strokeWidth={strokeWidth} />
       <circle
         cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
         strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
@@ -310,12 +298,12 @@ function CircularProgress({
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-      <div className="mb-4 h-6 w-16 rounded bg-gray-200" />
+    <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 h-6 w-16 rounded-md bg-stone-200" />
       <div className="space-y-3">
-        <div className="h-4 w-full rounded bg-gray-200" />
-        <div className="h-4 w-4/5 rounded bg-gray-200" />
-        <div className="h-4 w-3/5 rounded bg-gray-200" />
+        <div className="h-4 w-full rounded bg-stone-200" />
+        <div className="h-4 w-4/5 rounded bg-stone-200" />
+        <div className="h-4 w-3/5 rounded bg-stone-200" />
       </div>
     </div>
   )
@@ -323,9 +311,9 @@ function SkeletonCard() {
 
 function SkeletonChart() {
   return (
-    <div className="animate-pulse rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-      <div className="mb-6 h-5 w-48 rounded bg-gray-200" />
-      <div className="h-[300px] w-full rounded bg-gray-100" />
+    <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+      <div className="mb-6 h-5 w-48 rounded bg-stone-200" />
+      <div className="h-[300px] w-full rounded-xl bg-stone-100" />
     </div>
   )
 }
@@ -335,12 +323,12 @@ function SkeletonChart() {
  * ──────────────────────────────────────────────────────────────────────────*/
 
 export default function DashboardPage() {
-  const { user } = useAppStore()
+  const { user, currentEtablissement, setPage } = useAppStore()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  /** Devise sélectionnée pour les graphiques : un graphe = une devise. */
   const [deviseActive, setDeviseActive] = useState<string>('')
+  const [overdueSet, setOverdueSet] = useState<Set<string>>(new Set())
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -399,6 +387,24 @@ export default function DashboardPage() {
       }
       setData(clean)
       setDeviseActive((cur) => (cur && clean.devises.includes(cur) ? cur : clean.devises[0] ?? ''))
+      // Récupérer la liste des élèves en retard pour vérifier l'état réel des bons payeurs
+      try {
+        const overdueRes = await tc.listEcheances({ etablissementId: etabId, anneeScolaireId: anneeId, statut: 'EN_RETARD', pageSize: 2000 })
+        const rows: any[] = overdueRes?.data ?? []
+        const s = new Set<string>()
+        rows.forEach((r) => {
+          if (r.eleveMatricule) {
+            s.add(String(r.eleveMatricule))
+          } else {
+            const key = `${(r.elevePrenom || '').toString().toLowerCase()} ${(r.eleveNom || '').toString().toLowerCase()}`.trim()
+            if (key) s.add(key)
+          }
+        })
+        setOverdueSet(s)
+      } catch (e) {
+        // Ne bloque pas l'affichage du dashboard si l'appel échoue
+        setOverdueSet(new Set())
+      }
     } catch (err: any) {
       setError(err?.message || 'Erreur lors du chargement des données')
     } finally {
@@ -410,10 +416,6 @@ export default function DashboardPage() {
     fetchData()
   }, [fetchData])
 
-  /* ── Séries filtrées sur la devise active ───────────────────────────
-   * Un graphique ne peut afficher qu'une seule devise à la fois :
-   * mélanger 150 000 CDF et 50 USD sur le même axe n'a aucun sens.
-   * ─────────────────────────────────────────────────────────────────*/
   const serieMois = useMemo(
     () =>
       (data?.encaissementsParMois ?? [])
@@ -448,15 +450,11 @@ export default function DashboardPage() {
     return (data.elevesEnOrdre / data.nombreEleves.total) * 100
   }, [data])
 
-  /* ── Chargement ─────────────────────────────────────────────────────── */
   if (loading) {
     return (
       <div className="space-y-6 p-6">
-        <div>
-          <div className="mb-1 h-7 w-64 animate-pulse rounded bg-gray-200" />
-          <div className="h-4 w-96 animate-pulse rounded bg-gray-200" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="h-32 rounded-2xl bg-stone-200 animate-pulse" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -467,20 +465,19 @@ export default function DashboardPage() {
     )
   }
 
-  /* ── Erreur ─────────────────────────────────────────────────────────── */
   if (error || !data) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-32">
-        <div className="rounded-full bg-red-50 p-4">
-          <AlertTriangle className="h-8 w-8 text-red-500" />
+        <div className="rounded-2xl bg-rose-50 p-4 border border-rose-100">
+          <AlertTriangle className="h-8 w-8 text-rose-500" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-800">Erreur de chargement</h3>
-        <p className="max-w-md text-center text-sm text-gray-500">
+        <h3 className="text-lg font-bold text-stone-800">Erreur de chargement</h3>
+        <p className="max-w-md text-center text-sm text-stone-500">
           {error || 'Aucune donnée disponible'}
         </p>
         <button
           onClick={fetchData}
-          className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[var(--etab-color,#075e54)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--etab-color-hover,#064e46)]"
+          className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#0c241f] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-[#071916]"
         >
           <ArrowUpRight className="h-4 w-4" /> Réessayer
         </button>
@@ -491,54 +488,100 @@ export default function DashboardPage() {
   const trouve = <T extends { devise: string }>(arr: T[], d: string) =>
     arr.find((x) => x.devise === d)
 
-  /* ── Rendu ──────────────────────────────────────────────────────────── */
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6 p-6"
+      className="space-y-8 p-2 sm:p-4 md:p-6"
     >
-      <motion.div variants={itemVariants}>
-        <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Chaque devise est présentée séparément — aucun montant n'est converti.
-        </p>
+      {/* ── HERO HEADER BANNER (couleur solide et texte 100% visible) ── */}
+      <motion.div variants={itemVariants} className="relative rounded-3xl bg-[#0c241f] p-6 sm:p-8 text-white shadow-xl border border-emerald-900/40">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-[#d97706]/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30">
+               {currentEtablissement?.nom || 'Complexe Scolaire'}
+            </div>
+            <h1 className="text-2xl sm:text-xl lg:text-2xl font-extrabold tracking-tight text-white leading-tight">
+              Aperçu Général & Performance Financière
+            </h1>
+            <p className="text-sm text-stone-300 leading-relaxed">
+              Suivi en temps réel des encaissements, des dépenses et de la situation des élèves par établissement.
+            </p>
+
+            {/* Badges statistiques rapides intégrés dans la bannière */}
+            <div className="pt-2 flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/10 text-xs font-semibold">
+                <Users className="h-4 w-4 text-amber-400" />
+                <span>{formatNumber(data.nombreEleves.total)} Élèves Inscrits</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/10 text-xs font-semibold">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                <span>{Math.round(tauxGlobalRecouvrement)}% Recouvré</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/10 text-xs font-semibold">
+                <Clock className="h-4 w-4 text-amber-300" />
+                <span>{data.elevesEnRetard} Élèves en retard</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Boutons d'action rapide dans le Hero Header */}
+          <div className="flex flex-wrap lg:flex-col gap-3 shrink-0">
+            <Button
+              onClick={() => setPage('encaissements')}
+              className="bg-[#d97706] hover:bg-[#b45309] text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition-all gap-2 text-xs sm:text-sm"
+            >
+              <Receipt className="h-4 w-4" /> Nouvel Encaissement
+            </Button>
+            <Button
+              onClick={() => setPage('eleves')}
+              variant="outline"
+              className="bg-white/10 hover:bg-white/20 text-white border-white/20 font-semibold px-5 py-2.5 rounded-xl transition-all gap-2 text-xs sm:text-sm"
+            >
+              <Users className="h-4 w-4 text-amber-300" /> Inscrire un Élève
+            </Button>
+          </div>
+        </div>
       </motion.div>
 
-      {/* ── Une carte par devise ───────────────────────────────────── */}
-      {data.devises.length === 0 ? (
-        <motion.div variants={itemVariants}>
-          <Card className="rounded-xl border-gray-100 bg-white shadow-sm">
-            <CardContent className="p-12 text-center text-gray-400">
+      {/* ── CARTES FINANCIÈRES PAR DEVISE ── */}
+      <motion.div variants={itemVariants} className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-amber-600" /> Situation Financière par Devise
+          </h2>
+          <span className="text-xs text-stone-500">Ventilation stricte sans conversion</span>
+        </div>
+
+        {data.devises.length === 0 ? (
+          <Card className="rounded-2xl border-stone-200 bg-white shadow-sm">
+            <CardContent className="p-12 text-center text-stone-400">
               Aucune opération enregistrée pour cette année scolaire.
             </CardContent>
           </Card>
-        </motion.div>
-      ) : (
-        <motion.div
-          variants={itemVariants}
-          className={`grid grid-cols-1 gap-4 ${
+        ) : (
+          <div className={`grid grid-cols-1 gap-4 ${
             data.devises.length >= 3 ? 'md:grid-cols-2 xl:grid-cols-3' : 'md:grid-cols-2'
-          }`}
-        >
-          {data.devises.map((d) => (
-            <CarteDevise
-              key={d}
-              devise={d}
-              encaisse={trouve(data.encaissementsParDevise, d)}
-              depense={trouve(data.depensesParDevise, d)}
-              benefice={trouve(data.beneficeParDevise, d)}
-              dette={trouve(data.detteParDevise, d)}
-            />
-          ))}
-        </motion.div>
-      )}
+          }`}>
+            {data.devises.map((d) => (
+              <CarteDevise
+                key={d}
+                devise={d}
+                encaisse={trouve(data.encaissementsParDevise, d)}
+                depense={trouve(data.depensesParDevise, d)}
+                benefice={trouve(data.beneficeParDevise, d)}
+                dette={trouve(data.detteParDevise, d)}
+              />
+            ))}
+          </div>
+        )}
+      </motion.div>
 
-      {/* ── Sélecteur de devise pour les graphiques ────────────────── */}
+      {/* ── SÉLECTEUR DE DEVISE POUR GRAPHIQUES ── */}
       {data.devises.length > 1 && (
-        <motion.div variants={itemVariants} className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Graphiques affichés en</span>
+        <motion.div variants={itemVariants} className="flex items-center gap-3 bg-stone-100 p-2 rounded-xl w-fit border border-stone-200">
+          <span className="text-xs font-semibold text-stone-600 pl-2">Afficher les graphiques en :</span>
           <div className="flex gap-1.5">
             {data.devises.map((d) => {
               const actif = d === deviseActive
@@ -548,10 +591,9 @@ export default function DashboardPage() {
                   key={d}
                   type="button"
                   onClick={() => setDeviseActive(d)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-all ${
-                    actif ? c.badge + ' ring-2 ring-offset-1' : 'bg-gray-100 text-gray-400'
+                  className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                    actif ? 'bg-[#0c241f] text-amber-400 shadow-sm' : 'bg-white text-stone-600 hover:bg-stone-200'
                   }`}
-                  style={actif ? { boxShadow: `0 0 0 2px ${c.barre}33` } : undefined}
                 >
                   {d}
                 </button>
@@ -561,66 +603,81 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* ── Évolution + modes ──────────────────────────────────────── */}
+      {/* ── ÉVOLUTION + MODES (Zone Graphiques Principale) ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Évolution mensuelle (Area Chart avec gradient) */}
         <motion.div variants={itemVariants} className="lg:col-span-2">
-          <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-            <CardHeader className="px-5 pb-0">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
-                <TrendingUp className="h-4 w-4 text-[#25d366]" /> Évolution des encaissements
-                {deviseActive && <DeviseBadge devise={deviseActive} />}
-              </CardTitle>
+          <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
+            <CardHeader className="px-6 pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+                  <TrendingUp className="h-5 w-5 text-emerald-600" /> Évolution des Recettes
+                  {deviseActive && <DeviseBadge devise={deviseActive} />}
+                </CardTitle>
+                <span className="text-xs text-stone-400 font-medium">Flux mensuels</span>
+              </div>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="px-6 pt-4">
               {serieMois.length === 0 ? (
-                <p className="py-24 text-center text-sm text-gray-400">
+                <p className="py-24 text-center text-sm text-stone-400">
                   Aucun encaissement en {deviseActive || '—'}.
                 </p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={serieMois} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="mois" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                  <AreaChart data={serieMois} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorMontant" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#059669" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#059669" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="mois" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <YAxis
-                      tick={{ fontSize: 12, fill: '#6b7280' }}
+                      tick={{ fontSize: 12, fill: '#64748b' }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={formatCompact}
                     />
                     <RechartsTooltip
                       formatter={(v: number) => formatCurrency(v, deviseActive)}
-                      contentStyle={{ borderRadius: 8, fontSize: 13 }}
+                      contentStyle={{ borderRadius: 12, fontSize: 13, borderColor: '#e2e8f0', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
                     />
-                    <Line
-                      type="monotone" dataKey="montant" name="Encaissements"
-                      stroke={couleurDevise(deviseActive).barre} strokeWidth={3}
-                      dot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
-                      activeDot={{ r: 7 }}
+                    <Area
+                      type="monotone"
+                      dataKey="montant"
+                      name="Encaissements"
+                      stroke="#059669"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#colorMontant)"
+                      dot={{ r: 4, strokeWidth: 2, fill: '#ffffff', stroke: '#059669' }}
                     />
-                  </LineChart>
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Répartition par mode de paiement (Pie/Donut Chart) */}
         <motion.div variants={itemVariants}>
-          <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-            <CardHeader className="px-5 pb-0">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
-                <Wallet className="h-4 w-4 text-[var(--etab-color,#075e54)]" /> Modes de paiement
+          <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
+            <CardHeader className="px-6 pb-2">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+                <Wallet className="h-5 w-5 text-amber-600" /> Modes de Paiement
                 {deviseActive && <DeviseBadge devise={deviseActive} />}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="px-6 pt-4">
               {serieMode.length === 0 ? (
-                <p className="py-24 text-center text-sm text-gray-400">Aucune donnée.</p>
+                <p className="py-24 text-center text-sm text-stone-400">Aucune donnée disponible.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
                       data={serieMode} cx="50%" cy="45%"
-                      innerRadius={55} outerRadius={85} paddingAngle={3}
+                      innerRadius={60} outerRadius={90} paddingAngle={4}
                       dataKey="montant" nameKey="mode"
                     >
                       {serieMode.map((_, i) => (
@@ -637,32 +694,32 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {/* ── Écoles + motifs ────────────────────────────────────────── */}
+      {/* ── COMPARAISON ÉCOLES & MOTIFS ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <motion.div variants={itemVariants}>
-          <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-            <CardHeader className="px-5 pb-0">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
-                <School className="h-4 w-4 text-[var(--etab-color,#075e54)]" /> Comparaison écoles
+          <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
+            <CardHeader className="px-6 pb-2">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+                <School className="h-5 w-5 text-[#0c241f]" /> Comparaison Écoles
                 {deviseActive && <DeviseBadge devise={deviseActive} />}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="px-6 pt-4">
               {serieEcoles.length === 0 ? (
-                <p className="py-24 text-center text-sm text-gray-400">Aucune donnée.</p>
+                <p className="py-24 text-center text-sm text-stone-400">Aucune donnée.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={serieEcoles} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis
-                      dataKey="nom" tick={{ fontSize: 11, fill: '#6b7280' }}
+                      dataKey="nom" tick={{ fontSize: 11, fill: '#64748b' }}
                       interval={0} angle={-15} textAnchor="end" height={60}
                     />
-                    <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} tickFormatter={formatCompact} />
+                    <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={formatCompact} />
                     <RechartsTooltip formatter={(v: number) => formatCurrency(v, deviseActive)} />
                     <Legend />
-                    <Bar dataKey="encaissements" name="Encaissements" fill="#25d366" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="depenses" name="Dépenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="encaissements" name="Encaissements" fill="#059669" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="depenses" name="Dépenses" fill="#e11d48" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -671,22 +728,22 @@ export default function DashboardPage() {
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-            <CardHeader className="px-5 pb-0">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
-                <TrendingUp className="h-4 w-4 text-[#128c7e]" /> Répartition par frais
+          <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
+            <CardHeader className="px-6 pb-2">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+                <TrendingUp className="h-5 w-5 text-amber-600" /> Répartition par Type de Frais
                 {deviseActive && <DeviseBadge devise={deviseActive} />}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="px-6 pt-4">
               {serieMotif.length === 0 ? (
-                <p className="py-24 text-center text-sm text-gray-400">Aucune donnée.</p>
+                <p className="py-24 text-center text-sm text-stone-400">Aucune donnée.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
                       data={serieMotif} cx="50%" cy="45%"
-                      innerRadius={55} outerRadius={85} paddingAngle={3}
+                      innerRadius={60} outerRadius={90} paddingAngle={4}
                       dataKey="montant" nameKey="motif"
                     >
                       {serieMotif.map((_, i) => (
@@ -703,41 +760,38 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {/* ── Tableaux ───────────────────────────────────────────────── */}
+      {/* ── SUIVI DES ÉLÈVES (Retards & Bons Payeurs) ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <motion.div variants={itemVariants}>
-          <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-            <CardHeader className="px-5 pb-0">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
-                <AlertTriangle className="h-4 w-4 text-red-500" /> Top élèves en retard
+          <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
+            <CardHeader className="px-6 pb-2">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+                <AlertTriangle className="h-5 w-5 text-rose-500" /> Élèves en Retard
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="px-6 pt-3">
               {data.topElevesEnRetard.length === 0 ? (
-                <p className="py-8 text-center text-sm text-gray-400">Aucun élève en retard.</p>
+                <p className="py-8 text-center text-sm text-stone-400">Aucun élève en retard.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {data.topElevesEnRetard.slice(0, 6).map((item, i) => (
                     <div
                       key={i}
-                      className="flex items-start justify-between gap-3 border-b border-gray-50 pb-2 last:border-0 last:pb-0"
+                      className="flex items-center justify-between gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50 hover:bg-stone-50 transition-colors"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-800">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-stone-800 break-words">
                           {item.eleve?.prenom} {item.eleve?.nom}
                         </p>
                         {item.matricule && (
-                          <p className="text-[10px] text-gray-400">{item.matricule}</p>
+                          <p className="text-[11px] text-stone-400 font-medium">{item.matricule}</p>
                         )}
                       </div>
-                      {/* Une ligne par devise, jamais de total mélangé.
-                          Le montant porte déjà son symbole : pas de badge
-                          en plus, qui donnait « CDF20 000 FC ». */}
-                      <div className="shrink-0 space-y-1 text-right">
+                      <div className="shrink-0 space-y-0.5 text-right">
                         {item.dettes.map((d) => (
                           <div
                             key={d.devise}
-                            className="whitespace-nowrap text-sm font-semibold tabular-nums text-red-600"
+                            className="whitespace-nowrap text-sm font-bold tabular-nums text-rose-600"
                           >
                             {formatCurrency(d.montant, d.devise)}
                           </div>
@@ -752,34 +806,44 @@ export default function DashboardPage() {
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-            <CardHeader className="px-5 pb-0">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
-                <CheckCircle className="h-4 w-4 text-emerald-500" /> Bons payeurs
+          <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
+            <CardHeader className="px-6 pb-2">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+                <CheckCircle className="h-5 w-5 text-emerald-600" /> Élèves en Ordre (Bons Payeurs)
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="px-6 pt-3">
               {data.bonsPayeurs.length === 0 ? (
-                <p className="py-8 text-center text-sm text-gray-400">Aucun élève à jour.</p>
+                <p className="py-8 text-center text-sm text-stone-400">Aucun élève à jour.</p>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {data.bonsPayeurs.slice(0, 6).map((item, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-3 rounded-lg border border-emerald-100 bg-emerald-50/50 px-4 py-2.5"
+                      className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3"
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                        <CheckCircle className="h-4 w-4 text-emerald-600" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 border border-emerald-200">
+                        <CheckCircle className="h-4 w-4 text-emerald-700" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
+                        <p className="truncate text-sm font-semibold text-stone-800">
                           {item.eleve?.prenom} {item.eleve?.nom}
                         </p>
                         {item.matricule && (
-                          <p className="mt-0.5 text-[10px] text-gray-400">{item.matricule}</p>
+                          <p className="text-[11px] text-stone-400 font-medium">{item.matricule}</p>
                         )}
                       </div>
-                      <Badge className="border-0 bg-emerald-100 text-emerald-700">À jour</Badge>
+                      {
+                        (() => {
+                          const ident = (item.matricule || `${item.eleve?.prenom || ''} ${item.eleve?.nom || ''}`).toString().toLowerCase().trim()
+                          const isOverdue = ident ? overdueSet.has(ident) : false
+                          return isOverdue ? (
+                            <Badge className="border-0 bg-rose-100 text-rose-700 font-semibold">En retard</Badge>
+                          ) : (
+                            <Badge className="border-0 bg-emerald-100 text-emerald-800 font-semibold">À jour</Badge>
+                          )
+                        })()
+                      }
                     </div>
                   ))}
                 </div>
@@ -789,58 +853,57 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {/* ── Effectifs : sans devise ────────────────────────────────── */}
+      {/* ── KPI COMPTEURS D'EFFECTIFS ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-          <CardContent className="flex items-center gap-3 px-5">
-            <div className="rounded-full bg-[var(--etab-color,#075e54)]/10 p-3">
-              <Users className="h-5 w-5 text-[var(--etab-color,#075e54)]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="flex items-center gap-4 px-6">
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <Users className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
-              <p className="text-xl font-bold">{formatNumber(data.nombreEleves.total)}</p>
-              <p className="text-xs text-gray-500">Nombre d'élèves</p>
+              <p className="text-2xl font-extrabold text-stone-900">{formatNumber(data.nombreEleves.total)}</p>
+              <p className="text-xs font-semibold text-stone-500">Total Élèves</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-          <CardContent className="flex items-center gap-3 px-5">
-            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
-              <CircularProgress value={tauxGlobalRecouvrement} size={44} strokeWidth={4} />
-              <span className="absolute text-[9px] font-bold text-emerald-700">
+        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="flex items-center gap-4 px-6">
+            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
+              <CircularProgress value={tauxGlobalRecouvrement} size={48} strokeWidth={5} />
+              <span className="absolute text-[10px] font-extrabold text-amber-700">
                 {Math.round(tauxGlobalRecouvrement)}%
               </span>
             </div>
             <div>
-              <p className="text-xl font-bold">{formatNumber(data.elevesEnOrdre)}</p>
-              <p className="text-xs text-gray-500">Élèves en ordre</p>
+              <p className="text-2xl font-extrabold text-stone-900">{formatNumber(data.elevesEnOrdre)}</p>
+              <p className="text-xs font-semibold text-stone-500">Élèves en Ordre</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-          <CardContent className="flex items-center gap-3 px-5">
-            <div className="rounded-full bg-orange-50 p-3">
-              <AlertTriangle className="h-5 w-5 text-orange-500" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="flex items-center gap-4 px-6">
+            <div className="rounded-2xl bg-amber-500/10 p-3.5 border border-amber-500/20">
+              <AlertTriangle className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-xl font-bold">{formatNumber(data.elevesEnRetard)}</p>
-              <p className="text-xs text-gray-500">Élèves en retard</p>
+              <p className="text-2xl font-extrabold text-stone-900">{formatNumber(data.elevesEnRetard)}</p>
+              <p className="text-xs font-semibold text-stone-500">Élèves en Retard</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl border-gray-100 bg-white py-5 shadow-sm">
-          <CardContent className="flex items-center gap-3 px-5">
-            <div className="rounded-full bg-amber-50 p-3">
-              <Clock className="h-5 w-5 text-amber-500" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="flex items-center gap-4 px-6">
+            <div className="rounded-2xl bg-emerald-500/10 p-3.5 border border-emerald-500/20">
+              <Clock className="h-6 w-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-xl font-bold">
-                {Math.round(data.margeRetardMoyenne)} jour
-                {Math.round(data.margeRetardMoyenne) > 1 ? 's' : ''}
+              <p className="text-2xl font-extrabold text-stone-900">
+                {Math.round(data.margeRetardMoyenne)} Jours
               </p>
-              <p className="text-xs text-gray-500">Retard moyen</p>
+              <p className="text-xs font-semibold text-stone-500">Retard Moyen</p>
             </div>
           </CardContent>
         </Card>

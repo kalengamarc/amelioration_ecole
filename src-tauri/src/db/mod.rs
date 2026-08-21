@@ -3,9 +3,21 @@ use std::sync::Mutex;
 use crate::error::AppError;
 
 pub mod models;
-pub use models::*;
+pub use self::models::*;
 
 pub type DbConn = Mutex<Connection>;
+
+pub fn now_iso() -> String {
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+pub fn bool_to_int(b: bool) -> i32 {
+    if b { 1 } else { 0 }
+}
+
+pub fn int_to_bool(i: i32) -> bool {
+    i != 0
+}
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS Etablissement (
@@ -334,6 +346,7 @@ pub fn init_db() -> Result<DbConn, AppError> {
     let path = get_db_path();
     let conn = Connection::open(&path)?;
     conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    conn.execute_batch("PRAGMA busy_timeout=5000;")?;
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
     conn.execute_batch(SCHEMA)?;
     seed_default_admin(&conn)?;
@@ -356,7 +369,3 @@ fn seed_default_admin(conn: &Connection) -> Result<(), AppError> {
     )?;
     Ok(())
 }
-
-pub fn bool_to_int(b: bool) -> i32 { if b { 1 } else { 0 } }
-pub fn int_to_bool(i: i32) -> bool { i != 0 }
-pub fn now_iso() -> String { chrono::Utc::now().to_rfc3339() }

@@ -104,7 +104,7 @@ interface AppState {
   setEtabParams: (params: EtabParams | null) => void
 }
 
-export const DEFAULT_COLOR = '#0f0e50f1'
+export const DEFAULT_COLOR = '#0c241f'
 
 // ── Color helper: darken a hex color ──────────────────────────────────────
 

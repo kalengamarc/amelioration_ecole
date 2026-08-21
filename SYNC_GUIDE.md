@@ -1,0 +1,215 @@
+# 📊 Guide de Synchronisation Sécurisée - Nouvelle Base de Données
+
+## 🔍 État Actuel du Système
+
+Votre application utilise une **synchronisation bidirectionnelle** SQLite (local) ↔ Supabase/PostgreSQL (cloud).
+
+### Architecture:
+- **Local**: SQLite avec WAL mode
+- **Cloud**: Supabase (PostgreSQL)
+- **Protocole**: REST API PostgREST avec retry logic
+- **Mode**: Bidirectionnel (Pull puis Push)
+
+---
+
+## ⚠️ Ordre de Synchronisation Critique
+
+### **Tables Maîtres (pas de dépendances):**
+1. `Etablissement` ✓
+2. `User` ✓
+3. `AnneeScolaire` → dépend de `Etablissement`
+
+### **Tables Secondaires:**
+4. `Classe` → dépend de `Etablissement`, `AnneeScolaire`
+5. `Eleve` → dépend de `Etablissement`, `AnneeScolaire`
+6. `Tuteur` ✓ (indépendant)
+
+### **Tables de Liaison (Junction):**
+7. `TuteurEleve` → dépend de `Eleve`, `Tuteur`
+8. `EleveClasse` → dépend de `Eleve`, `Classe`
+
+### **Frais & Échéances:**
+9. `FraisScolaire` → dépend de `Etablissement`, `AnneeScolaire`
+10. `FraisClasse` → dépend de `FraisScolaire`, `Classe`
+11. `Echeance` → dépend de `Eleve`, `FraisScolaire`, `Etablissement`, `AnneeScolaire`
+
+### **Transactions Financières:**
+12. `Paiement` → dépend de `Eleve`, `Echeance`, `Etablissement`, `AnneeScolaire`, `User`
+13. `AnnulationRecu` → dépend de `Paiement`, `User`
+14. `Depense` → dépend de `Etablissement`, `AnneeScolaire`, `User`
+
+### **Configuration & Audit:**
+15. `ParametreEtablissement` → dépend de `Etablissement`, `AnneeScolaire`
+16. `AuditLog` (non critique)
+
+---
+
+## 🚀 Étapes de Synchronisation Sécurisée
+
+### **Avant la Première Sync:**
+
+#### 1️⃣ Vérifier la Configuration Supabase
+```bash
+# Dans Paramètres → Synchronisation
+- Entrer votre URL Supabase: https://xxxxx.supabase.co
+- Entrer votre clé API: eyJhbG...
+```
+
+#### 2️⃣ Exécuter le Script SQL Supabase
+```sql
+-- ✓ Aller dans Supabase → SQL Editor
+-- ✓ Copier-coller le contenu de: supabase_schema.sql
+-- ✓ Exécuter le script
+-- ✓ Attendre que toutes les tables soient créées
+```
+
+#### 3️⃣ Vérifier les Données Locales
+```bash
+# Vérifier que votre SQLite locale a des données:
+- Dashboard: voir des élèves, frais, paiements
+- Chaque établissement doit avoir des années scolaires
+- Les élèves doivent être liés à des classes
+```
+
+### **Première Synchronisation (Pull → Push):**
+
+#### Phase 1: PULL (Supabase → Local)
+- Télécharge les **deletions** depuis l'audit de Supabase
+- Télécharge les **insertions/modifications** par table
+- ✓ Remet à jour les données locales qui auraient pu être modifiées en cloud
+
+#### Phase 2: PUSH (Local → Supabase)
+- Envoie les **deletions** (uniquement tables non-critiques)
+- Envoie les **insertions/modifications** par lot de 100
+- ✓ Utilise `on_conflict` pour gérer les doublons
+
+---
+
+## ✅ Vérifications de Sécurité
+
+### Avant de cliquer "Synchroniser":
+
+- [ ] **Supabase est accessible**
+  ```bash
+  Tester: https://xxxxx.supabase.co/rest/v1/Etablissement
+  Header: apikey: votre_cle_api
+  ```
+
+- [ ] **Les tables sont créées** (SQL exécuté)
+  ```bash
+  Supabase → SQL Editor → Vérifier que toutes les tables existent
+  ```
+
+- [ ] **Les données locales sont complètes**
+  ```bash
+  Dashboard → Vérifier:
+  - Au moins 1 établissement
+  - Au moins 1 année scolaire active
+  - Au moins quelques élèves
+  - Au moins quelques paiements ou frais
+  ```
+
+- [ ] **Foreign keys respectées**
+  ```bash
+  Exemple: Un élève DOIT être lié à un établissement existant
+  ```
+
+---
+
+## 🔄 Processus de Sync Sécurisé
+
+### **Pour une PREMIÈRE synchronisation:**
+
+1. **Vérifier le statut** → Paramètres → Synchronisation → "Vérifier le statut"
+   - ✓ Doit afficher "Configuré: Oui"
+   - ✓ Doit afficher la dernière sync (si première, affichera "Jamais")
+
+2. **Cliquer "Synchroniser maintenant"**
+   - ⏳ Attendre... (cela peut prendre 30 secondes à 2 minutes)
+   - 📊 Voir le résumé s'afficher
+
+3. **Vérifier le résumé:**
+   ```
+   Établissement: 5 poussés
+   Année scolaire: 3 poussés
+   Élève: 45 poussés
+   Paiement: 120 poussés
+   ...
+   ```
+
+4. **Vérifier dans Supabase:**
+   ```bash
+   Supabase → Table Editor → Cliquer sur chaque table
+   Vérifier que les données sont là
+   ```
+
+---
+
+## ⚠️ Problèmes Courants & Solutions
+
+### 🔴 "Erreur: Foreign key constraint violated"
+**Cause**: Une table enfant référence un parent qui n'existe pas
+**Solution**: 
+- Vérifier que toutes les dépendances existent localement
+- Relancer la sync (il va pull d'abord les parents manquants)
+
+### 🔴 "Erreur: UNIQUE constraint violated"
+**Cause**: Un doublon est trouvé dans Supabase
+**Solution**:
+- La sync utilise `on_conflict=merge` 
+- Les doublons seront ignorés/fusionnés
+- Continuer la sync
+
+### 🔴 "Erreur réseau: Connection timeout"
+**Cause**: Supabase ou votre internet est lent
+**Solution**:
+- Vérifier votre connexion internet
+- Relancer la sync (elle retentera 3 fois)
+
+### 🔴 "Sync réussie mais peu de données poussées"
+**Cause**: Les données ont peut-être déjà été synchées
+**Solution**:
+- Vérifier dans Supabase que les données sont là
+- Si oui: tout va bien! ✓
+- Si non: Réinitialiser LAST_SYNC en base (avancé)
+
+---
+
+## 📋 Checklist Finale
+
+Avant de déployer en production:
+
+- [ ] ✅ Première sync complétée avec succès
+- [ ] ✅ Données visibles dans Supabase
+- [ ] ✅ Dashboard affiche les mêmes données
+- [ ] ✅ Pas d'erreurs dans les logs
+- [ ] ✅ Sync automatique (toutes les 10 min) fonctionne
+- [ ] ✅ Tester une nouvelle saisie → sync automatique → visible en Supabase
+- [ ] ✅ Configurer les backups Supabase (optionnel mais recommandé)
+
+---
+
+## 🛠️ Commandes Avancées (Terminal)
+
+Si vous devez réinitialiser la dernière sync:
+
+```rust
+// Dans SQLite locale:
+DELETE FROM ConfigSysteme WHERE cle = 'LAST_SYNC';
+```
+
+Puis relancer la sync (elle va tout resynchroniser).
+
+---
+
+## 📞 Support
+
+Si la sync échoue:
+1. Vérifier que Supabase est accessible
+2. Vérifier que la clé API est correcte
+3. Vérifier les logs de Supabase (Logs → Fonction Logs)
+4. Réessayer
+
+---
+
+**Bon courage pour la synchronisation! 🎉**

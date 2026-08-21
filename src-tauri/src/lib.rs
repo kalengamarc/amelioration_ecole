@@ -73,6 +73,7 @@ pub fn run() {
             commands::audit::list_audit_logs,
             // Sync
             commands::sync::sync_status,
+            commands::sync::validate_sync_ready,
             commands::sync::sync_push,
             commands::sync::sync_pull,
             commands::sync::save_sync_config,

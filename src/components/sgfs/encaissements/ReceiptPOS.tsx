@@ -4,6 +4,7 @@ import filigram from '@/assets/gramme.png'
 import { Printer, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
+import Barcode from 'react-barcode'
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Types
@@ -83,7 +84,7 @@ export interface PosEtabParams {
  * ──────────────────────────────────────────────────────────────────────────*/
 
 /** Affiché sous le nom de l'établissement, écran et impression. */
-const ETAB_SITE_WEB = 'www.bonberger.tech'
+const ETAB_SITE_WEB = ''
 
 const LOCALES: Record<string, string> = { CDF: 'fr-CD', BIF: 'fr-BI', USD: 'en-US' }
 const SANS_DECIMALES = ['CDF', 'BIF']
@@ -281,6 +282,7 @@ function printPosReceipt(
 <head>
   <meta charset="utf-8" />
   <title>Reçu ${escapeHtml(receipt.numeroRecu)}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
   <style>
     @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; }
@@ -348,13 +350,27 @@ function printPosReceipt(
   <hr />
   <footer class="footer">
     ${etabParams?.mentionsLegales ? `<p style="font-size:9px;margin-bottom:1mm;">${escapeHtml(etabParams.mentionsLegales)}</p>` : ''}
+    <p style="font-size:9px;margin-bottom:1mm;font-weight:bold;">NB: L'argent payé n'est pas remboursable.</p>
     <p><b>Merci pour votre paiement.</b></p>
     <p>Conservez ce reçu comme preuve de paiement.</p>
     <p>${escapeHtml(etabParams?.piedPageRecu || 'Document généré électroniquement')}</p>
   </footer>
+  <div class="center" style="margin-top: 2mm;">
+    <svg id="barcode"></svg>
+  </div>
 </main>
 <script>
-  window.onload = function () { setTimeout(function () { window.print(); }, 200); };
+  window.onload = function () {
+    JsBarcode("#barcode", "${escapeHtml(receipt.numeroRecu)}|${escapeHtml(receipt.eleveNom || '')}|${escapeHtml(receipt.eleveClasse || '')}|${escapeHtml(String(receipt.montant || ''))}|${escapeHtml(receipt.devise || '')}", {
+      format: "CODE128",
+      width: 1,
+      height: 40,
+      displayValue: true,
+      fontSize: 8,
+      margin: 0
+    });
+    setTimeout(function () { window.print(); }, 200);
+  };
   window.onafterprint = function () { window.parent.postMessage('close-iframe', '*'); };
 <\/script>
 </body>
@@ -583,10 +599,25 @@ export function ReceiptPOS({
           <p className="mb-1 text-center text-[9px] text-gray-500">{etabParams.mentionsLegales}</p>
         )}
         <footer className="text-center text-[10px]">
+          <p className="mb-1 font-bold">NB: L'argent payé n'est pas remboursable.</p>
           <p className="font-bold">Merci pour votre paiement.</p>
           <p>Conservez ce reçu comme preuve de paiement.</p>
           <p className="mt-2">{etabParams?.piedPageRecu || 'Document généré électroniquement'}</p>
         </footer>
+
+        {/* Barcode scannable avec informations de l'élève */}
+        <div className="mt-1 flex justify-center">
+          <Barcode
+            value={`${receipt.numeroRecu}|${receipt.eleveNom || ''}|${receipt.eleveClasse || ''}|${receipt.montant || ''}|${receipt.devise || ''}`}
+            width={1}
+            height={40}
+            fontSize={8}
+            margin={0}
+            displayValue={true}
+            textPosition="bottom"
+            textMargin={2}
+          />
+        </div>
 
         <div className="no-print mt-1 flex justify-center gap-2 border-t pt-3">
           <Button variant="outline" size="sm" onClick={onClose}>

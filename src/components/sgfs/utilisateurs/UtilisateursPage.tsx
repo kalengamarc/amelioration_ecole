@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useAppStore, canManageUsers, getRoleLabel, getTypeIcon, getTypeBadgeClass, getTypeLabel } from '@/lib/store'
+import { useAppStore, canManageUsers, getRoleLabel, getTypeIcon } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,10 +27,10 @@ import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import {
   Plus, Users, UserCheck, Shield, Edit, Trash2, Power, ShieldAlert,
-  Eye, Search, Filter, Clock, CalendarDays, Building2, Key, Lock,
+  Eye, Search, Filter, Clock, CalendarDays, Building2, Key, Lock, UserCog, Sparkles, CheckCircle2
 } from 'lucide-react'
 
-// ── Types (camelCase exacts fournis par le backend) ─────────────────────────
+// ── Types ───────────────────────────────────────────────────────────────────
 
 interface User {
   id: string
@@ -102,30 +102,19 @@ function formatDateTime(dateStr?: string | null) {
 }
 
 function getRoleBadgeClass(role: string): string {
-  if (role === 'COORDINATEUR') {
-    return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
+  if (role === 'COORDINATEUR' || role === 'ADMIN' || role === 'SUPERADMIN') {
+    return 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold'
   }
-  return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+  return 'bg-amber-100 text-amber-900 border border-amber-200 font-semibold'
 }
 
-function getInitials(nomComplet: string): string {
-  const parts = nomComplet.trim().split(/\s+/)
+function getInitials(nomComplet: string, username?: string): string {
+  const name = nomComplet || username || 'Admin'
+  const parts = name.trim().split(/\s+/)
   if (parts.length >= 2) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
   }
-  return nomComplet.substring(0, 2).toUpperCase()
-}
-
-function getAvatarColor(nomComplet: string): string {
-  const colors = [
-    '#075e54', '#25d366', '#128c7e', '#34b7f1', '#f39c12',
-    '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2c3e50',
-  ]
-  let hash = 0
-  for (let i = 0; i < nomComplet.length; i++) {
-    hash = nomComplet.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return colors[Math.abs(hash) % colors.length]
+  return name.substring(0, 2).toUpperCase()
 }
 
 function getRolePermissions(role: string): { icon: typeof Shield; label: string; desc: string }[] {
@@ -218,7 +207,6 @@ export default function UtilisateursPage() {
     setLoading(true)
     try {
       const res = await tc.listUtilisateurs()
-      // La réponse a la forme { success: true, data: User[] }
       const list = res?.data ?? []
       setUsers(list)
     } catch (err: unknown) {
@@ -270,10 +258,10 @@ export default function UtilisateursPage() {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col items-center justify-center min-h-[60vh] gap-4"
       >
-        <ShieldAlert className="w-16 h-16 text-red-400" />
-        <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-200">Accès réservé</h2>
-        <p className="text-gray-500 dark:text-gray-400">
-          La gestion des utilisateurs est réservée au coordonnateur
+        <ShieldAlert className="w-16 h-16 text-rose-500" />
+        <h2 className="text-2xl font-bold text-stone-800">Accès réservé</h2>
+        <p className="text-stone-500">
+          La gestion des utilisateurs est réservée au coordonnateur ou à l'administrateur.
         </p>
       </motion.div>
     )
@@ -310,7 +298,7 @@ export default function UtilisateursPage() {
 
   async function handleSave() {
     if (!form.nomComplet.trim() || !form.username.trim() || !form.role) {
-      toast.error('Veuillez remplir tous les champs obligatoires')
+      toast.error('Veuillez remplir tous les champs obligatoires (*)')
       return
     }
     if (!editingUser && !form.password.trim()) {
@@ -384,58 +372,60 @@ export default function UtilisateursPage() {
 
   // ── Rendu ───────────────────────────────────────────────────────────────
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 p-4 md:p-6">
-      {/* Header */}
-      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 p-2 sm:p-4 md:p-6">
+      {/* Banner Header */}
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Users className="w-7 h-7" style={{ color: 'var(--etab-color, #075e54)' }} />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <UserCog className="h-3.5 w-3.5" /> Sécurité & Comptes
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight flex items-center gap-2">
             Gestion des Utilisateurs
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Créez et gérez les comptes d&apos;accès au système
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+            Création, rôles, affectations et sécurité d&apos;accès au système.
           </p>
         </div>
         {canManageUsers(user?.role || '') && (
-          <Button onClick={openCreate} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white gap-2">
-            <Plus className="w-4 h-4" />
+          <Button onClick={openCreate} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
+            <Plus className="w-4 h-4 text-amber-400" />
             Nouvel utilisateur
           </Button>
         )}
       </motion.div>
 
-      {/* Stats */}
+      {/* Stats Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-l-4 border-l-[var(--etab-color,#075e54)]">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 rounded-full bg-[var(--etab-color,#075e54)]/10">
-              <Users className="w-6 h-6 text-[var(--etab-color,#075e54)]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="p-3.5 rounded-2xl bg-[#0c241f]/10 border border-[#0c241f]/20">
+              <Users className="w-6 h-6 text-[#0c241f]" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Total utilisateurs</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{totalUsers}</p>
+              <p className="text-xs font-semibold text-stone-500">Total Utilisateurs</p>
+              <p className="text-2xl font-extrabold text-stone-900">{totalUsers}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-[#25d366]">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 rounded-full bg-[#25d366]/10">
-              <UserCheck className="w-6 h-6 text-[#25d366]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-emerald-600">
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+              <UserCheck className="w-6 h-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Utilisateurs actifs</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{activeUsers}</p>
+              <p className="text-xs font-semibold text-stone-500">Utilisateurs Actifs</p>
+              <p className="text-2xl font-extrabold text-stone-900">{activeUsers}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 rounded-full bg-amber-500/10">
-              <Shield className="w-6 h-6 text-amber-500" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-amber-500">
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+              <Shield className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Rôles différents</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{uniqueRoles}</p>
+              <p className="text-xs font-semibold text-stone-500">Rôles Différents</p>
+              <p className="text-2xl font-extrabold text-stone-900">{uniqueRoles}</p>
             </div>
           </CardContent>
         </Card>
@@ -444,21 +434,20 @@ export default function UtilisateursPage() {
       {/* Search & Filter */}
       <motion.div variants={itemVariants} className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <Input
             placeholder="Rechercher par nom, identifiant ou rôle..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 rounded-xl border-stone-200 font-medium"
           />
         </div>
-        <div className="relative w-full sm:w-56">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <div className="relative w-full sm:w-60">
           <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="pl-10">
+            <SelectTrigger className="rounded-xl border-stone-200 font-medium">
               <SelectValue placeholder="Tous les rôles" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-xl">
               <SelectItem value="ALL">Tous les rôles</SelectItem>
               {ALL_ROLES.map((r) => (
                 <SelectItem key={r} value={r}>
@@ -472,69 +461,58 @@ export default function UtilisateursPage() {
 
       {/* Table */}
       <motion.div variants={itemVariants}>
-        <Card>
+        <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             {loading ? (
-              <div className="p-6 space-y-4">
+              <div className="p-8 space-y-4">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex gap-4 items-center">
-                    <Skeleton className="h-8 w-1/5" />
-                    <Skeleton className="h-8 w-1/6" />
-                    <Skeleton className="h-8 w-1/5" />
-                    <Skeleton className="h-8 w-1/6" />
-                    <Skeleton className="h-8 w-1/6" />
-                    <Skeleton className="h-8 w-1/6" />
-                  </div>
+                  <Skeleton key={i} className="h-10 w-full rounded-xl" />
                 ))}
               </div>
             ) : filteredUsers.length === 0 ? (
-              <div className="p-12 text-center text-gray-500 dark:text-gray-400">
+              <div className="p-12 text-center text-stone-400">
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p className="text-lg font-medium">
-                  {searchQuery || roleFilter !== 'ALL'
-                    ? 'Aucun utilisateur trouvé'
-                    : 'Aucun utilisateur trouvé'}
+                <p className="text-base font-bold text-stone-700">
+                  Aucun utilisateur trouvé
                 </p>
-                <p className="text-sm mt-1">
-                  {searchQuery || roleFilter !== 'ALL'
-                    ? 'Essayez de modifier vos critères de recherche'
-                    : 'Commencez par créer un nouvel utilisateur'}
+                <p className="text-xs mt-1">
+                  Essayez de modifier vos critères de recherche ou créez un nouvel utilisateur
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                      <TableHead>Utilisateur</TableHead>
-                      <TableHead>Identifiant</TableHead>
-                      <TableHead>Rôle</TableHead>
-                      <TableHead className="hidden md:table-cell">Établissement</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="hidden lg:table-cell">Dernière connexion</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
+                      <TableHead className="text-amber-300 font-bold">Utilisateur</TableHead>
+                      <TableHead className="text-white font-bold">Identifiant</TableHead>
+                      <TableHead className="text-white font-bold">Rôle</TableHead>
+                      <TableHead className="hidden md:table-cell text-white font-bold">Établissement</TableHead>
+                      <TableHead className="text-white font-bold">Statut</TableHead>
+                      <TableHead className="hidden lg:table-cell text-white font-bold">Dernière Connexion</TableHead>
+                      <TableHead className="text-right text-white font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.map((u) => (
                       <TableRow
                         key={u.id}
-                        className={`hover:bg-gray-50/50 dark:hover:bg-gray-800/30 ${!u.actif ? 'opacity-60' : ''}`}
+                        className={`hover:bg-amber-500/5 transition-colors ${!u.actif ? 'opacity-60 bg-stone-50' : ''}`}
                       >
-                        <TableCell className="font-medium">{u.nomComplet}</TableCell>
-                        <TableCell className="text-gray-500 dark:text-gray-400 font-mono text-sm">
-                          {u.username}
+                        <TableCell className="font-bold text-stone-900 break-words">{u.nomComplet}</TableCell>
+                        <TableCell className="text-stone-600 font-mono text-xs font-semibold">
+                          @{u.username}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={getRoleBadgeClass(u.role)}>
                             {getRoleLabel(u.role)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
+                        <TableCell className="hidden md:table-cell font-medium text-stone-700 break-words">
                           {u.etablissementNom ? (
                             u.etablissementNom
                           ) : u.role === 'COORDINATEUR' ? (
-                            <span className="text-gray-400 italic">Tous</span>
+                            <span className="text-stone-400 italic">Tous les établissements</span>
                           ) : (
                             '—'
                           )}
@@ -544,15 +522,15 @@ export default function UtilisateursPage() {
                             variant="secondary"
                             className={
                               u.actif
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200 font-semibold'
                             }
                           >
                             {u.actif ? 'Actif' : 'Inactif'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-gray-500 dark:text-gray-400 text-sm">
-                          {formatDate(u.dernierLogin)}
+                        <TableCell className="hidden lg:table-cell text-stone-500 text-xs font-medium">
+                          {formatDateTime(u.dernierLogin)}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -560,7 +538,7 @@ export default function UtilisateursPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => openDetail(u)}
-                              className="text-[var(--etab-color,#075e54)] hover:text-[var(--etab-color-hover,#064e46)] hover:bg-[var(--etab-color,#075e54)]/10"
+                              className="h-8 w-8 text-stone-600 hover:text-[#0c241f] hover:bg-stone-100"
                               title="Voir la fiche"
                             >
                               <Eye className="w-4 h-4" />
@@ -569,7 +547,7 @@ export default function UtilisateursPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => openEdit(u)}
-                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              className="h-8 w-8 text-amber-700 hover:bg-amber-50"
                               title="Modifier"
                             >
                               <Edit className="w-4 h-4" />
@@ -578,10 +556,10 @@ export default function UtilisateursPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleToggleActif(u)}
-                              className={`hover:bg-gray-50 dark:hover:bg-gray-800/30 ${
+                              className={`h-8 w-8 ${
                                 u.actif
-                                  ? 'text-amber-500 hover:text-amber-700'
-                                  : 'text-green-500 hover:text-green-700'
+                                  ? 'text-amber-600 hover:bg-amber-50'
+                                  : 'text-emerald-600 hover:bg-emerald-50'
                               }`}
                               title={u.actif ? 'Désactiver' : 'Activer'}
                             >
@@ -592,8 +570,8 @@ export default function UtilisateursPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => openConfirm(u)}
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                title="Désactiver (supprimer)"
+                                className="h-8 w-8 text-rose-600 hover:bg-rose-50"
+                                title="Supprimer / Désactiver"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -610,34 +588,42 @@ export default function UtilisateursPage() {
         </Card>
       </motion.div>
 
-      {/* Create / Edit Dialog */}
+      {/* ── DIALOG CRÉATION / ÉDITION UTILISATEUR ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold" style={{ color: 'var(--etab-color, #075e54)' }}>
-              {editingUser ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}
-            </DialogTitle>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <UserCog className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
+                  {editingUser ? "Modifier le compte utilisateur" : 'Créer un utilisateur'}
+                </DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Saisissez les identifiants et le rôle système.</p>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="nomComplet">Nom complet *</Label>
-              <Input id="nomComplet" placeholder="Ex: Jean Dupont" value={form.nomComplet} onChange={(e) => setForm({ ...form, nomComplet: e.target.value })} />
+          <div className="space-y-4 pt-4">
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Nom complet *</Label>
+              <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Ex: Jean Dupont" value={form.nomComplet} onChange={(e) => setForm({ ...form, nomComplet: e.target.value })} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="username">Nom d'utilisateur *</Label>
-              <Input id="username" placeholder="Ex: jdupont" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} disabled={!!editingUser} />
-              {editingUser && <p className="text-xs text-gray-400">L'identifiant ne peut pas être modifié</p>}
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Nom d'utilisateur *</Label>
+              <Input className="rounded-xl border-stone-200 bg-white font-mono font-bold mt-1" placeholder="Ex: jdupont" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} disabled={!!editingUser} />
+              {editingUser && <p className="text-[11px] text-stone-400 mt-1 font-medium">L'identifiant d'accès ne peut pas être modifié.</p>}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe {editingUser ? '' : '*'}</Label>
-              <Input id="password" type="password" placeholder={editingUser ? 'Laisser vide pour ne pas changer' : 'Définir un mot de passe'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Mot de passe {editingUser ? '(Optionnel)' : '*'}</Label>
+              <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" type="password" placeholder={editingUser ? 'Laisser vide pour ne pas changer' : 'Définir un mot de passe'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">Rôle *</Label>
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Rôle système *</Label>
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v, etablissementId: v === 'COORDINATEUR' ? '' : form.etablissementId })}>
-                <SelectTrigger id="role"><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="COORDINATEUR">Coordonnateur</SelectItem>
+                <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="COORDINATEUR">Coordonnateur (Accès Complet)</SelectItem>
                   <SelectItem value="SECRETAIRE_MATERNELLE">Secrétaire Maternelle</SelectItem>
                   <SelectItem value="SECRETAIRE_PRIMAIRE">Secrétaire Primaire</SelectItem>
                   <SelectItem value="SECRETAIRE_SECONDAIRE">Secrétaire Secondaire</SelectItem>
@@ -646,12 +632,12 @@ export default function UtilisateursPage() {
             </div>
             {form.role && form.role !== 'COORDINATEUR' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-2">
-                <Label htmlFor="etablissement">Établissement *</Label>
+                <Label className="text-xs font-semibold text-stone-600">Établissement affecté *</Label>
                 <Select value={form.etablissementId} onValueChange={(v) => setForm({ ...form, etablissementId: v })}>
-                  <SelectTrigger id="etablissement"><SelectValue placeholder="Sélectionner un établissement" /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner un établissement" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
                     {filteredEcoles.length === 0 ? (
-                      <div className="px-3 py-6 text-center text-sm text-gray-400">Aucun établissement compatible avec ce rôle</div>
+                      <div className="px-3 py-6 text-center text-sm text-stone-400 font-medium">Aucun établissement compatible disponible</div>
                     ) : (
                       filteredEcoles.map((e) => (
                         <SelectItem key={e.id} value={e.id}>{`${e.type ? getTypeIcon(e.type) + ' ' : ''}${e.nom}`}</SelectItem>
@@ -661,84 +647,89 @@ export default function UtilisateursPage() {
                 </Select>
               </motion.div>
             )}
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button onClick={handleSave} disabled={saving} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white">
-                {saving ? 'Enregistrement...' : editingUser ? 'Mettre à jour' : 'Créer'}
+            <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
+              <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button onClick={handleSave} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md">
+                {saving ? 'Enregistrement...' : editingUser ? 'Mettre à jour' : 'Créer le compte'}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* User Detail Dialog */}
+      {/* ── DIALOG FICHE DÉTAILLÉE UTILISATEUR ── */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold" style={{ color: 'var(--etab-color, #075e54)' }}>Fiche utilisateur</DialogTitle>
-            <DialogDescription>Informations détaillées du compte</DialogDescription>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <DialogTitle className="text-lg font-bold text-[#0c241f]">Fiche Utilisateur</DialogTitle>
+            <DialogDescription className="text-xs text-stone-500 font-medium">Informations du compte et droits d&apos;accès</DialogDescription>
           </DialogHeader>
           {detailUser && (
             <div className="space-y-5 pt-2">
-              <div className="flex flex-col items-center text-center gap-3">
-                <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg" style={{ backgroundColor: getAvatarColor(detailUser.nomComplet) }}>
-                  {getInitials(detailUser.nomComplet)}
+              <div className="flex flex-col items-center text-center gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-md bg-[#d97706]">
+                  {getInitials(detailUser.nomComplet, detailUser.username)}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{detailUser.nomComplet}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">@{detailUser.username}</p>
+                  <h3 className="text-lg font-extrabold text-stone-900 break-words">{detailUser.nomComplet}</h3>
+                  <p className="text-xs text-stone-500 font-mono font-semibold mt-0.5">@{detailUser.username}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className={getRoleBadgeClass(detailUser.role)}>{getRoleLabel(detailUser.role)}</Badge>
-                  <Badge variant="secondary" className={detailUser.actif ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}>
+                  <Badge variant="secondary" className={detailUser.actif ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold' : 'bg-rose-100 text-rose-800 border border-rose-200 font-semibold'}>
                     {detailUser.actif ? 'Actif' : 'Inactif'}
                   </Badge>
                 </div>
               </div>
-              <Separator />
+
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800"><Building2 className="w-4 h-4 text-gray-500 dark:text-gray-400" /></div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Établissement</p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50">
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#0c241f]"><Building2 className="w-4 h-4" /></div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-stone-400 font-bold uppercase tracking-wider">Établissement Affecté</p>
+                    <p className="text-xs font-semibold text-stone-800 break-words mt-0.5">
                       {detailUser.etablissementNom ? detailUser.etablissementNom : detailUser.role === 'COORDINATEUR' ? 'Tous les établissements' : '—'}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800"><Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" /></div>
+
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50">
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#0c241f]"><Clock className="w-4 h-4" /></div>
                   <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Dernière connexion</p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">{formatDateTime(detailUser.dernierLogin)}</p>
+                    <p className="text-[11px] text-stone-400 font-bold uppercase tracking-wider">Dernière Connexion</p>
+                    <p className="text-xs font-semibold text-stone-800 mt-0.5">{formatDateTime(detailUser.dernierLogin)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800"><CalendarDays className="w-4 h-4 text-gray-500 dark:text-gray-400" /></div>
+
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50">
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#0c241f]"><CalendarDays className="w-4 h-4" /></div>
                   <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Date de création</p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">{formatDateTime(detailUser.createdAt)}</p>
+                    <p className="text-[11px] text-stone-400 font-bold uppercase tracking-wider">Date de Création</p>
+                    <p className="text-xs font-semibold text-stone-800 mt-0.5">{formatDateTime(detailUser.createdAt)}</p>
                   </div>
                 </div>
               </div>
+
               <Separator />
+
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2"><Shield className="w-4 h-4" style={{ color: 'var(--etab-color, #075e54)' }} />Permissions du rôle</h4>
+                <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5"><Shield className="w-4 h-4 text-amber-600" /> Droits d&apos;accès du rôle</h4>
                 <div className="space-y-2">
                   {getRolePermissions(detailUser.role).map((perm, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                      <div className="p-1.5 rounded-md bg-[var(--etab-color,#075e54)]/10 mt-0.5"><perm.icon className="w-3.5 h-3.5 text-[var(--etab-color,#075e54)]" /></div>
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 border border-stone-100">
+                      <div className="p-1.5 rounded-lg bg-[#0c241f]/10 text-[#0c241f] mt-0.5"><perm.icon className="w-3.5 h-3.5" /></div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{perm.label}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{perm.desc}</p>
+                        <p className="text-xs font-bold text-stone-900">{perm.label}</p>
+                        <p className="text-[11px] text-stone-500 font-medium mt-0.5">{perm.desc}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); openEdit(detailUser) }}><Edit className="w-3.5 h-3.5 mr-1.5" />Modifier</Button>
-                <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); handleToggleActif(detailUser) }} className={detailUser.actif ? 'text-amber-600 border-amber-300 hover:bg-amber-50' : 'text-green-600 border-green-300 hover:bg-green-50'}>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+                <Button variant="outline" className="rounded-xl border-stone-200 text-xs font-semibold" size="sm" onClick={() => { setDetailOpen(false); openEdit(detailUser) }}><Edit className="w-3.5 h-3.5 mr-1.5" />Modifier</Button>
+                <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); handleToggleActif(detailUser) }} className={`rounded-xl text-xs font-semibold ${detailUser.actif ? 'text-amber-700 border-amber-300 hover:bg-amber-50' : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'}`}>
                   <Power className="w-3.5 h-3.5 mr-1.5" />{detailUser.actif ? 'Désactiver' : 'Activer'}
                 </Button>
               </div>
@@ -749,17 +740,17 @@ export default function UtilisateursPage() {
 
       {/* Confirm Deactivation Dialog */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-3xl border border-stone-200 p-6 shadow-2xl max-w-md bg-white">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2"><Trash2 className="w-5 h-5 text-red-500" />Désactiver l'utilisateur</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600 font-extrabold text-lg"><Trash2 className="w-5 h-5" />Désactiver le compte ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-stone-600 text-sm font-medium mt-1">
               Êtes-vous sûr de vouloir désactiver l'utilisateur{' '}
-              <span className="font-semibold text-gray-900 dark:text-white">{targetUser?.nomComplet}</span> ? Son accès au système sera supprimé. Vous pourrez le réactiver ultérieurement.
+              <b className="text-stone-900">{targetUser?.nomComplet}</b> ? Son accès au système sera interrompu. Vous pourrez réactiver son compte ultérieurement.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700 text-white">Désactiver</AlertDialogAction>
+          <AlertDialogFooter className="pt-4">
+            <AlertDialogCancel className="rounded-xl border-stone-200 font-semibold">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold">Désactiver</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

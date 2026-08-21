@@ -1,7 +1,9 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::thread;
+use std::time::Duration;
 use crate::error::AppError;
 use crate::db::now_iso;
 
@@ -10,6 +12,7 @@ pub struct TableSyncStats {
     pub table_name: String,
     pub pushed: usize,
     pub pulled: usize,
+    pub skipped_orphans: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,13 +28,15 @@ struct TableConfig {
     name: &'static str,
     has_updated_at: bool,
     pk_cols: Vec<&'static str>,
+    unique_cols: Vec<&'static str>,
+    /// (colonne FK locale, table parente référencée)
+    fk_deps: Vec<(&'static str, &'static str)>,
 }
 
 fn encode_param(s: &str) -> String {
     s.replace('+', "%2B").replace(' ', "%20")
 }
 
-// Map local entity names in AuditLog to SQLite / PostgreSQL table names
 fn map_entity_to_table(entity: &str) -> Option<&'static str> {
     match entity.to_lowercase().as_str() {
         "etablissement" => Some("Etablissement"),
@@ -54,13 +59,104 @@ fn map_entity_to_table(entity: &str) -> Option<&'static str> {
     }
 }
 
+fn http_get_with_retry(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    apikey: &str,
+    auth: &str,
+    range_header: Option<&str>,
+) -> Result<reqwest::blocking::Response, reqwest::Error> {
+    let max_attempts = 3;
+    let mut last_err = None;
+    for attempt in 0..max_attempts {
+        let mut req = client.get(url)
+            .header("apikey", apikey)
+            .header("Authorization", auth);
+        if let Some(range) = range_header {
+            req = req.header("Range", range);
+        }
+        match req.send() {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(resp);
+                }
+                let status_code = resp.status().as_u16();
+                if status_code == 429 || status_code >= 500 {
+                    let wait = Duration::from_millis(300 * (attempt as u64 + 1));
+                    thread::sleep(wait);
+                    last_err = None;
+                    continue;
+                }
+                if status_code == 416 || status_code == 206 {
+                    return Ok(resp);
+                }
+                return Ok(resp);
+            }
+            Err(e) => {
+                last_err = Some(e);
+                let wait = Duration::from_millis(300 * (attempt as u64 + 1));
+                thread::sleep(wait);
+            }
+        }
+    }
+
+    let mut req = client.get(url)
+        .header("apikey", apikey)
+        .header("Authorization", auth);
+    if let Some(range) = range_header {
+        req = req.header("Range", range);
+    }
+    req.send().or_else(|e| last_err.map(Err).unwrap_or(Err(e)))
+}
+
+fn http_post_with_retry(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    apikey: &str,
+    auth: &str,
+    body: &Value,
+) -> Result<reqwest::blocking::Response, reqwest::Error> {
+    let max_attempts = 3;
+    let mut last_err = None;
+    for attempt in 0..max_attempts {
+        match client.post(url)
+            .header("apikey", apikey)
+            .header("Authorization", auth)
+            .header("Content-Type", "application/json")
+            .header("Prefer", "resolution=merge-duplicates")
+            .json(body)
+            .send()
+        {
+            Ok(resp) => return Ok(resp),
+            Err(e) => {
+                last_err = Some(e);
+                let wait = Duration::from_millis(300 * (attempt as u64 + 1));
+                thread::sleep(wait);
+            }
+        }
+    }
+    client.post(url)
+        .header("apikey", apikey)
+        .header("Authorization", auth)
+        .header("Content-Type", "application/json")
+        .header("Prefer", "resolution=merge-duplicates")
+        .json(body)
+        .send()
+        .or_else(|e| last_err.map(Err).unwrap_or(Err(e)))
+}
+
 pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError> {
     let start_time = now_iso();
 
-    // Disable SQLite foreign keys temporarily during sync to allow safe upserts
     let _ = conn.execute_batch("PRAGMA foreign_keys=OFF;");
 
-    // 1. Retrieve Supabase config
+    let _ = conn.execute(
+        "UPDATE \"AuditLog\" SET user_id = NULL \
+         WHERE user_id IS NOT NULL \
+           AND user_id NOT IN (SELECT id FROM \"User\");",
+        [],
+    );
+
     let supabase_url: String = match conn.query_row(
         "SELECT valeur FROM ConfigSysteme WHERE cle = 'SUPABASE_URL'",
         [],
@@ -88,46 +184,49 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         supabase_url = format!("https://{}", supabase_url);
     }
 
-    // 2. Retrieve last sync time
     let last_sync: String = conn.query_row(
         "SELECT valeur FROM ConfigSysteme WHERE cle = 'LAST_SYNC'",
         [],
         |r| r.get(0)
     ).unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
 
-    // 3. Define tables in strict dependency order with their natural conflict keys
     let tables = vec![
-        TableConfig { name: "Etablissement", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "User", has_updated_at: true, pk_cols: vec!["username"] },
-        TableConfig { name: "AnneeScolaire", has_updated_at: true, pk_cols: vec!["etablissement_id", "libelle"] },
-        TableConfig { name: "Classe", has_updated_at: true, pk_cols: vec!["nom", "etablissement_id", "annee_scolaire_id"] },
-        TableConfig { name: "Eleve", has_updated_at: true, pk_cols: vec!["matricule"] },
-        TableConfig { name: "Tuteur", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "TuteurEleve", has_updated_at: false, pk_cols: vec!["eleve_id", "tuteur_id"] },
-        TableConfig { name: "EleveClasse", has_updated_at: false, pk_cols: vec!["eleve_id", "classe_id"] },
-        TableConfig { name: "FraisScolaire", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "FraisClasse", has_updated_at: false, pk_cols: vec!["frais_scolaire_id", "classe_id"] },
-        TableConfig { name: "Echeance", has_updated_at: true, pk_cols: vec!["eleve_id", "frais_scolaire_id"] },
-        TableConfig { name: "Paiement", has_updated_at: true, pk_cols: vec!["numero_recu"] },
-        TableConfig { name: "AnnulationRecu", has_updated_at: false, pk_cols: vec!["paiement_id"] },
-        TableConfig { name: "Depense", has_updated_at: true, pk_cols: vec!["id"] },
-        TableConfig { name: "ParametreEtablissement", has_updated_at: true, pk_cols: vec!["etablissement_id"] },
-        TableConfig { name: "AuditLog", has_updated_at: false, pk_cols: vec!["id"] },
+        TableConfig { name: "Etablissement", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "User", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["username"], fk_deps: vec![] },
+        TableConfig { name: "AnneeScolaire", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["etablissement_id", "libelle"], fk_deps: vec![("etablissement_id", "Etablissement")] },
+        TableConfig { name: "Classe", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["nom", "etablissement_id", "annee_scolaire_id"], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
+        TableConfig { name: "Eleve", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["matricule"], fk_deps: vec![] },
+        TableConfig { name: "Tuteur", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "TuteurEleve", has_updated_at: false, pk_cols: vec!["eleve_id", "tuteur_id"], unique_cols: vec![], fk_deps: vec![("eleve_id", "Eleve"), ("tuteur_id", "Tuteur")] },
+        TableConfig { name: "EleveClasse", has_updated_at: false, pk_cols: vec!["eleve_id", "classe_id"], unique_cols: vec![], fk_deps: vec![("eleve_id", "Eleve"), ("classe_id", "Classe")] },
+        TableConfig { name: "FraisScolaire", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "FraisClasse", has_updated_at: false, pk_cols: vec!["frais_scolaire_id", "classe_id"], unique_cols: vec![], fk_deps: vec![("frais_scolaire_id", "FraisScolaire"), ("classe_id", "Classe")] },
+        TableConfig { name: "Echeance", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["eleve_id", "frais_scolaire_id"], fk_deps: vec![("eleve_id", "Eleve"), ("frais_scolaire_id", "FraisScolaire")] },
+        TableConfig { name: "Paiement", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["numero_recu"], fk_deps: vec![("eleve_id", "Eleve")] },
+        TableConfig { name: "AnnulationRecu", has_updated_at: false, pk_cols: vec!["id"], unique_cols: vec!["paiement_id"], fk_deps: vec![("paiement_id", "Paiement")] },
+        TableConfig { name: "Depense", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "ParametreEtablissement", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["etablissement_id"], fk_deps: vec![("etablissement_id", "Etablissement")] },
+        TableConfig { name: "AuditLog", has_updated_at: false, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
     ];
 
     let client = reqwest::blocking::Client::builder()
         .user_agent("SGFS-ME/1.0")
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| AppError::Internal(format!("Impossible d'initialiser le client HTTP : {}", e)))?;
-    let mut stats = HashMap::new();
 
-    // Initialize stats
+    let mut stats = HashMap::new();
+    let mut push_errors: Vec<String> = Vec::new();
+    let mut push_had_error = false;
+    let mut failed_tables: HashSet<&str> = HashSet::new();
+    let mut orphan_log: Vec<String> = Vec::new();
+
     for t in &tables {
         stats.insert(t.name.to_string(), TableSyncStats {
             table_name: t.name.to_string(),
             pushed: 0,
             pulled: 0,
+            skipped_orphans: 0,
         });
     }
 
@@ -135,12 +234,8 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     // PHASE 1 : PULL (Remote -> Local)
     // ==========================================
 
-    // A. Pull Deletions from Remote AuditLog
     let url_del = format!("{}/rest/v1/AuditLog?action=eq.DELETE&created_at=gt.{}", supabase_url, encode_param(&last_sync));
-    let res_del = client.get(&url_del)
-        .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {}", supabase_key))
-        .send();
+    let res_del = http_get_with_retry(&client, &url_del, &supabase_key, &format!("Bearer {}", supabase_key), None);
 
     if let Ok(resp) = res_del {
         if resp.status().is_success() {
@@ -151,8 +246,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         del.get("entite_id").and_then(|v| v.as_str())
                     ) {
                         if let Some(table_name) = map_entity_to_table(entite) {
-                            let sql_del = format!("DELETE FROM \"{}\" WHERE id = ?", table_name);
-                            let _ = conn.execute(&sql_del, params![entite_id]);
+                            let _ = delete_composite_row(conn, table_name, entite_id);
                         }
                     }
                 }
@@ -160,9 +254,16 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         }
     }
 
-    // B. Pull Inserts & Updates
     for t in &tables {
-        // Build timestamp field query parameter
+        let t_last_sync = get_table_last_sync(conn, t.name);
+        let t_pull_since = if t_last_sync == "1970-01-01T00:00:00Z" || t_last_sync.trim().is_empty() {
+            "1970-01-01T00:00:00Z".to_string()
+        } else if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&t_last_sync) {
+            (dt - chrono::Duration::hours(24)).format("%Y-%m-%dT%H:%M:%SZ").to_string()
+        } else {
+            "1970-01-01T00:00:00Z".to_string()
+        };
+
         let timestamp_col = if t.has_updated_at {
             "updated_at"
         } else if t.name == "EleveClasse" {
@@ -171,41 +272,58 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             "created_at"
         };
 
-        let url = format!("{}/rest/v1/{}?{}=gt.{}", supabase_url, t.name, timestamp_col, encode_param(&last_sync));
-        let res = client.get(&url)
-            .header("apikey", &supabase_key)
-            .header("Authorization", format!("Bearer {}", supabase_key))
-            .send();
+        let mut offset = 0;
+        let page_size = 1000;
+        let mut total_pulled = 0;
+        let mut pull_success = true;
 
-        match res {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let remote_rows: Vec<Value> = resp.json().unwrap_or_default();
-                    let count = remote_rows.len();
-                    
-                    for row in remote_rows {
-                        if let Some(row_map) = row.as_object() {
-                            upsert_row(conn, t.name, &t.pk_cols, row_map)?;
+        loop {
+            let range_header = format!("{}-{}", offset, offset + page_size - 1);
+            let url = format!("{}/rest/v1/{}?{}=gt.{}", supabase_url, t.name, timestamp_col, encode_param(&t_pull_since));
+            let res = http_get_with_retry(
+                &client,
+                &url,
+                &supabase_key,
+                &format!("Bearer {}", supabase_key),
+                Some(&range_header),
+            );
+
+            match res {
+                Ok(resp) => {
+                    let status_code = resp.status().as_u16();
+                    if status_code == 416 || status_code == 200 || status_code == 206 {
+                        let remote_rows: Vec<Value> = resp.json().unwrap_or_default();
+                        let count = remote_rows.len();
+
+                        for row in &remote_rows {
+                            if let Some(row_map) = row.as_object() {
+                                let _ = upsert_row(conn, t.name, &t.pk_cols, row_map);
+                            }
                         }
-                    }
 
-                    if let Some(stat) = stats.get_mut(t.name) {
-                        stat.pulled = count;
+                        total_pulled += count;
+                        if count < page_size || status_code == 200 {
+                            break;
+                        }
+                        offset += page_size;
+                    } else {
+                        pull_success = false;
+                        break;
                     }
-                } else {
-                    let status = resp.status();
-                    let err_text = resp.text().unwrap_or_default();
-                    return Err(AppError::Internal(format!(
-                        "Erreur pull table {} : Code {}, Détails: {}",
-                        t.name, status, err_text
-                    )));
+                }
+                Err(_) => {
+                    pull_success = false;
+                    break;
                 }
             }
-            Err(e) => {
-                return Err(AppError::Internal(format!(
-                    "Erreur HTTP pull table {} : {}", t.name, e
-                )));
-            }
+        }
+
+        if pull_success {
+            set_table_last_sync(conn, t.name, &start_time);
+        }
+
+        if let Some(stat) = stats.get_mut(t.name) {
+            stat.pulled = total_pulled;
         }
     }
 
@@ -213,8 +331,6 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     // PHASE 2 : PUSH (Local -> Remote)
     // ==========================================
 
-    // A. Push Deletions
-    // Find deletions logged locally since last sync
     let mut stmt_del = conn.prepare(
         "SELECT entite, entite_id FROM \"AuditLog\" WHERE action = 'DELETE' AND created_at > ?"
     )?;
@@ -230,134 +346,526 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     drop(rows_del);
     drop(stmt_del);
 
-    // Propagate deletions to Supabase
     for (table_name, ids) in deletions_by_table {
         if ids.is_empty() { continue; }
-        // Postgres PostgREST syntax for DELETE in: ?id=in.(id1,id2)
+        if table_name == "Eleve" || table_name == "User" || table_name == "Etablissement" || table_name == "AnneeScolaire" || table_name == "Paiement" {
+            continue;
+        }
+        if table_name == "TuteurEleve" || table_name == "EleveClasse" || table_name == "FraisClasse" {
+            for id_pair in &ids {
+                let parts: Vec<&str> = id_pair.split(',').collect();
+                if parts.len() == 2 {
+                    let filter = format!("{}=eq.{}&{}=eq.{}", parts[0].trim(), parts[1].trim(), parts[0].trim(), parts[1].trim());
+                    let url = format!("{}/rest/v1/{}?{}", supabase_url, table_name, filter);
+                    let _ = client.delete(&url)
+                        .header("apikey", &supabase_key)
+                        .header("Authorization", format!("Bearer {}", supabase_key))
+                        .send();
+                }
+            }
+            continue;
+        }
         let ids_filter = ids.join(",");
         let url = format!("{}/rest/v1/{}?id=in.({})", supabase_url, table_name, ids_filter);
-        let res = client.delete(&url)
+        let _ = client.delete(&url)
             .header("apikey", &supabase_key)
             .header("Authorization", format!("Bearer {}", supabase_key))
             .send();
-        
-        match res {
-            Ok(resp) => {
-                if !resp.status().is_success() {
-                    let err_text = resp.text().unwrap_or_default();
-                    println!("Erreur lors de la suppression distante sur {} : {}", table_name, err_text);
-                }
-            }
-            Err(e) => println!("Erreur HTTP lors de la suppression sur {} : {}", table_name, e),
-        }
     }
 
-    // B. Push Inserts & Updates
+    let push_batch_size = 100;
     for t in &tables {
-        let local_rows = query_table_since(conn, t.name, &last_sync, t.has_updated_at)?;
+        let blocked_parent = t.fk_deps.iter()
+            .map(|(_, parent)| *parent)
+            .find(|parent| failed_tables.contains(parent));
+        if let Some(parent) = blocked_parent {
+            push_errors.push(format!(
+                "{}: ignoré, la table parente {} a échoué lors de ce run",
+                t.name, parent
+            ));
+            push_had_error = true;
+            failed_tables.insert(t.name);
+            continue;
+        }
+
+        let mut local_rows = match query_table_since(conn, t.name, &last_sync, t.has_updated_at) {
+            Ok(rows) => rows,
+            Err(_) => Vec::new(),
+        };
+        if local_rows.is_empty() {
+            local_rows = query_table_all(conn, t.name).unwrap_or_default();
+        }
         if local_rows.is_empty() { continue; }
 
-        let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
+        sanitize_rows_for_push(conn, t.name, &mut local_rows);
 
-        let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
-        let res = client.post(&url)
-            .header("apikey", &supabase_key)
-            .header("Authorization", format!("Bearer {}", supabase_key))
-            .header("Content-Type", "application/json")
-            .header("Prefer", "resolution=merge-duplicates")
-            .json(&local_rows)
-            .send();
-
-        match res {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    if let Some(stat) = stats.get_mut(t.name) {
-                        stat.pushed = local_rows.len();
+        // --- AUTO-RÉPARATION CIBLÉE ---
+        let mut repair_log: Vec<String> = Vec::new();
+        if !local_rows.is_empty() && !t.fk_deps.is_empty() {
+            repair_missing_remote_parents(
+                conn,
+                &client,
+                &supabase_url,
+                &supabase_key,
+                &local_rows,
+                &t.fk_deps,
+                &mut repair_log,
+            );
+        }
+        if !repair_log.is_empty() {
+            let repair_successes = repair_log.iter().filter(|log| log.contains("Succès") || log.contains("déjà présent") || log.contains("absents localement")).count();
+            if repair_successes != repair_log.len() {
+                for log in repair_log {
+                    if log.contains("Succès") || log.contains("déjà présent") || log.contains("absents localement") {
+                        continue;
                     }
-                } else {
-                    let status = resp.status();
-                    let err_text = resp.text().unwrap_or_default();
-                    return Err(AppError::Internal(format!(
-                        "Erreur push table {} : Code {}, Détails: {}",
-                        t.name, status, err_text
-                    )));
+                    push_errors.push(format!("[AUTO-REPAIR] {}", log));
+                    push_had_error = true;
                 }
             }
-            Err(e) => {
-                return Err(AppError::Internal(format!(
-                    "Erreur HTTP push table {} : {}", t.name, e
-                )));
+        }
+        // --- FIN AUTO-RÉPARATION ---
+
+        // --- Filtrage des orphelins locaux (Filet de sécurité) ---
+        let mut skipped_orphans = 0usize;
+        for (fk_col, parent_table) in &t.fk_deps {
+            let removed = filter_orphan_rows(conn, &mut local_rows, fk_col, parent_table);
+            for (row_id, fk_val) in removed {
+                skipped_orphans += 1;
+                orphan_log.push(format!(
+                    "{} id={} : {}={} absent de {}",
+                    t.name, row_id, fk_col, fk_val, parent_table
+                ));
             }
+        }
+        if let Some(stat) = stats.get_mut(t.name) {
+            stat.skipped_orphans = skipped_orphans;
+        }
+        if local_rows.is_empty() { continue; }
+
+        let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
+        let mut table_had_error = false;
+
+        for batch in &batches {
+            let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
+            let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
+            let res = http_post_with_retry(&client, &url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
+
+            match res {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        if let Some(stat) = stats.get_mut(t.name) {
+                            stat.pushed += batch.len();
+                        }
+                        continue;
+                    } else {
+                        let err_text = resp.text().unwrap_or_default();
+
+                        if !t.unique_cols.is_empty() {
+                            let alt_on_conflict = format!("on_conflict={}", t.unique_cols.join(","));
+                            let alt_url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, alt_on_conflict);
+                            let alt_res = http_post_with_retry(&client, &alt_url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
+
+                            if let Ok(alt_resp) = alt_res {
+                                if alt_resp.status().is_success() {
+                                    if let Some(stat) = stats.get_mut(t.name) {
+                                        stat.pushed += batch.len();
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if t.name != "AuditLog" {
+                            push_errors.push(format!("{}: {}", t.name, err_text));
+                        } else {
+                            println!("Note AuditLog (non critique) : {}", err_text);
+                        }
+                        push_had_error = true;
+                        table_had_error = true;
+                    }
+                }
+                Err(e) => {
+                    if t.name != "AuditLog" {
+                        push_errors.push(format!("{}: {}", t.name, e));
+                    }
+                    push_had_error = true;
+                    table_had_error = true;
+                }
+            }
+        }
+
+        if table_had_error && t.name != "AuditLog" {
+            failed_tables.insert(t.name);
         }
     }
 
-    // 4. Update LAST_SYNC in ConfigSysteme
     let end_time = now_iso();
-    let uuid_str = uuid::Uuid::new_v4().to_string();
-    conn.execute(
-        "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
-         VALUES (?1, 'LAST_SYNC', ?2, ?3, ?3) \
-         ON CONFLICT(cle) DO UPDATE SET valeur = ?2, updated_at = ?3",
-        params![uuid_str, end_time, end_time],
-    )?;
+    if !push_had_error {
+        let uuid_str = uuid::Uuid::new_v4().to_string();
+        let _ = conn.execute(
+            "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
+             VALUES (?1, 'LAST_SYNC', ?2, ?3, ?3) \
+             ON CONFLICT(cle) DO UPDATE SET valeur = ?2, updated_at = ?3",
+            params![uuid_str, end_time, end_time],
+        )?;
+    }
 
-    // 5. Log synchronization locally in SyncLog
     for (_, stat) in &stats {
-        if stat.pushed > 0 || stat.pulled > 0 {
+        if stat.pushed > 0 || stat.pulled > 0 || stat.skipped_orphans > 0 {
             let log_id = uuid::Uuid::new_v4().to_string();
             let details = serde_json::json!({
                 "pushed": stat.pushed,
-                "pulled": stat.pulled
+                "pulled": stat.pulled,
+                "skipped_orphans": stat.skipped_orphans
             }).to_string();
-            
+
+            let sync_status = if push_had_error { "WARNING" } else { "SUCCESS" };
             let _ = conn.execute(
                 "INSERT INTO SyncLog (id, table_name, last_sync_at, direction, status, details, created_at) \
-                 VALUES (?1, ?2, ?3, 'BIDIRECTIONAL', 'SUCCESS', ?4, ?3)",
-                params![log_id, stat.table_name, end_time, details],
+                 VALUES (?1, ?2, ?3, 'BIDIRECTIONAL', ?4, ?5, ?3)",
+                params![log_id, stat.table_name, end_time, sync_status, details],
             );
         }
     }
 
-    // Prune AuditLog to keep only 200 most recent records
+    if !orphan_log.is_empty() {
+        let log_id = uuid::Uuid::new_v4().to_string();
+        let details = serde_json::json!({ "orphans": orphan_log }).to_string();
+        let _ = conn.execute(
+            "INSERT INTO SyncLog (id, table_name, last_sync_at, direction, status, details, created_at) \
+             VALUES (?1, 'ORPHANS', ?2, 'PUSH', 'WARNING', ?3, ?2)",
+            params![log_id, end_time, details],
+        );
+    }
+
     let _ = conn.execute(
         "DELETE FROM \"AuditLog\" WHERE id NOT IN (SELECT id FROM \"AuditLog\" ORDER BY created_at DESC LIMIT 200)",
         [],
     );
 
-    // Re-enable foreign keys after sync
     let _ = conn.execute_batch("PRAGMA foreign_keys=ON;");
 
-    // Convert stats hashmap to sorted vector
     let mut stats_vec: Vec<TableSyncStats> = stats.into_values().collect();
     stats_vec.sort_by(|a, b| a.table_name.cmp(&b.table_name));
 
+    let message = if push_errors.is_empty() {
+        "Synchronisation réussie avec succès !".to_string()
+    } else {
+        format!("Synchronisation effectuée avec des avertissements sur : {}", push_errors.join(" | "))
+    };
+
     Ok(SyncSummary {
-        success: true,
+        success: push_errors.is_empty(),
         start_time,
         end_time,
         stats: stats_vec,
-        message: "Synchronisation réussie avec succès !".to_string(),
+        message,
     })
 }
 
-// Helper to query rows since a timestamp
+// =====================================================================
+// FONCTIONS D'AUTO-RÉPARATION
+// =====================================================================
+
+fn query_local_rows_by_ids(
+    conn: &Connection,
+    table_name: &str,
+    ids: &[String],
+) -> Result<Vec<Value>, AppError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    if ids.len() > 100 {
+        return Err(AppError::Internal(format!("Trop de parents manquants pour {} ({}), abandon de la réparation auto pour ce batch", table_name, ids.len())));
+    }
+
+    let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+    let query = format!(
+        "SELECT * FROM \"{}\" WHERE \"id\" IN ({})",
+        table_name,
+        placeholders.join(", ")
+    );
+
+    let mut stmt = conn.prepare(&query)?;
+    let col_count = stmt.column_count();
+    let col_names: Vec<String> = (0..col_count)
+        .map(|i| stmt.column_name(i).unwrap_or_default().to_string())
+        .collect();
+
+    let params: Vec<&dyn rusqlite::types::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+    let mut rows = stmt.query(params.as_slice())?;
+    
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        let mut map = serde_json::Map::new();
+        for i in 0..col_count {
+            let col_name = &col_names[i];
+            let val = match row.get_ref(i)? {
+                rusqlite::types::ValueRef::Null => Value::Null,
+                rusqlite::types::ValueRef::Integer(n) => Value::Number(n.into()),
+                rusqlite::types::ValueRef::Real(f) => {
+                    if let Some(num) = serde_json::Number::from_f64(f) { Value::Number(num) } else { Value::Null }
+                }
+                rusqlite::types::ValueRef::Text(t) => Value::String(std::str::from_utf8(t).unwrap_or_default().to_string()),
+                rusqlite::types::ValueRef::Blob(b) => Value::String(std::str::from_utf8(b).unwrap_or_default().to_string()),
+            };
+            map.insert(col_name.clone(), val);
+        }
+        results.push(Value::Object(map));
+    }
+
+    Ok(results)
+}
+
+fn repair_missing_remote_parents(
+    conn: &Connection,
+    client: &reqwest::blocking::Client,
+    supabase_url: &str,
+    supabase_key: &str,
+    child_rows: &[Value],
+    fk_deps: &[(&'static str, &'static str)],
+    repair_log: &mut Vec<String>,
+) {
+    for (fk_col, parent_table) in fk_deps {
+        let mut required_ids: HashSet<String> = HashSet::new();
+        for row in child_rows {
+            if let Some(id) = row.get(fk_col).and_then(|v| v.as_str()) {
+                if !id.is_empty() {
+                    required_ids.insert(id.to_string());
+                }
+            }
+        }
+        if required_ids.is_empty() { continue; }
+
+        let ids_filter = required_ids.iter().cloned().collect::<Vec<_>>().join(",");
+        let check_url = format!("{}/rest/v1/{}?id=in.({})&select=id", supabase_url, parent_table, ids_filter);
+
+        let mut existing_ids: HashSet<String> = HashSet::new();
+        if let Ok(resp) = http_get_with_retry(client, &check_url, supabase_key, &format!("Bearer {}", supabase_key), None) {
+            if resp.status().is_success() {
+                if let Ok(remote_rows) = resp.json::<Vec<Value>>() {
+                    for r in remote_rows {
+                        if let Some(id) = r.get("id").and_then(|v| v.as_str()) {
+                            existing_ids.insert(id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        let missing_ids: Vec<String> = required_ids.difference(&existing_ids).cloned().collect();
+        if missing_ids.is_empty() {
+            continue;
+        }
+
+        let local_missing_rows = match query_local_rows_by_ids(conn, parent_table, &missing_ids) {
+            Ok(r) => r,
+            Err(e) => {
+                repair_log.push(format!("Échec de la récupération locale des parents manquants pour {} : {}", parent_table, e));
+                continue;
+            }
+        };
+
+        if local_missing_rows.is_empty() {
+            repair_log.push(format!("Parents référencés absents localement pour {} : aucune donnée disponible pour rétablir le parent", parent_table));
+            continue;
+        }
+
+        let push_url = format!("{}/rest/v1/{}?on_conflict=id", supabase_url, parent_table);
+        let res = http_post_with_retry(
+            client,
+            &push_url,
+            supabase_key,
+            &format!("Bearer {}", supabase_key),
+            &Value::Array(local_missing_rows),
+        );
+
+        match res {
+            Ok(resp) if resp.status().is_success() => {
+                continue;
+            }
+            Ok(resp) => {
+                repair_log.push(format!("ÉCHEC du push vers '{}' : {}", parent_table, resp.text().unwrap_or_default()));
+            }
+            Err(e) => {
+                repair_log.push(format!("Erreur réseau vers '{}' : {}", parent_table, e));
+            }
+        }
+    }
+}
+
+// =====================================================================
+// FONCTIONS UTILITAIRES
+// =====================================================================
+
+fn filter_orphan_rows(
+    conn: &Connection,
+    rows: &mut Vec<Value>,
+    fk_col: &str,
+    parent_table: &str,
+) -> Vec<(String, String)> {
+    let mut valid_parents: HashSet<String> = HashSet::new();
+    if let Ok(mut stmt) = conn.prepare(&format!("SELECT id FROM \"{}\"", parent_table)) {
+        if let Ok(mut r) = stmt.query([]) {
+            while let Ok(Some(row)) = r.next() {
+                if let Ok(id) = row.get::<_, String>(0) {
+                    valid_parents.insert(id);
+                }
+            }
+        }
+    }
+
+    let mut removed = Vec::new();
+    rows.retain(|row| {
+        let fk_val = row.get(fk_col).and_then(|v| v.as_str());
+        match fk_val {
+            None => true,
+            Some(fk) if fk.is_empty() => true,
+            Some(fk) => {
+                if valid_parents.contains(fk) {
+                    true
+                } else {
+                    let row_id = row.get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?")
+                        .to_string();
+                    removed.push((row_id, fk.to_string()));
+                    false
+                }
+            }
+        }
+    });
+    removed
+}
+
+fn delete_composite_row(conn: &Connection, table_name: &str, entite_id: &str) -> Result<(), AppError> {
+    match table_name {
+        "TuteurEleve" | "EleveClasse" | "FraisClasse" => {
+            let (col1, col2) = match table_name {
+                "TuteurEleve" => ("eleve_id", "tuteur_id"),
+                "EleveClasse" => ("eleve_id", "classe_id"),
+                "FraisClasse" => ("frais_scolaire_id", "classe_id"),
+                _ => unreachable!(),
+            };
+
+            let parts: Vec<&str> = if entite_id.contains('=') {
+                entite_id.split(',').map(|p| {
+                    let mut kv = p.splitn(2, '=');
+                    (kv.next().unwrap_or(""), kv.next().unwrap_or(""))
+                }).collect::<Vec<(&str, &str)>>()
+                    .iter()
+                    .map(|(_, v)| *v)
+                    .collect()
+            } else {
+                entite_id.split(',').collect()
+            };
+
+            if parts.len() >= 2 {
+                let sql = format!("DELETE FROM \"{}\" WHERE \"{}\" = ? AND \"{}\" = ?", table_name, col1, col2);
+                let _ = conn.execute(&sql, params![parts[0], parts[1]]);
+            }
+        }
+        _ => {
+            let sql = format!("DELETE FROM \"{}\" WHERE \"id\" = ?", table_name);
+            let _ = conn.execute(&sql, params![entite_id]);
+        }
+    }
+    Ok(())
+}
+
+fn get_table_last_sync(conn: &Connection, table_name: &str) -> String {
+    let key = format!("LAST_SYNC_{}", table_name);
+    let table_sync: Option<String> = conn
+        .query_row("SELECT valeur FROM ConfigSysteme WHERE cle = ?", params![key], |r| r.get(0))
+        .ok();
+
+    if let Some(ts) = table_sync {
+        if !ts.trim().is_empty() {
+            return ts;
+        }
+    }
+
+    conn.query_row("SELECT valeur FROM ConfigSysteme WHERE cle = 'LAST_SYNC'", [], |r| r.get(0))
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn set_table_last_sync(conn: &Connection, table_name: &str, sync_time: &str) {
+    let key = format!("LAST_SYNC_{}", table_name);
+    let uuid_str = uuid::Uuid::new_v4().to_string();
+    let _ = conn.execute(
+        "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?4) \
+         ON CONFLICT(cle) DO UPDATE SET valeur = ?3, updated_at = ?4",
+        params![uuid_str, key, sync_time, sync_time],
+    );
+}
+
+fn sanitize_rows_for_push(conn: &Connection, table_name: &str, rows: &mut Vec<Value>) {
+    if table_name != "Paiement" && table_name != "AuditLog" && table_name != "AnnulationRecu" && table_name != "Depense" {
+        return;
+    }
+
+    let mut valid_users: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT id FROM \"User\"") {
+        if let Ok(mut rows_user) = stmt.query([]) {
+            while let Ok(Some(row)) = rows_user.next() {
+                if let Ok(uid) = row.get::<_, String>(0) {
+                    valid_users.push(uid);
+                }
+            }
+        }
+    }
+
+    let default_user_id = valid_users.first().cloned();
+
+    for row in rows.iter_mut() {
+        if let Some(map) = row.as_object_mut() {
+            if table_name == "AuditLog" {
+                if let Some(uid_val) = map.get("user_id").and_then(|v| v.as_str()) {
+                    if !uid_val.is_empty() && !valid_users.contains(&uid_val.to_string()) {
+                        map.insert("user_id".to_string(), Value::Null);
+                    }
+                }
+            } else {
+                let field = if table_name == "Depense" { "created_by_id" } else { "user_id" };
+                if let Some(uid_val) = map.get(field).and_then(|v| v.as_str()) {
+                    if !uid_val.is_empty() && !valid_users.contains(&uid_val.to_string()) {
+                        if let Some(ref fallback) = default_user_id {
+                            map.insert(field.to_string(), Value::String(fallback.clone()));
+                        } else {
+                            map.insert(field.to_string(), Value::Null);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn query_table_since(
     conn: &Connection,
     table_name: &str,
     last_sync: &str,
     has_updated_at: bool,
 ) -> Result<Vec<Value>, AppError> {
-    let query = if has_updated_at {
-        format!("SELECT * FROM \"{}\" WHERE updated_at > ?", table_name)
+    let time_col = if has_updated_at {
+        "updated_at"
     } else if table_name == "EleveClasse" {
-        format!("SELECT * FROM \"{}\" WHERE date_inscription > ?", table_name)
+        "date_inscription"
     } else {
-        format!("SELECT * FROM \"{}\" WHERE created_at > ?", table_name)
+        "created_at"
     };
+
+    let query = format!(
+        "SELECT * FROM \"{}\" WHERE strftime('%Y-%m-%dT%H:%M:%SZ', COALESCE(\"{}\", '1970-01-01T00:00:00')) > strftime('%Y-%m-%dT%H:%M:%SZ', ?)",
+        table_name, time_col
+    );
 
     let mut stmt = conn.prepare(&query)?;
     let col_count = stmt.column_count();
-    
+
     let col_names: Vec<String> = (0..col_count)
         .map(|i| stmt.column_name(i).unwrap_or_default().to_string())
         .collect();
@@ -396,7 +904,52 @@ fn query_table_since(
     Ok(results)
 }
 
-// Helper to upsert a row in SQLite
+fn query_table_all(
+    conn: &Connection,
+    table_name: &str,
+) -> Result<Vec<Value>, AppError> {
+    let query = format!("SELECT * FROM \"{}\"", table_name);
+    let mut stmt = conn.prepare(&query)?;
+    let col_count = stmt.column_count();
+
+    let col_names: Vec<String> = (0..col_count)
+        .map(|i| stmt.column_name(i).unwrap_or_default().to_string())
+        .collect();
+
+    let mut rows = stmt.query([])?;
+    let mut results = Vec::new();
+
+    while let Some(row) = rows.next()? {
+        let mut map = serde_json::Map::new();
+        for i in 0..col_count {
+            let col_name = &col_names[i];
+            let val = match row.get_ref(i)? {
+                rusqlite::types::ValueRef::Null => Value::Null,
+                rusqlite::types::ValueRef::Integer(n) => Value::Number(n.into()),
+                rusqlite::types::ValueRef::Real(f) => {
+                    if let Some(num) = serde_json::Number::from_f64(f) {
+                        Value::Number(num)
+                    } else {
+                        Value::Null
+                    }
+                }
+                rusqlite::types::ValueRef::Text(t) => {
+                    let s = std::str::from_utf8(t).unwrap_or_default();
+                    Value::String(s.to_string())
+                }
+                rusqlite::types::ValueRef::Blob(b) => {
+                    let s = std::str::from_utf8(b).unwrap_or_default();
+                    Value::String(s.to_string())
+                }
+            };
+            map.insert(col_name.clone(), val);
+        }
+        results.push(Value::Object(map));
+    }
+
+    Ok(results)
+}
+
 fn upsert_row(
     conn: &Connection,
     table_name: &str,
@@ -410,10 +963,10 @@ fn upsert_row(
     for (k, v) in row {
         cols.push(k.as_str());
         val_placeholders.push(format!("?{}", cols.len()));
-        
+
         let sql_val: Box<dyn rusqlite::types::ToSql> = match v {
             Value::Null => Box::new(rusqlite::types::Null),
-            Value::Bool(b) => Box::new(if *b { 1 } else { 0 }),
+            Value::Bool(b) => Box::new(if *b { 1i32 } else { 0i32 }),
             Value::Number(n) => {
                 if let Some(i) = n.as_i64() {
                     Box::new(i)
@@ -435,7 +988,7 @@ fn upsert_row(
     let pk_clause = pk_cols.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ");
 
     let update_parts: Vec<String> = cols.iter()
-        .filter(|&&c| !pk_cols.contains(&c) && c != "id")
+        .filter(|&&c| !pk_cols.contains(&c))
         .map(|&c| format!("\"{}\"=excluded.\"{}\"", c, c))
         .collect();
 

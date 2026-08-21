@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useAppStore, getSchoolFilter } from '@/lib/store'
+import { useAppStore, getSchoolFilter, isCoordinateur } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
-import { GraduationCap, Eye, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { GraduationCap, Eye, Pencil, Plus, Trash2, Users, Search, User, ShieldCheck, Sparkles, Building2, Phone, MapPin } from 'lucide-react'
 
 type School = { id: string; nom: string }
 type Year = { id: string; libelle: string; active?: boolean; etablissementId?: string }
@@ -31,8 +31,11 @@ const empty = {
   tuteurRelation: 'Père', tuteurAdresse: '', tuteurProfession: ''
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  ACTIF: 'Actif', INSCRIT: 'Inscrit', SUSPENDU: 'Suspendu', TRANSFERE: 'Transféré'
+const STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  ACTIF: { label: 'Actif', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  INSCRIT: { label: 'Inscrit', className: 'bg-sky-100 text-sky-800 border-sky-200' },
+  SUSPENDU: { label: 'Suspendu', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+  TRANSFERE: { label: 'Transféré', className: 'bg-stone-100 text-stone-700 border-stone-200' }
 }
 
 export default function ElevesPage() {
@@ -73,24 +76,22 @@ export default function ElevesPage() {
   }, [locked, schoolFilter])
 
   const fetchYears = useCallback(async () => {
-    const etabId = locked ? schoolFilter! : school || undefined
-    if (!etabId) { setYears([]); return }
+    const etabId = locked ? schoolFilter! : school || (schools?.[0]?.id) || undefined
     try {
       const res = await tc.listAnneesScolaires(etabId)
-      const data = res?.annees_scolaires ?? []
+      const data = res?.annees_scolaires ?? res?.data ?? []
       setYears(Array.isArray(data) ? data : [])
     } catch (e) { setYears([]) }
-  }, [school, locked, schoolFilter])
+  }, [school, schools, locked, schoolFilter])
 
   const fetchClasses = useCallback(async () => {
-    const etabId = locked ? schoolFilter! : school || undefined
-    if (!etabId) { setClasses([]); return }
+    const etabId = locked ? schoolFilter! : school || (schools?.[0]?.id) || undefined
     try {
       const res = await tc.listClasses(etabId, year || undefined)
-      const data = res?.classes ?? []
+      const data = res?.classes ?? res?.data ?? []
       setClasses(Array.isArray(data) ? data : [])
     } catch (e) { setClasses([]) }
-  }, [school, year, locked, schoolFilter])
+  }, [school, schools, year, locked, schoolFilter])
 
   const fetchStudents = useCallback(async () => {
     if (!user) return
@@ -119,24 +120,46 @@ export default function ElevesPage() {
   useEffect(() => { fetchClasses() }, [fetchClasses])
   useEffect(() => { fetchStudents() }, [fetchStudents])
 
+  useEffect(() => {
+    const handleSync = () => {
+      fetchStudents()
+      fetchClasses()
+    }
+    window.addEventListener('sync-completed', handleSync)
+    return () => window.removeEventListener('sync-completed', handleSync)
+  }, [fetchStudents, fetchClasses])
+
   function openCreate() {
     setEditingId(null)
     setForm({ ...empty, etablissementId: school || (locked ? schoolFilter! : ''), anneeScolaireId: year })
     setFormOpen(true)
   }
 
-  function openEdit(s: Student) {
+  async function openEdit(s: Student) {
+    const etabId = s.etablissementId ?? (s as any).etablissement_id ?? school ?? (schools?.[0]?.id) ?? ''
+    if (etabId) {
+      try {
+        const resY = await tc.listAnneesScolaires(etabId)
+        const listY = resY?.annees_scolaires ?? resY?.data ?? []
+        if (Array.isArray(listY) && listY.length > 0) setYears(listY)
+
+        const resC = await tc.listClasses(etabId, undefined)
+        const listC = resC?.classes ?? resC?.data ?? []
+        if (Array.isArray(listC) && listC.length > 0) setClasses(listC)
+      } catch { /* silencieux */ }
+    }
+
     const ins = (s.inscriptions || s.classes || []).find((x: any) => x.statut === 'ACTIF') ?? (s.inscriptions || s.classes || [])[0]
     const t = s.tuteurs?.find((x: any) => x.tuteur?.isPrincipal)?.tuteur ?? s.tuteurs?.[0]?.tuteur
     setEditingId(s.id)
     setForm({
       ...empty,
       nom: s.nom, prenom: s.prenom, sexe: s.sexe,
-      dateNaissance: s.dateNaissance ?? '',
-      lieuNaissance: s.lieuNaissance ?? '',
-      etablissementId: s.etablissementId,
-      anneeScolaireId: ins?.classe?.anneeScolaire?.id ?? ins?.classe?.annee_scolaire?.id ?? '',
-      classeId: ins?.classeId ?? '',
+      dateNaissance: s.dateNaissance ?? (s as any).date_naissance ?? '',
+      lieuNaissance: s.lieuNaissance ?? (s as any).lieu_naissance ?? '',
+      etablissementId: etabId,
+      anneeScolaireId: ins?.classe?.anneeScolaire?.id ?? ins?.classe?.annee_scolaire?.id ?? ins?.anneeScolaireId ?? ins?.annee_scolaire_id ?? (s as any).anneeScolaireId ?? (s as any).annee_scolaire_id ?? '',
+      classeId: ins?.classeId ?? ins?.classe_id ?? ins?.classe?.id ?? '',
       tuteurNom: t?.nom ?? '', tuteurPrenom: t?.prenom ?? '',
       tuteurTelephone: t?.telephone ?? '', tuteurTelephone2: t?.telephone2 ?? '',
       tuteurRelation: t?.relation ?? 'Père', tuteurAdresse: t?.adresse ?? '', tuteurProfession: t?.profession ?? '',
@@ -146,7 +169,7 @@ export default function ElevesPage() {
 
   async function handleSave() {
     if (!form.nom.trim() || !form.prenom.trim() || !form.etablissementId || !form.anneeScolaireId || !form.classeId) {
-      toast.error('Champs obligatoires manquants')
+      toast.error('Veuillez remplir tous les champs obligatoires (*)')
       return
     }
     setBusy(true)
@@ -167,10 +190,10 @@ export default function ElevesPage() {
     try {
       if (editingId) {
         await tc.updateEleve(editingId, payload)
-        toast.success('Élève modifié')
+        toast.success('Élève modifié avec succès')
       } else {
         await tc.createEleve(payload)
-        toast.success('Élève inscrit')
+        toast.success('Élève inscrit avec succès')
       }
       setFormOpen(false)
       fetchStudents()
@@ -182,9 +205,13 @@ export default function ElevesPage() {
   }
 
   async function handleDelete() {
+    if (!isCoordinateur(role)) {
+      toast.error("Seul l'Administrateur / Coordonnateur peut archiver un élève.")
+      return
+    }
     if (!deleteTarget) return
     setBusy(true)
-    try { await tc.deleteEleve(deleteTarget.id); toast.success('Élève archivé'); setDeleteTarget(null); fetchStudents() }
+    try { await tc.deleteEleve(deleteTarget.id); toast.success('Élève archivé avec succès'); setDeleteTarget(null); fetchStudents() }
     catch (e: any) { toast.error(typeof e === 'string' ? e : e?.message || 'Erreur') }
     finally { setBusy(false) }
   }
@@ -195,138 +222,273 @@ export default function ElevesPage() {
   }
 
   return (
-    <main className="space-y-6 p-4 md:p-6">
-      <header className="flex items-center justify-between">
-        <div><h1 className="flex items-center gap-2 text-2xl font-bold"><GraduationCap /> Gestion des élèves</h1>
-        <p className="text-sm text-muted-foreground">Informations personnelles, scolarité et situation financière.</p></div>
-        <Button onClick={openCreate} className="bg-[var(--etab-color,#075e54)] text-white"><Plus className="mr-2 h-4 w-4" />Nouvel élève</Button>
+    <main className="space-y-6 p-2 sm:p-4 md:p-6">
+      {/* ── BANNIÈRE HEADER ── */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <GraduationCap className="h-3.5 w-3.5" /> Gestion des Élèves
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Répertoire des Élèves</h1>
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">Inscriptions, scolarité, tuteurs et situation financière.</p>
+        </div>
+        <Button onClick={openCreate} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
+          <Plus className="h-4 w-4 text-amber-400" /> Nouvel élève
+        </Button>
       </header>
 
-      <Card>
+      {/* ── BARRE DE RECHERCHE ET FILTRES ── */}
+      <Card className="rounded-2xl border-stone-200/80 shadow-sm">
         <CardContent className="grid gap-3 p-4 md:grid-cols-4">
-          <Input placeholder="Nom, prénom ou matricule" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+            <Input className="pl-9 rounded-xl border-stone-200 font-medium" placeholder="Rechercher nom, prénom, matricule..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          </div>
           <Select value={school || 'all'} onValueChange={v => { setSchool(v === 'all' ? '' : v); setYear(''); setClasse('') }} disabled={locked}>
-            <SelectTrigger><SelectValue placeholder="Établissement" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Tous les établissements</SelectItem>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.nom}</SelectItem>)}</SelectContent>
+            <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Établissement" /></SelectTrigger>
+            <SelectContent className="rounded-xl"><SelectItem value="all">Tous les établissements</SelectItem>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.nom}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={year || 'all'} onValueChange={v => { setYear(v === 'all' ? '' : v); setClasse('') }}>
-            <SelectTrigger><SelectValue placeholder="Année scolaire" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Toutes les années</SelectItem>{years.map(y => <SelectItem key={y.id} value={y.id}>{y.libelle}{y.active ? ' ★' : ''}</SelectItem>)}</SelectContent>
+            <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Année scolaire" /></SelectTrigger>
+            <SelectContent className="rounded-xl"><SelectItem value="all">Toutes les années</SelectItem>{years.map(y => <SelectItem key={y.id} value={y.id}>{y.libelle}{y.active ? ' ★' : ''}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={classe || 'all'} onValueChange={v => setClasse(v === 'all' ? '' : v)} disabled={!school}>
-            <SelectTrigger><SelectValue placeholder="Classe" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Toutes les classes</SelectItem>{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
+            <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Classe" /></SelectTrigger>
+            <SelectContent className="rounded-xl"><SelectItem value="all">Toutes les classes</SelectItem>{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
           </Select>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />{total} élève(s)</CardTitle></CardHeader>
+      {/* ── TABLEAU DES ÉLÈVES ── */}
+      <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+        <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+          <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
+            <Users className="h-5 w-5 text-amber-600" /> Total : {total} élève(s) inscrit(s)
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-[var(--etab-color,#075e54)] text-white"><TableRow><TableHead>Matricule</TableHead><TableHead>Élève</TableHead><TableHead>Classe</TableHead><TableHead>Année scolaire</TableHead><TableHead>Statut</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+            <TableHeader className="bg-[#0c241f] text-white">
+              <TableRow className="hover:bg-[#0c241f]">
+                <TableHead className="text-amber-300 font-bold">Matricule</TableHead>
+                <TableHead className="text-white font-bold">Élève</TableHead>
+                <TableHead className="text-white font-bold">Classe</TableHead>
+                <TableHead className="text-white font-bold">Année Scolaire</TableHead>
+                <TableHead className="text-white font-bold">Statut</TableHead>
+                <TableHead className="text-right text-white font-bold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
-              {loading ? <TableRow><TableCell colSpan={6} className="p-10 text-center">Chargement...</TableCell></TableRow> :
-               students.length === 0 ? <TableRow><TableCell colSpan={6} className="p-10 text-center text-muted-foreground">Aucun élève trouvé.</TableCell></TableRow> :
-               students.map(s => {
-                 const i = (s.inscriptions || s.classes || []).find((x: any) => x.statut === 'ACTIF') ?? (s.inscriptions || s.classes || [])[0]
-                 return (
-                   <TableRow key={s.id}>
-                     <TableCell className="font-mono text-xs">{s.matricule}</TableCell>
-                     <TableCell><b>{s.nom} {s.prenom}</b><br /><span className="text-xs text-muted-foreground">{s.sexe === 'F' ? 'Féminin' : 'Masculin'}</span></TableCell>
-                     <TableCell>{i?.classe?.nom ?? '—'}</TableCell>
-                     <TableCell>{i?.classe?.anneeScolaire?.libelle ?? i?.classe?.annee_scolaire?.libelle ?? '—'}</TableCell>
-                     <TableCell><Badge variant="outline">{STATUS_LABEL[s.statut] ?? s.statut}</Badge></TableCell>
-                     <TableCell className="text-right">
-                       <Button size="icon" variant="ghost" onClick={() => showDetail(s)}><Eye className="h-4 w-4" /></Button>
-                       <Button size="icon" variant="ghost" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                       <Button size="icon" variant="ghost" className="text-red-600" onClick={() => setDeleteTarget(s)}><Trash2 className="h-4 w-4" /></Button>
-                     </TableCell>
-                   </TableRow>
-                 )
-               })}
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="p-12 text-center text-stone-400 font-medium">Chargement du répertoire...</TableCell></TableRow>
+              ) : students.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="p-12 text-center text-stone-400 font-medium">Aucun élève trouvé.</TableCell></TableRow>
+              ) : (
+                students.map(s => {
+                  const i = (s.inscriptions || s.classes || []).find((x: any) => x.statut === 'ACTIF') ?? (s.inscriptions || s.classes || [])[0]
+                  const st = STATUS_LABEL[s.statut] ?? { label: s.statut, className: 'bg-stone-100 text-stone-700' }
+                  return (
+                    <TableRow key={s.id} className="hover:bg-amber-500/5 transition-colors cursor-pointer" onClick={() => showDetail(s)}>
+                      <TableCell className="font-mono text-xs font-bold text-stone-700">{s.matricule}</TableCell>
+                      <TableCell>
+                        <span className="font-bold text-stone-900">{s.nom} {s.prenom}</span>
+                        <br />
+                        <span className="text-[11px] font-semibold text-stone-400">{s.sexe === 'F' ? 'Féminin' : 'Masculin'}</span>
+                      </TableCell>
+                      <TableCell className="font-semibold text-stone-800">{i?.classe?.nom ?? '—'}</TableCell>
+                      <TableCell className="text-xs text-stone-600 font-medium">{i?.classe?.anneeScolaire?.libelle ?? i?.classe?.annee_scolaire?.libelle ?? '—'}</TableCell>
+                      <TableCell><Badge variant="outline" className={`font-semibold ${st.className}`}>{st.label}</Badge></TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-stone-600 hover:text-[#0c241f] hover:bg-stone-100" onClick={(e) => { e.stopPropagation(); showDetail(s) }}><Eye className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-700 hover:bg-amber-50" onClick={(e) => { e.stopPropagation(); openEdit(s) }}><Pencil className="h-4 w-4" /></Button>
+                          {isCoordinateur(role) && (
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600 hover:bg-rose-50" onClick={(e) => { e.stopPropagation(); setDeleteTarget(s) }}><Trash2 className="h-4 w-4" /></Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
             </TableBody>
           </Table>
+
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t p-3 text-sm">
+            <div className="flex items-center justify-between border-t border-stone-100 px-6 py-4 text-sm font-medium text-stone-600">
               <span>Page {page} sur {totalPages}</span>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Précédent</Button>
-                <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Suivant</Button>
+                <Button size="sm" variant="outline" className="rounded-xl border-stone-200" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Précédent</Button>
+                <Button size="sm" variant="outline" className="rounded-xl border-stone-200" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Suivant</Button>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* ── DIALOG INSCRIPTION / MODIFICATION D'ÉLÈVE ── */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-5xl max-h-[95vh] overflow-y-auto bg-slate-100">
-          <DialogHeader><DialogTitle>{editingId ? 'Modifier l’élève' : 'Inscrire un élève'}</DialogTitle></DialogHeader>
-          <div className="grid gap-5 md:grid-cols-2 bg-slate-200">
-            <section className="space-y-3 rounded border p-4">
-              <h3 className="font-semibold">Informations personnelles</h3>
-              <Input placeholder="Nom *" value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} />
-              <Input placeholder="Prénom *" value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} />
-              <Select value={form.sexe} onValueChange={v => setForm({ ...form, sexe: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="M">Masculin</SelectItem><SelectItem value="F">Féminin</SelectItem></SelectContent>
-              </Select>
-              <Label>Date de naissance</Label>
-              <Input type="date" value={form.dateNaissance} onChange={e => setForm({ ...form, dateNaissance: e.target.value })} />
-              <Input placeholder="Lieu de naissance" value={form.lieuNaissance} onChange={e => setForm({ ...form, lieuNaissance: e.target.value })} />
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-5xl max-h-[92vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <GraduationCap className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
+                  {editingId ? 'Modifier la fiche élève' : 'Inscrire un nouvel élève'}
+                </DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Saisissez les informations de scolarité et du tuteur légal.</p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="grid gap-6 md:grid-cols-2 pt-4">
+            {/* Informations personnelles */}
+            <section className="space-y-4 rounded-2xl border border-stone-200/80 bg-stone-50/50 p-5">
+              <h3 className="font-bold text-stone-800 text-sm flex items-center gap-2">
+                <User className="h-4 w-4 text-amber-600" /> Informations Personnelles
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Nom *</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Nom de famille" value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Prénom *</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Prénom de l'élève" value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Sexe *</Label>
+                  <Select value={form.sexe} onValueChange={v => setForm({ ...form, sexe: v })}>
+                    <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent className="rounded-xl"><SelectItem value="M">Masculin</SelectItem><SelectItem value="F">Féminin</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Date de naissance</Label>
+                  <Input type="date" className="rounded-xl border-stone-200 bg-white font-medium mt-1" value={form.dateNaissance} onChange={e => setForm({ ...form, dateNaissance: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Lieu de naissance</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Ville ou commune" value={form.lieuNaissance} onChange={e => setForm({ ...form, lieuNaissance: e.target.value })} />
+                </div>
+              </div>
             </section>
-            <section className="space-y-3 rounded border p-4">
-              <h3 className="font-semibold">Scolarité</h3>
-              <Select value={form.etablissementId} onValueChange={v => { setForm({ ...form, etablissementId: v, anneeScolaireId: '', classeId: '' }); setSchool(v) }} disabled={!!locked || !!editingId}>
-                <SelectTrigger><SelectValue placeholder="Établissement *" /></SelectTrigger>
-                <SelectContent>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.nom}</SelectItem>)}</SelectContent>
-              </Select>
-              <Select value={form.anneeScolaireId} onValueChange={v => setForm({ ...form, anneeScolaireId: v, classeId: '' })} disabled={!!editingId}>
-                <SelectTrigger><SelectValue placeholder="Année scolaire *" /></SelectTrigger>
-                <SelectContent>{years.map(y => <SelectItem key={y.id} value={y.id}>{y.libelle}</SelectItem>)}</SelectContent>
-              </Select>
-              <Select value={form.classeId} onValueChange={v => setForm({ ...form, classeId: v })} disabled={!!editingId}>
-                <SelectTrigger><SelectValue placeholder="Classe *" /></SelectTrigger>
-                <SelectContent>{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
-              </Select>
+
+            {/* Scolarité */}
+            <section className="space-y-4 rounded-2xl border border-stone-200/80 bg-stone-50/50 p-5">
+              <h3 className="font-bold text-stone-800 text-sm flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-[#0c241f]" /> Affectation Scolaire
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Établissement *</Label>
+                  <Select value={form.etablissementId} onValueChange={v => { setForm({ ...form, etablissementId: v, anneeScolaireId: '', classeId: '' }); setSchool(v) }} disabled={!!locked}>
+                    <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner l'école" /></SelectTrigger>
+                    <SelectContent className="rounded-xl">{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.nom}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Année Scolaire *</Label>
+                  <Select value={form.anneeScolaireId} onValueChange={v => setForm({ ...form, anneeScolaireId: v, classeId: '' })}>
+                    <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner l'année" /></SelectTrigger>
+                    <SelectContent className="rounded-xl">{years.map(y => <SelectItem key={y.id} value={y.id}>{y.libelle}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Classe *</Label>
+                  <Select value={form.classeId} onValueChange={v => setForm({ ...form, classeId: v })}>
+                    <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner la classe" /></SelectTrigger>
+                    <SelectContent className="rounded-xl">{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
             </section>
-            <section className="space-y-3 rounded border p-4 md:col-span-2">
-              <h3 className="font-semibold">Tuteur principal</h3>
+
+            {/* Tuteur principal */}
+            <section className="space-y-4 rounded-2xl border border-stone-200/80 bg-stone-50/50 p-5 md:col-span-2">
+              <h3 className="font-bold text-stone-800 text-sm flex items-center gap-2">
+                <Phone className="h-4 w-4 text-amber-600" /> Tuteur Principal / Responsable Légal
+              </h3>
               <div className="grid gap-3 md:grid-cols-2">
-                <Input placeholder="Nom du tuteur" value={form.tuteurNom} onChange={e => setForm({ ...form, tuteurNom: e.target.value })} />
-                <Input placeholder="Prénom du tuteur" value={form.tuteurPrenom} onChange={e => setForm({ ...form, tuteurPrenom: e.target.value })} />
-                <Input placeholder="Téléphone" value={form.tuteurTelephone} onChange={e => setForm({ ...form, tuteurTelephone: e.target.value })} />
-                <Input placeholder="Téléphone secondaire" value={form.tuteurTelephone2} onChange={e => setForm({ ...form, tuteurTelephone2: e.target.value })} />
-                <Input placeholder="Relation : Père, Mère..." value={form.tuteurRelation} onChange={e => setForm({ ...form, tuteurRelation: e.target.value })} />
-                <Input placeholder="Profession" value={form.tuteurProfession} onChange={e => setForm({ ...form, tuteurProfession: e.target.value })} />
-                <Input className="md:col-span-2" placeholder="Adresse du tuteur" value={form.tuteurAdresse} onChange={e => setForm({ ...form, tuteurAdresse: e.target.value })} />
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Nom du tuteur</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Nom de famille" value={form.tuteurNom} onChange={e => setForm({ ...form, tuteurNom: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Prénom du tuteur</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Prénom" value={form.tuteurPrenom} onChange={e => setForm({ ...form, tuteurPrenom: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Téléphone *</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="+243..." value={form.tuteurTelephone} onChange={e => setForm({ ...form, tuteurTelephone: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Téléphone secondaire</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Optionnel" value={form.tuteurTelephone2} onChange={e => setForm({ ...form, tuteurTelephone2: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Lien de parenté</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Père, Mère, Tuteur..." value={form.tuteurRelation} onChange={e => setForm({ ...form, tuteurRelation: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-stone-600">Profession</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="Profession" value={form.tuteurProfession} onChange={e => setForm({ ...form, tuteurProfession: e.target.value })} />
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-xs font-semibold text-stone-600">Adresse de résidence</Label>
+                  <Input className="rounded-xl border-stone-200 bg-white font-medium mt-1" placeholder="N°, Avenue, Quartier..." value={form.tuteurAdresse} onChange={e => setForm({ ...form, tuteurAdresse: e.target.value })} />
+                </div>
               </div>
             </section>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Annuler</Button>
-            <Button disabled={busy} onClick={handleSave} className="bg-[var(--etab-color,#075e54)] text-white">{busy ? 'Enregistrement...' : editingId ? 'Mettre à jour' : 'Inscrire'}</Button>
+
+          <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
+            <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setFormOpen(false)}>Annuler</Button>
+            <Button disabled={busy} onClick={handleSave} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md">
+              {busy ? 'Enregistrement...' : editingId ? 'Mettre à jour' : 'Inscrire l’élève'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* ── DIALOG FICHE DÉTAILLÉE D'ÉLÈVE ── */}
       <Dialog open={!!detail} onOpenChange={open => !open && setDetail(null)}>
-        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-7xl max-h-[95vh] overflow-y-auto bg-slate-50">
-          <DialogHeader><DialogTitle>{detail?.nom} {detail?.prenom}</DialogTitle></DialogHeader>
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-6xl max-h-[92vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white font-bold text-lg">
+                {detail ? detail.prenom[0] + detail.nom[0] : 'EL'}
+              </div>
+              <div>
+                <DialogTitle className="text-2xl font-extrabold text-[#0c241f]">{detail?.nom} {detail?.prenom}</DialogTitle>
+                <p className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/50 w-fit mt-1">
+                  Matricule : {detail?.matricule}
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
           {detail && (
-            <div className="grid gap-5 md:grid-cols-2">
-              <Card><CardHeader><CardTitle>Informations personnelles</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><p><b>Matricule :</b> {detail.matricule}</p><p><b>Sexe :</b> {detail.sexe === 'F' ? 'Féminin' : 'Masculin'}</p><p><b>Date de naissance :</b> {detail.dateNaissance ? new Date(detail.dateNaissance).toLocaleDateString('fr-BI') : '—'}</p><p><b>Lieu :</b> {detail.lieuNaissance || '—'}</p><p><b>Établissement :</b> {detail.etablissement?.nom || '—'}</p></CardContent></Card>
-              <Card><CardHeader><CardTitle>Scolarité</CardTitle></CardHeader><CardContent className="space-y-2">{(detail.inscriptions || detail.classes || []).map((i: any, n: number) => (<div key={n} className="rounded border p-3"><b>{i.classe?.nom || '—'}</b><p className="text-sm text-muted-foreground">{i.classe?.anneeScolaire?.libelle || i.classe?.annee_scolaire?.libelle || '—'} · {i.statut}</p></div>))}</CardContent></Card>
-              <Card><CardHeader><CardTitle>Tuteurs</CardTitle></CardHeader><CardContent className="space-y-2">{detail.tuteurs?.length ? detail.tuteurs.map((x: any, n: number) => (<div key={n} className="rounded border p-3"><b>{x.tuteur?.nom} {x.tuteur?.prenom}</b><p className="text-sm">{x.tuteur?.relation || '—'} · {x.tuteur?.telephone || '—'}</p><p className="text-sm text-muted-foreground">{x.tuteur?.adresse || '—'}</p></div>)) : <p className="text-muted-foreground">Aucun tuteur.</p>}</CardContent></Card>
-              <Card><CardHeader><CardTitle>Situation financière</CardTitle></CardHeader><CardContent>{detail.echeances?.length ? (<Table><TableHeader><TableRow><TableHead>Frais</TableHead><TableHead>Dû</TableHead><TableHead>Payé</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{detail.echeances.map((e: any) => (<TableRow key={e.id}><TableCell>{e.fraisScolaire?.libelle || e.frais_scolaire?.libelle || '—'}</TableCell><TableCell>{Number(e.montantDu || e.montant_du || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell>{Number(e.montantPaye || e.montant_paye || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell><Badge variant="outline">{e.statut}</Badge></TableCell></TableRow>))}</TableBody></Table>) : <p className="text-muted-foreground">Aucune échéance.</p>}</CardContent></Card>
-              <Card className="md:col-span-2"><CardHeader><CardTitle>Historique des paiements</CardTitle></CardHeader><CardContent>{detail.paiements?.length ? (<div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Reçu</TableHead><TableHead>Motif</TableHead><TableHead>Montant</TableHead><TableHead>Mode</TableHead><TableHead>Date</TableHead><TableHead>État</TableHead></TableRow></TableHeader><TableBody>{detail.paiements.map((p: any) => (<TableRow key={p.id} className={p.annule ? 'opacity-60 line-through' : ''}><TableCell className="font-mono text-xs">{p.numeroRecu || p.numero_recu || '—'}</TableCell><TableCell>{p.motif || '—'}</TableCell><TableCell>{Number(p.montant || 0).toLocaleString('fr-CD')} {p.devise || 'CDF'}</TableCell><TableCell>{p.modePaiement === 'ESPECES' ? 'Espèces' : p.modePaiement === 'CHEQUE' ? 'Chèque' : p.modePaiement === 'VIREMENT' ? 'Virement' : p.modePaiement || p.mode_paiement || '—'}</TableCell><TableCell>{p.createdAt || p.created_at ? new Date(p.createdAt || p.created_at).toLocaleDateString('fr-CD') : '—'}</TableCell><TableCell>{p.annule ? <Badge variant="destructive">Annulé</Badge> : <Badge className="bg-emerald-600">Validé</Badge>}</TableCell></TableRow>))}</TableBody></Table></div>) : <p className="text-sm text-muted-foreground">Aucun paiement enregistré.</p>}</CardContent></Card>
+            <div className="grid gap-5 md:grid-cols-2 pt-2">
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Informations Personnelles</CardTitle></CardHeader><CardContent className="space-y-2 text-xs sm:text-sm font-medium"><p><b>Sexe :</b> {detail.sexe === 'F' ? 'Féminin' : 'Masculin'}</p><p><b>Date de naissance :</b> {detail.dateNaissance ? new Date(detail.dateNaissance).toLocaleDateString('fr-FR') : '—'}</p><p><b>Lieu :</b> {detail.lieuNaissance || '—'}</p><p><b>Établissement :</b> {detail.etablissement?.nom || '—'}</p></CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Scolarité Actuelle</CardTitle></CardHeader><CardContent className="space-y-2">{(detail.inscriptions || detail.classes || []).map((i: any, n: number) => (<div key={n} className="rounded-xl border border-stone-200 p-3 bg-stone-50/50"><b>{i.classe?.nom || '—'}</b><p className="text-xs text-stone-500 mt-0.5">{i.classe?.anneeScolaire?.libelle || i.classe?.annee_scolaire?.libelle || '—'} · <Badge variant="outline" className="text-[10px] ml-1">{i.statut}</Badge></p></div>))}</CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Tuteur Légal</CardTitle></CardHeader><CardContent className="space-y-2">{detail.tuteurs?.length ? detail.tuteurs.map((x: any, n: number) => (<div key={n} className="rounded-xl border border-stone-200 p-3 bg-stone-50/50"><b>{x.tuteur?.nom} {x.tuteur?.prenom}</b><p className="text-xs font-semibold text-amber-700 mt-1">{x.tuteur?.relation || '—'} · {x.tuteur?.telephone || '—'}</p><p className="text-xs text-stone-500">{x.tuteur?.adresse || '—'}</p></div>)) : <p className="text-xs text-stone-400 font-medium">Aucun tuteur renseigné.</p>}</CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Situation Financière</CardTitle></CardHeader><CardContent>{detail.echeances?.length ? (<Table><TableHeader><TableRow><TableHead>Frais</TableHead><TableHead>Dû</TableHead><TableHead>Payé</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{detail.echeances.map((e: any) => (<TableRow key={e.id}><TableCell className="font-semibold text-xs">{e.fraisScolaire?.libelle || e.frais_scolaire?.libelle || '—'}</TableCell><TableCell className="text-xs font-bold">{Number(e.montantDu || e.montant_du || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell className="text-xs text-emerald-700 font-bold">{Number(e.montantPaye || e.montant_paye || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell><Badge variant="outline" className="text-[10px]">{e.statut}</Badge></TableCell></TableRow>))}</TableBody></Table>) : <p className="text-xs text-stone-400 font-medium">Aucune échéance enregistrée.</p>}</CardContent></Card>
+              <Card className="md:col-span-2 rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Historique des Paiements</CardTitle></CardHeader><CardContent>{detail.paiements?.length ? (<div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>N° Reçu</TableHead><TableHead>Motif</TableHead><TableHead>Montant</TableHead><TableHead>Mode</TableHead><TableHead>Date</TableHead><TableHead>État</TableHead></TableRow></TableHeader><TableBody>{detail.paiements.map((p: any) => (<TableRow key={p.id} className={p.annule ? 'opacity-50 line-through bg-rose-50/50' : ''}><TableCell className="font-mono text-xs font-bold">{p.numeroRecu || p.numero_recu || '—'}</TableCell><TableCell className="text-xs font-medium">{p.motif || '—'}</TableCell><TableCell className="text-xs font-bold text-emerald-700">{Number(p.montant || 0).toLocaleString('fr-CD')} {p.devise || 'CDF'}</TableCell><TableCell className="text-xs">{p.modePaiement === 'ESPECES' ? 'Espèces' : p.modePaiement === 'CHEQUE' ? 'Chèque' : p.modePaiement === 'VIREMENT' ? 'Virement' : p.modePaiement || '—'}</TableCell><TableCell className="text-xs">{p.createdAt || p.created_at ? new Date(p.createdAt || p.created_at).toLocaleDateString('fr-FR') : '—'}</TableCell><TableCell>{p.annule ? <Badge variant="destructive" className="text-[10px]">Annulé</Badge> : <Badge className="bg-emerald-600 text-[10px]">Validé</Badge>}</TableCell></TableRow>))}</TableBody></Table></div>) : <p className="text-xs text-stone-400 font-medium">Aucun paiement enregistré.</p>}</CardContent></Card>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
+      {/* ── DIALOG CONFIRMATION SUPPRESSION / ARCHIVAGE ── */}
       <Dialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
-        <DialogContent><DialogHeader><DialogTitle>Archiver l’élève ?</DialogTitle></DialogHeader><p>Voulez-vous archiver {deleteTarget?.nom} {deleteTarget?.prenom} ? L’historique financier sera conservé.</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Annuler</Button><Button variant="destructive" disabled={busy} onClick={handleDelete}>{busy ? 'Traitement...' : 'Archiver'}</Button></div></DialogContent>
+        <DialogContent className="rounded-3xl border border-stone-200 p-6 shadow-2xl max-w-md">
+          <DialogHeader><DialogTitle className="text-lg font-bold text-[#0c241f]">Archiver la fiche élève ?</DialogTitle></DialogHeader>
+          <p className="text-sm text-stone-600 font-medium mt-1">Voulez-vous archiver la fiche de <b className="text-stone-900">{deleteTarget?.nom} {deleteTarget?.prenom}</b> ? L’historique financier et les reçus seront conservés.</p>
+          <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDeleteTarget(null)}>Annuler</Button><Button variant="destructive" className="rounded-xl font-bold" disabled={busy} onClick={handleDelete}>{busy ? 'Traitement...' : 'Archiver'}</Button></div>
+        </DialogContent>
       </Dialog>
     </main>
   )

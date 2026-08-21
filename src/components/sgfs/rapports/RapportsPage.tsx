@@ -22,11 +22,9 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Printer, TrendingUp, TrendingDown, Banknote } from 'lucide-react'
+import { Printer, TrendingUp, TrendingDown, Banknote, FileText, Sparkles, BarChart3, Users } from 'lucide-react'
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Types
- * ──────────────────────────────────────────────────────────────────────────*/
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface MoisDeviseMontant {
   mois: string
@@ -67,9 +65,7 @@ interface RapportEleves {
   parClasse: ClasseCount[]
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Constantes & helpers
- * ──────────────────────────────────────────────────────────────────────────*/
+// ─── Constantes & helpers ─────────────────────────────────────────────────────
 
 const PRINT_FRAME_ID = '__rapport_print_frame__'
 
@@ -86,13 +82,6 @@ const STATUS_LABELS: Record<string, string> = {
 const LOCALES: Record<string, string> = { CDF: 'fr-CD', BIF: 'fr-BI', USD: 'en-US' }
 const SANS_DECIMALES = ['CDF', 'BIF']
 
-/**
- * Montant suivi de son code devise.
- *
- * L'ancienne version forçait la locale `fr-CD` : un montant en USD sortait
- * avec le séparateur congolais. Et `style: 'currency'` place le symbole en
- * suffixe pour CDF, en préfixe pour USD — incohérent dans un tableau.
- */
 function formatMoney(montant: number | null | undefined, devise = 'CDF') {
   const d = (devise || 'CDF').toUpperCase()
   const v = Number(montant || 0)
@@ -104,7 +93,6 @@ function formatMoney(montant: number | null | undefined, devise = 'CDF') {
   return `${n} ${d}`
 }
 
-/** « 2026-03 » → « mars 2026 ». Tolère un format inattendu. */
 function formatMois(mois: string) {
   const [annee, moisNum] = String(mois ?? '').split('-')
   const d = new Date(Number(annee), Number(moisNum) - 1, 1)
@@ -112,22 +100,10 @@ function formatMois(mois: string) {
   return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 }
 
-/**
- * Accepte l'ancien format du backend comme le nouveau.
- *
- * Ancien : `{ encaissements: [{mois, total}], depenses: [...], solde }`
- *          → pas de `devise` par ligne, un `solde` scalaire.
- * Nouveau : `{ encaissements: [{mois, devise, total}], soldes: [...], devises }`
- *
- * Sans ce repli, une page à jour branchée sur un backend non recompilé
- * n'affiche plus rien : aucune devise détectée, donc aucun tableau.
- */
 function normaliserFinancier(data: any): RapportFinancier {
   const enc: any[] = Array.isArray(data?.encaissements) ? data.encaissements : []
   const dep: any[] = Array.isArray(data?.depenses) ? data.depenses : []
 
-  // Le backend est-il déjà ventilé ?
-  const ventile = enc.some((x) => x?.devise) || dep.some((x) => x?.devise)
   const DEFAUT = (data?.devise || 'CDF').toUpperCase()
 
   const norm = (l: any[]): MoisDeviseMontant[] =>
@@ -140,7 +116,6 @@ function normaliserFinancier(data: any): RapportFinancier {
   const encaissements = norm(enc)
   const depenses = norm(dep)
 
-  // Soldes : fournis par le backend, sinon recalculés devise par devise.
   let soldes: SoldeDevise[] = Array.isArray(data?.soldes) ? data.soldes : []
   if (soldes.length === 0) {
     const acc = new Map<string, { encaissements: number; depenses: number }>()
@@ -166,14 +141,6 @@ function normaliserFinancier(data: any): RapportFinancier {
     ? data.devises.map((d: string) => String(d).toUpperCase())
     : Array.from(new Set([...encaissements, ...depenses].map((x) => x.devise)))
 
-  // Avertit si les montants risquent de mélanger des devises.
-  if (!ventile && devises.length > 0) {
-    console.warn(
-      '[rapports] Backend non ventilé : les montants peuvent additionner ' +
-        'plusieurs devises. Recompilez src-tauri/rapports.rs.',
-    )
-  }
-
   return { encaissements, depenses, soldes, devises }
 }
 
@@ -190,15 +157,6 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, '&#039;')
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Impression
- *
- * `window.print()` sur la page courante donne une feuille blanche en Tauri :
- * la webview n'imprime pas correctement le document hôte (layout en
- * `h-screen overflow-hidden`, styles Tailwind non résolus…).
- * On construit donc un document A4 autonome dans une iframe cachée.
- * ──────────────────────────────────────────────────────────────────────────*/
-
 interface PrintContext {
   titre: string
   etablissement: string
@@ -211,7 +169,6 @@ interface PrintContext {
 function buildRapportHtml(ctx: PrintContext): string {
   const { financier, eleves } = ctx
 
-  // ── Tableau mensuel, une section par devise ────────────────────────────
   let blocFinancier = ''
   if (ctx.onglet === 'financier' && financier) {
     const devises =
@@ -224,12 +181,11 @@ function buildRapportHtml(ctx: PrintContext): string {
             ]),
           )
 
-    // Cartes de synthèse : une par devise, jamais de total inter-devises
     const cartes = financier.soldes
       .map(
         (s) => `
       <div class="card">
-        <span>${escapeHtml(s.devise)} — encaissements</span>
+        <span>${escapeHtml(s.devise)} — Encaissements</span>
         <b class="pos">${escapeHtml(formatMoney(s.encaissements, s.devise))}</b>
         <span style="margin-top:4px">Dépenses</span>
         <b class="neg">${escapeHtml(formatMoney(s.depenses, s.devise))}</b>
@@ -239,7 +195,6 @@ function buildRapportHtml(ctx: PrintContext): string {
       )
       .join('')
 
-    // Un tableau mensuel par devise
     const tables = devises
       .map((dev) => {
         const enc = financier.encaissements.filter((e) => e.devise === dev)
@@ -290,7 +245,6 @@ function buildRapportHtml(ctx: PrintContext): string {
         : `<div class="cards">${cartes}</div>${tables}`
   }
 
-  // ── Statistiques élèves ────────────────────────────────────────────────
   let blocEleves = ''
   if (ctx.onglet === 'eleves' && eleves) {
     const petiteTable = (titre: string, entete: string, rows: string, total: number) => `
@@ -339,15 +293,15 @@ function buildRapportHtml(ctx: PrintContext): string {
       color: #111827; font-size: 12px; line-height: 1.45;
     }
     header {
-      border-bottom: 3px solid #075e54; padding-bottom: 10px; margin-bottom: 18px;
+      border-bottom: 3px solid #0c241f; padding-bottom: 10px; margin-bottom: 18px;
       display: flex; justify-content: space-between; align-items: flex-end;
     }
-    header h1 { font-size: 20px; color: #075e54; letter-spacing: -.3px; }
+    header h1 { font-size: 20px; color: #0c241f; letter-spacing: -.3px; }
     header .sub { color: #6b7280; font-size: 11px; margin-top: 3px; }
     header .meta { text-align: right; font-size: 11px; color: #6b7280; }
     h2 {
       font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
-      color: #075e54; margin: 16px 0 6px; padding-bottom: 3px;
+      color: #0c241f; margin: 16px 0 6px; padding-bottom: 3px;
       border-bottom: 1px solid #e5e7eb;
     }
     .cards { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -359,7 +313,7 @@ function buildRapportHtml(ctx: PrintContext): string {
     .card b { font-size: 15px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
     th {
-      background: #075e54; color: #fff; padding: 6px 8px; text-align: left;
+      background: #0c241f; color: #fff; padding: 6px 8px; text-align: left;
       font-size: 10px; text-transform: uppercase; letter-spacing: .4px;
     }
     td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
@@ -374,7 +328,6 @@ function buildRapportHtml(ctx: PrintContext): string {
       margin-top: 20px; border-top: 1px solid #e5e7eb; padding-top: 8px;
       font-size: 9px; color: #9ca3af; text-align: center;
     }
-    /* Les fonds colorés doivent sortir à l'impression */
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       table, .cards, .col { break-inside: avoid; }
@@ -439,7 +392,6 @@ function printRapport(ctx: PrintContext) {
     } catch {
       toast.error("L'impression a été interrompue.")
     } finally {
-      // Laisse le dialogue système s'ouvrir avant de retirer l'iframe
       setTimeout(() => frame.remove(), 1500)
     }
   }
@@ -447,10 +399,6 @@ function printRapport(ctx: PrintContext) {
   if (doc.readyState === 'complete') setTimeout(launch, 60)
   else frame.onload = launch
 }
-
-/* ────────────────────────────────────────────────────────────────────────────
- * Page
- * ──────────────────────────────────────────────────────────────────────────*/
 
 export default function RapportsPage() {
   const { user } = useAppStore()
@@ -468,7 +416,6 @@ export default function RapportsPage() {
   const [rapportEleves, setRapportEleves] = useState<RapportEleves | null>(null)
   const [activeTab, setActiveTab] = useState('financier')
 
-  /* ── Établissements ─────────────────────────────────────────────────── */
   useEffect(() => {
     if (!user) return
     ;(async () => {
@@ -477,12 +424,11 @@ export default function RapportsPage() {
         setSchools(res?.etablissements ?? [])
         if (locked) setSchool(schoolFilter!)
       } catch {
-        /* les filtres restent utilisables */
+        /* silencieux */
       }
     })()
   }, [user, locked, schoolFilter])
 
-  /* ── Années de l'établissement ──────────────────────────────────────── */
   useEffect(() => {
     if (!school) {
       setYears([])
@@ -507,7 +453,6 @@ export default function RapportsPage() {
     })()
   }, [school])
 
-  /* ── Génération ─────────────────────────────────────────────────────── */
   async function generate() {
     if (!school || !year) {
       toast.error('Veuillez sélectionner un établissement et une année scolaire')
@@ -536,11 +481,9 @@ export default function RapportsPage() {
     }
   }
 
-  /* ── Dérivés ────────────────────────────────────────────────────────── */
   const rapportCourant = activeTab === 'financier' ? rapportFinancier : rapportEleves
   const peutImprimer = !!rapportCourant
 
-  /** Devises présentes dans le rapport, avec repli si le backend est ancien. */
   const devises = useMemo(() => {
     if (!rapportFinancier) return []
     if (rapportFinancier.devises?.length) return rapportFinancier.devises
@@ -552,7 +495,6 @@ export default function RapportsPage() {
     ).filter(Boolean)
   }, [rapportFinancier])
 
-  /** Mois × devise : un tableau distinct par devise. */
   const moisParDevise = useMemo(() => {
     if (!rapportFinancier) return new Map<string, string[]>()
     const m = new Map<string, string[]>()
@@ -591,32 +533,32 @@ export default function RapportsPage() {
     })
   }
 
-  /* ── Rendu ──────────────────────────────────────────────────────────── */
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-2 sm:p-4 md:p-6">
+      {/* Banner Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold">Rapports</h1>
-          <p className="text-sm text-muted-foreground">
-            Consultez les rapports financiers et statistiques des élèves.
-          </p>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <FileText className="h-3.5 w-3.5" /> Analyses & Audits
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Rapports & Synthèses</h1>
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">Consultez et imprimez les rapports financiers et statistiques d&apos;effectifs.</p>
         </div>
         <Button
-          variant="outline"
-          className="gap-2"
+          className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
           onClick={handlePrint}
           disabled={!peutImprimer}
           title={peutImprimer ? 'Imprimer le rapport' : 'Générez un rapport pour l’imprimer'}
         >
-          <Printer className="h-4 w-4" /> Imprimer
+          <Printer className="h-4 w-4 text-amber-400" /> Imprimer le Rapport
         </Button>
       </div>
 
       {/* Filtres */}
-      <Card>
-        <CardContent className="grid gap-3 p-4 md:grid-cols-3">
+      <Card className="rounded-2xl border-stone-200/80 shadow-sm">
+        <CardContent className="grid gap-4 p-5 md:grid-cols-3">
           <div>
-            <label className="text-sm font-medium">Établissement</label>
+            <label className="text-xs font-semibold text-stone-600">Établissement *</label>
             <Select
               value={school || undefined}
               onValueChange={(v) => {
@@ -627,10 +569,10 @@ export default function RapportsPage() {
               }}
               disabled={locked}
             >
-              <SelectTrigger className="mt-1">
+              <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1">
                 <SelectValue placeholder="Sélectionner un établissement" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 {schools.map((s: any) => (
                   <SelectItem key={s.id} value={s.id}>
                     {`${getTypeIcon(s.type || '')} ${s.nom}`}
@@ -641,16 +583,16 @@ export default function RapportsPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Année scolaire</label>
+            <label className="text-xs font-semibold text-stone-600">Année scolaire *</label>
             <Select
               value={year || undefined}
               onValueChange={setYear}
               disabled={!school || years.length === 0}
             >
-              <SelectTrigger className="mt-1">
+              <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1">
                 <SelectValue placeholder="Sélectionner une année" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 {years.map((y: any) => (
                   <SelectItem key={y.id} value={y.id}>
                     {y.libelle}
@@ -662,69 +604,67 @@ export default function RapportsPage() {
           </div>
 
           <div className="flex items-end">
-            <Button onClick={generate} disabled={loading || !school || !year} className="w-full">
+            <Button onClick={generate} disabled={loading || !school || !year} className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-10 shadow-md">
               {loading ? 'Génération...' : 'Générer le rapport'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="financier">Rapport financier</TabsTrigger>
-          <TabsTrigger value="eleves">Rapport élèves</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="bg-stone-100 p-1 rounded-xl border border-stone-200">
+          <TabsTrigger value="financier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport financier</TabsTrigger>
+          <TabsTrigger value="eleves" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport élèves</TabsTrigger>
         </TabsList>
 
         {/* ── Financier ─────────────────────────────────────────────── */}
         <TabsContent value="financier" className="mt-4 space-y-4">
           {rapportFinancier ? (
             devises.length === 0 ? (
-              <Card>
-                <CardContent className="p-12 text-center text-muted-foreground">
-                  <p>Aucune opération sur la période sélectionnée.</p>
+              <Card className="rounded-2xl border-stone-200 shadow-sm">
+                <CardContent className="p-12 text-center text-stone-400 font-medium">
+                  Aucune opération sur la période sélectionnée.
                 </CardContent>
               </Card>
             ) : (
               <>
-                {/* Une carte de synthèse par devise — jamais de total mélangé */}
-                <div
-                  className={`grid grid-cols-1 gap-4 ${
-                    rapportFinancier.soldes.length > 1 ? 'md:grid-cols-2' : ''
-                  }`}
-                >
+                <div className={`grid grid-cols-1 gap-4 ${
+                  rapportFinancier.soldes.length > 1 ? 'md:grid-cols-2' : ''
+                }`}>
                   {rapportFinancier.soldes.map((s) => (
-                    <Card key={s.devise} className="overflow-hidden">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-base">
-                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-bold">
+                    <Card key={s.devise} className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                      <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
+                        <CardTitle className="flex items-center justify-between text-sm font-bold text-[#0c241f]">
+                          <span>Bilan Financier</span>
+                          <span className="rounded-md bg-[#0c241f] text-amber-400 px-2.5 py-0.5 text-xs font-bold">
                             {s.devise}
                           </span>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-2.5 pt-0">
+                      <CardContent className="space-y-3 p-6">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <TrendingUp className="h-4 w-4 text-emerald-500" /> Encaissements
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-600">
+                            <TrendingUp className="h-4 w-4 text-emerald-600" /> Total Encaissements
                           </span>
-                          <span className="font-bold tabular-nums">
+                          <span className="font-bold tabular-nums text-stone-900 text-sm">
                             {formatMoney(s.encaissements, s.devise)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <TrendingDown className="h-4 w-4 text-red-500" /> Dépenses
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-600">
+                            <TrendingDown className="h-4 w-4 text-rose-600" /> Total Dépenses
                           </span>
-                          <span className="font-bold tabular-nums">
+                          <span className="font-bold tabular-nums text-stone-900 text-sm">
                             {formatMoney(s.depenses, s.devise)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between gap-3 border-t pt-2.5">
-                          <span className="flex items-center gap-1.5 text-sm font-medium">
-                            <Banknote className="h-4 w-4 text-blue-500" /> Solde
+                        <div className="flex items-center justify-between gap-3 border-t border-stone-100 pt-3">
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
+                            <Banknote className="h-4 w-4 text-amber-600" /> Solde Net
                           </span>
                           <span
-                            className={`text-lg font-bold tabular-nums ${
-                              s.solde >= 0 ? 'text-emerald-600' : 'text-red-600'
+                            className={`text-base font-extrabold tabular-nums ${
+                              s.solde >= 0 ? 'text-emerald-700' : 'text-rose-600'
                             }`}
                           >
                             {formatMoney(s.solde, s.devise)}
@@ -735,28 +675,27 @@ export default function RapportsPage() {
                   ))}
                 </div>
 
-                {/* Un tableau mensuel par devise */}
                 {devises.map((dev) => {
                   const mois = moisParDevise.get(dev) ?? []
                   const s = rapportFinancier.soldes.find((x) => x.devise === dev)
                   return (
-                    <Card key={dev}>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          Évolution mensuelle
-                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-bold">
+                    <Card key={dev} className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                      <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+                        <CardTitle className="flex items-center justify-between text-base font-bold text-stone-900">
+                          <span>Évolution Mensuelle</span>
+                          <span className="rounded-md bg-[#0c241f] text-amber-400 px-2.5 py-0.5 text-xs font-bold">
                             {dev}
                           </span>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-0">
                         <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Mois</TableHead>
-                              <TableHead className="text-right">Encaissements</TableHead>
-                              <TableHead className="text-right">Dépenses</TableHead>
-                              <TableHead className="text-right">Solde</TableHead>
+                          <TableHeader className="bg-[#0c241f] text-white">
+                            <TableRow className="hover:bg-[#0c241f]">
+                              <TableHead className="text-amber-300 font-bold">Mois</TableHead>
+                              <TableHead className="text-right text-white font-bold">Encaissements</TableHead>
+                              <TableHead className="text-right text-white font-bold">Dépenses</TableHead>
+                              <TableHead className="text-right text-amber-300 font-bold">Solde</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -764,7 +703,7 @@ export default function RapportsPage() {
                               <TableRow>
                                 <TableCell
                                   colSpan={4}
-                                  className="py-8 text-center text-muted-foreground"
+                                  className="py-8 text-center text-xs font-semibold text-stone-400"
                                 >
                                   Aucune donnée pour cette devise.
                                 </TableCell>
@@ -775,17 +714,17 @@ export default function RapportsPage() {
                                 const dep = montantMois(rapportFinancier.depenses, m, dev)
                                 const solde = enc - dep
                                 return (
-                                  <TableRow key={m}>
-                                    <TableCell>{formatMois(m)}</TableCell>
-                                    <TableCell className="text-right tabular-nums">
+                                  <TableRow key={m} className="hover:bg-amber-500/5 transition-colors">
+                                    <TableCell className="font-bold text-stone-800 text-xs">{formatMois(m)}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-xs font-bold text-emerald-700">
                                       {formatMoney(enc, dev)}
                                     </TableCell>
-                                    <TableCell className="text-right tabular-nums">
+                                    <TableCell className="text-right tabular-nums text-xs font-bold text-rose-600">
                                       {formatMoney(dep, dev)}
                                     </TableCell>
                                     <TableCell
-                                      className={`text-right font-semibold tabular-nums ${
-                                        solde >= 0 ? 'text-emerald-600' : 'text-red-600'
+                                      className={`text-right font-extrabold tabular-nums text-xs ${
+                                        solde >= 0 ? 'text-emerald-700' : 'text-rose-600'
                                       }`}
                                     >
                                       {formatMoney(solde, dev)}
@@ -795,17 +734,17 @@ export default function RapportsPage() {
                               })
                             )}
                             {mois.length > 0 && s && (
-                              <TableRow className="border-t-2 bg-slate-50 font-bold dark:bg-slate-900/40">
-                                <TableCell>TOTAL {dev}</TableCell>
-                                <TableCell className="text-right tabular-nums">
+                              <TableRow className="border-t-2 border-stone-200 bg-stone-50 font-extrabold text-xs">
+                                <TableCell className="text-stone-900">TOTAL {dev}</TableCell>
+                                <TableCell className="text-right tabular-nums text-emerald-800">
                                   {formatMoney(s.encaissements, dev)}
                                 </TableCell>
-                                <TableCell className="text-right tabular-nums">
+                                <TableCell className="text-right tabular-nums text-rose-700">
                                   {formatMoney(s.depenses, dev)}
                                 </TableCell>
                                 <TableCell
                                   className={`text-right tabular-nums ${
-                                    s.solde >= 0 ? 'text-emerald-600' : 'text-red-600'
+                                    s.solde >= 0 ? 'text-emerald-800' : 'text-rose-700'
                                   }`}
                                 >
                                   {formatMoney(s.solde, dev)}
@@ -821,9 +760,10 @@ export default function RapportsPage() {
               </>
             )
           ) : (
-            <Card>
-              <CardContent className="p-12 text-center text-muted-foreground">
-                <p>Générez un rapport pour voir les données financières.</p>
+            <Card className="rounded-2xl border-stone-200 shadow-sm">
+              <CardContent className="p-12 text-center text-stone-400 font-medium">
+                <FileText className="mx-auto mb-3 h-12 w-12 opacity-30" />
+                <p className="text-base font-bold text-stone-700">Générez un rapport pour afficher le bilan financier.</p>
               </CardContent>
             </Card>
           )}
@@ -833,23 +773,23 @@ export default function RapportsPage() {
         <TabsContent value="eleves" className="mt-4 space-y-4">
           {rapportEleves ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Par statut</CardTitle>
+              <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
+                  <CardTitle className="text-sm font-bold text-[#0c241f]">Par Statut</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Statut</TableHead>
-                        <TableHead className="text-right">Nombre</TableHead>
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
+                        <TableHead className="text-amber-300 font-bold">Statut</TableHead>
+                        <TableHead className="text-right text-white font-bold">Nombre</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rapportEleves.parStatut.map((s) => (
-                        <TableRow key={s.statut}>
-                          <TableCell>{STATUS_LABELS[s.statut] ?? s.statut}</TableCell>
-                          <TableCell className="text-right font-semibold">{s.count}</TableCell>
+                        <TableRow key={s.statut} className="hover:bg-amber-500/5">
+                          <TableCell className="font-semibold text-xs text-stone-800">{STATUS_LABELS[s.statut] ?? s.statut}</TableCell>
+                          <TableCell className="text-right font-extrabold text-xs text-stone-900">{s.count}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -857,23 +797,23 @@ export default function RapportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Par sexe</CardTitle>
+              <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
+                  <CardTitle className="text-sm font-bold text-[#0c241f]">Par Sexe</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Sexe</TableHead>
-                        <TableHead className="text-right">Nombre</TableHead>
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
+                        <TableHead className="text-amber-300 font-bold">Sexe</TableHead>
+                        <TableHead className="text-right text-white font-bold">Nombre</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rapportEleves.parSexe.map((s) => (
-                        <TableRow key={s.sexe}>
-                          <TableCell>{sexeLabel(s.sexe)}</TableCell>
-                          <TableCell className="text-right font-semibold">{s.count}</TableCell>
+                        <TableRow key={s.sexe} className="hover:bg-amber-500/5">
+                          <TableCell className="font-semibold text-xs text-stone-800">{sexeLabel(s.sexe)}</TableCell>
+                          <TableCell className="text-right font-extrabold text-xs text-stone-900">{s.count}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -881,23 +821,23 @@ export default function RapportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Par classe</CardTitle>
+              <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
+                  <CardTitle className="text-sm font-bold text-[#0c241f]">Par Classe</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Classe</TableHead>
-                        <TableHead className="text-right">Nombre</TableHead>
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
+                        <TableHead className="text-amber-300 font-bold">Classe</TableHead>
+                        <TableHead className="text-right text-white font-bold">Nombre</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rapportEleves.parClasse.map((c) => (
-                        <TableRow key={c.classeNom}>
-                          <TableCell>{c.classeNom}</TableCell>
-                          <TableCell className="text-right font-semibold">{c.count}</TableCell>
+                        <TableRow key={c.classeNom} className="hover:bg-amber-500/5">
+                          <TableCell className="font-semibold text-xs text-stone-800 break-words">{c.classeNom}</TableCell>
+                          <TableCell className="text-right font-extrabold text-xs text-stone-900">{c.count}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -906,9 +846,10 @@ export default function RapportsPage() {
               </Card>
             </div>
           ) : (
-            <Card>
-              <CardContent className="p-12 text-center text-muted-foreground">
-                <p>Générez un rapport pour voir les statistiques des élèves.</p>
+            <Card className="rounded-2xl border-stone-200 shadow-sm">
+              <CardContent className="p-12 text-center text-stone-400 font-medium">
+                <Users className="mx-auto mb-3 h-12 w-12 opacity-30" />
+                <p className="text-base font-bold text-stone-700">Générez un rapport pour voir les statistiques des élèves.</p>
               </CardContent>
             </Card>
           )}

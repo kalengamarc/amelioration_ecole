@@ -125,10 +125,10 @@ export default function Home() {
       }
     }
 
-    // Premier déclenchement après 15 secondes
-    const initialTimer = setTimeout(runAutoSync, 15000)
-    // Boucle toutes les 5 minutes
-    const interval = setInterval(runAutoSync, 5 * 60 * 1000)
+    // Premier déclenchement après 30 secondes
+    const initialTimer = setTimeout(runAutoSync, 30000)
+    // Boucle toutes les 10 minutes en arrière-plan
+    const interval = setInterval(runAutoSync, 1 * 60 * 1000)
 
     return () => {
       clearTimeout(initialTimer)

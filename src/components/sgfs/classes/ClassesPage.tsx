@@ -27,7 +27,7 @@ import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import {
   GraduationCap, Plus, Edit, Trash2, ShieldAlert, Users, Layers,
-  BarChart3, AlertTriangle, ChevronLeft, ChevronRight, Search, Loader2, // <-- AJOUTÉ
+  BarChart3, AlertTriangle, ChevronLeft, ChevronRight, Search, Loader2,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -61,15 +61,15 @@ interface ClasseItem {
 const NIVEAU_MAP: Record<string, { label: string; className: string }> = {
   MATERNELLE: {
     label: 'Maternelle',
-    className: 'bg-pink-50 text-pink-700 border border-pink-100',
+    className: 'bg-amber-100 text-amber-900 border border-amber-200 font-semibold',
   },
   PRIMAIRE: {
     label: 'Primaire',
-    className: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+    className: 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold',
   },
   SECONDAIRE: {
     label: 'Secondaire',
-    className: 'bg-amber-50 text-amber-700 border border-amber-100',
+    className: 'bg-sky-100 text-sky-900 border border-sky-200 font-semibold',
   },
 }
 
@@ -98,19 +98,18 @@ function getTauxRemplissage(eleves: number, max: number): number {
   return Math.min(100, Math.round((eleves / max) * 100))
 }
 
-// Correction des classes dynamiques
 function getTauxBarClass(taux: number): string {
-  if (taux >= 90) return '[&>div]:bg-red-500'
-  if (taux >= 70) return '[&>div]:bg-emerald-500'
-  if (taux >= 50) return '[&>div]:bg-amber-500'
-  return '[&>div]:bg-black'
+  if (taux >= 90) return '[&>div]:bg-rose-600'
+  if (taux >= 70) return '[&>div]:bg-emerald-600'
+  if (taux >= 50) return '[&>div]:bg-amber-600'
+  return '[&>div]:bg-stone-700'
 }
 
 function getTauxTextClass(taux: number): string {
-  if (taux >= 90) return 'text-red-600 font-semibold'
-  if (taux >= 70) return 'text-emerald-600'
-  if (taux >= 50) return 'text-amber-600'
-  return 'text-gray-400'
+  if (taux >= 90) return 'text-rose-600 font-bold'
+  if (taux >= 70) return 'text-emerald-700 font-bold'
+  if (taux >= 50) return 'text-amber-700 font-bold'
+  return 'text-stone-500 font-bold'
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -118,40 +117,31 @@ function getTauxTextClass(taux: number): string {
 export default function ClassesPage() {
   const { user } = useAppStore()
 
-  // Data states
   const [classes, setClasses] = useState<ClasseItem[]>([])
   const [ecoles, setEcoles] = useState<Etablissement[]>([])
   const [annees, setAnnees] = useState<AnneeScolaire[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  // Filter states
   const [filterEcole, setFilterEcole] = useState('all')
   const [filterAnnee, setFilterAnnee] = useState('')
   const [filterNiveau, setFilterNiveau] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Pagination
   const [page, setPage] = useState(1)
   const pageSize = 10
 
-  // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
 
-  // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState<ClasseItem | null>(null)
   const [deleting, setDeleting] = useState(false)
-
-  // ─── Derived: permission ─────────────────────────────────────────────────
 
   const role = user?.role ?? ''
   const etabIdUser = user?.etablissementId ?? null
   const schoolFilter = getSchoolFilter(role, etabIdUser)
   const locked = !!schoolFilter
-
-  // ─── Fetch: Établissements ───────────────────────────────────────────────
 
   const fetchEcoles = useCallback(async () => {
     try {
@@ -166,8 +156,6 @@ export default function ClassesPage() {
       // silent
     }
   }, [locked, schoolFilter])
-
-  // ─── Fetch: Années scolaires ─────────────────────────────────────────────
 
   const fetchAnnees = useCallback(
     async (etablissementId: string) => {
@@ -186,8 +174,6 @@ export default function ClassesPage() {
     },
     [filterAnnee]
   )
-
-  // ─── Fetch: Classes ─────────────────────────────────────────────────────
 
   const fetchClasses = useCallback(async () => {
     if (!user) return
@@ -209,9 +195,7 @@ export default function ClassesPage() {
     } finally {
       setLoading(false)
     }
-  }, [user, role, etabIdUser, filterEcole, filterAnnee]) // Retiré filterNiveau
-
-  // ─── Effects ─────────────────────────────────────────────────────────────
+  }, [user, role, etabIdUser, filterEcole, filterAnnee])
 
   useEffect(() => {
     if (!user) return
@@ -239,24 +223,17 @@ export default function ClassesPage() {
     setPage(1)
   }, [filterEcole, filterAnnee, filterNiveau, searchQuery])
 
-  // ─── Filtering & Pagination (Côté client pour la recherche et le niveau) ──
-
   const filteredClasses = useMemo(() => {
     let result = classes
-    
     if (filterNiveau !== 'all') {
       result = result.filter(c => c.niveau === filterNiveau)
     }
-
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter(c => c.nom.toLowerCase().includes(q))
     }
-
     return result
   }, [classes, filterNiveau, searchQuery])
-
-  // ─── Stats ────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => {
     const totalClasses = filteredClasses.length
@@ -266,15 +243,11 @@ export default function ClassesPage() {
     return { totalClasses, totalEleves, niveauxCouverts, effectifMoyen }
   }, [filteredClasses])
 
-  // ─── Selected year label ─────────────────────────────────────────────────
-
   const selectedYearLabel = useMemo(() => {
     if (!filterAnnee) return ''
     const found = annees.find((a) => a.id === filterAnnee)
     return found?.libelle ?? ''
   }, [filterAnnee, annees])
-
-  // ─── Pagination ───────────────────────────────────────────────────────────
 
   const totalItems = filteredClasses.length
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
@@ -284,13 +257,9 @@ export default function ClassesPage() {
     return filteredClasses.slice(start, start + pageSize)
   }, [filteredClasses, page])
 
-  // ─── Form: Dialog years list ─────────────────────────────────────────────
-
   const formAnnees = useMemo(() => {
     return annees
   }, [annees])
-
-  // ─── Handlers ─────────────────────────────────────────────────────────────
 
   function openCreate() {
     setEditingId(null)
@@ -316,15 +285,15 @@ export default function ClassesPage() {
 
   async function handleSave() {
     if (!form.nom.trim()) {
-      toast.error('Le nom de la classe est obligatoire')
+      toast.error('Le nom de la classe est obligatoire (*)')
       return
     }
     if (!form.etablissementId) {
-      toast.error("L'établissement est obligatoire")
+      toast.error("L'établissement est obligatoire (*)")
       return
     }
     if (!form.anneeScolaireId) {
-      toast.error("L'année scolaire est obligatoire")
+      toast.error("L'année scolaire est obligatoire (*)")
       return
     }
     const effectifMax = Number(form.effectifMax)
@@ -383,8 +352,6 @@ export default function ClassesPage() {
     }
   }
 
-  // ─── Permission Guard ────────────────────────────────────────────────────
-
   if (user && !canManageClasses(user.role)) {
     return (
       <motion.div
@@ -392,46 +359,47 @@ export default function ClassesPage() {
         animate={{ opacity: 1, y: 0 }}
         className="flex min-h-[60vh] flex-col items-center justify-center gap-4"
       >
-        <ShieldAlert className="h-16 w-16 text-red-400" />
-        <h2 className="text-2xl font-bold">Accès réservé</h2>
-        <p className="text-muted-foreground">
-          La gestion des classes est réservée au coordonnateur.
+        <ShieldAlert className="h-16 w-16 text-rose-500" />
+        <h2 className="text-2xl font-bold text-stone-800">Accès réservé</h2>
+        <p className="text-stone-500">
+          La gestion des classes est réservée au coordonnateur ou à l'administrateur.
         </p>
       </motion.div>
     )
   }
-
-  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-6 p-2 sm:p-4 md:p-6"
     >
-      {/* Header */}
+      {/* Banner Header */}
       <motion.div
         variants={itemVariants}
-        className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm"
       >
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <GraduationCap className="h-3.5 w-3.5" /> Structure Pédagogique
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">
             Gestion des Classes
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
             {selectedYearLabel ? (
-              <>Année en cours : <span className="font-medium text-[var(--etab-color,#075e54)]">{selectedYearLabel}</span></>
+              <>Année en cours : <span className="font-bold text-[#0c241f]">{selectedYearLabel}</span></>
             ) : (
-              "Organisez vos classes par niveau et établissement."
+              "Organisez vos classes par niveau, effectif et établissement."
             )}
           </p>
         </div>
         <Button
           onClick={openCreate}
-          className="gap-2 bg-[var(--etab-color,#075e54)] text-white hover:bg-[var(--etab-color-hover,#064e46)] shadow-sm"
+          className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 text-amber-400" />
           Nouvelle classe
         </Button>
       </motion.div>
@@ -439,15 +407,15 @@ export default function ClassesPage() {
       {/* Filters Row */}
       <motion.div
         variants={itemVariants}
-        className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center"
+        className="flex flex-col gap-3 rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:flex-row sm:items-center"
       >
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
           <Input
             placeholder="Rechercher une classe..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 border-gray-200 bg-gray-50/50 focus:bg-white"
+            className="pl-9 rounded-xl border-stone-200 font-medium"
           />
         </div>
 
@@ -458,10 +426,10 @@ export default function ClassesPage() {
           }}
           disabled={locked}
         >
-          <SelectTrigger className="w-full h-9 border-gray-200 sm:w-48">
+          <SelectTrigger className="w-full sm:w-52 rounded-xl border-stone-200 font-medium">
             <SelectValue placeholder="Établissement" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="rounded-xl">
             <SelectItem value="all">Tous les établissements</SelectItem>
             {ecoles.map((e) => (
               <SelectItem key={e.id} value={e.id}>
@@ -472,10 +440,10 @@ export default function ClassesPage() {
         </Select>
 
         <Select value={filterAnnee} onValueChange={setFilterAnnee}>
-          <SelectTrigger className="w-full h-9 border-gray-200 sm:w-44">
+          <SelectTrigger className="w-full sm:w-48 rounded-xl border-stone-200 font-medium">
             <SelectValue placeholder="Année scolaire" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="rounded-xl">
             {annees.length === 0 && (
               <SelectItem value="__none" disabled>
                 Sélectionnez un établissement
@@ -490,10 +458,10 @@ export default function ClassesPage() {
         </Select>
 
         <Select value={filterNiveau} onValueChange={setFilterNiveau}>
-          <SelectTrigger className="w-full h-9 border-gray-200 sm:w-40">
+          <SelectTrigger className="w-full sm:w-44 rounded-xl border-stone-200 font-medium">
             <SelectValue placeholder="Niveau" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="rounded-xl">
             <SelectItem value="all">Tous les niveaux</SelectItem>
             {NIVEAUX.map((n) => (
               <SelectItem key={n} value={n}>
@@ -509,50 +477,50 @@ export default function ClassesPage() {
         variants={itemVariants}
         className="grid grid-cols-2 gap-4 lg:grid-cols-4"
       >
-        <Card className="border-0 shadow-sm bg-white">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-[var(--etab-color,#075e54)]/10 p-2.5">
-              <GraduationCap className="h-5 w-5 text-[var(--etab-color,#075e54)]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <GraduationCap className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Total Classes</p>
-              <p className="text-xl font-bold tracking-tight">{stats.totalClasses}</p>
+              <p className="text-xs font-semibold text-stone-500">Total Classes</p>
+              <p className="text-2xl font-extrabold text-stone-900">{stats.totalClasses}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm bg-white">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-emerald-500/10 p-2.5">
-              <Users className="h-5 w-5 text-emerald-600" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-emerald-600">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-emerald-500/10 p-3.5 border border-emerald-500/20">
+              <Users className="h-6 w-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Élèves inscrits</p>
-              <p className="text-xl font-bold tracking-tight">{stats.totalEleves}</p>
+              <p className="text-xs font-semibold text-stone-500">Élèves Inscrits</p>
+              <p className="text-2xl font-extrabold text-stone-900">{stats.totalEleves}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm bg-white">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-violet-500/10 p-2.5">
-              <Layers className="h-5 w-5 text-violet-600" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-amber-500">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-amber-500/10 p-3.5 border border-amber-500/20">
+              <Layers className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Niveaux couverts</p>
-              <p className="text-xl font-bold tracking-tight">{stats.niveauxCouverts}</p>
+              <p className="text-xs font-semibold text-stone-500">Niveaux Couverts</p>
+              <p className="text-2xl font-extrabold text-stone-900">{stats.niveauxCouverts}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm bg-white">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-amber-500/10 p-2.5">
-              <BarChart3 className="h-5 w-5 text-amber-600" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-sky-600">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-sky-500/10 p-3.5 border border-sky-500/20">
+              <BarChart3 className="h-6 w-6 text-sky-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Effectif moyen</p>
-              <p className="text-xl font-bold tracking-tight">{stats.effectifMoyen}</p>
+              <p className="text-xs font-semibold text-stone-500">Effectif Moyen</p>
+              <p className="text-2xl font-extrabold text-stone-900">{stats.effectifMoyen}</p>
             </div>
           </CardContent>
         </Card>
@@ -560,26 +528,19 @@ export default function ClassesPage() {
 
       {/* Table */}
       <motion.div variants={itemVariants}>
-        <Card className="border-0 shadow-sm bg-white overflow-hidden">
+        <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             {loading ? (
-              <div className="space-y-3 p-6">
+              <div className="space-y-4 p-8">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex gap-4">
-                    <Skeleton className="h-8 w-1/4" />
-                    <Skeleton className="h-8 w-1/6" />
-                    <Skeleton className="h-8 w-1/4" />
-                    <Skeleton className="h-8 w-1/5" />
-                  </div>
+                  <Skeleton key={i} className="h-10 w-full rounded-xl" />
                 ))}
               </div>
             ) : paginatedClasses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-16 text-muted-foreground">
-                <div className="rounded-full bg-gray-100 p-4 mb-4">
-                  <GraduationCap className="h-8 w-8 text-gray-400" />
-                </div>
-                <p className="font-medium">Aucune classe trouvée</p>
-                <p className="mt-1 text-sm text-center max-w-sm">
+              <div className="p-12 text-center text-stone-400">
+                <GraduationCap className="mx-auto mb-3 h-12 w-12 opacity-30" />
+                <p className="text-base font-bold text-stone-700">Aucune classe trouvée</p>
+                <p className="mt-1 text-xs">
                   {filterAnnee
                     ? 'Aucune classe ne correspond à vos filtres.'
                     : "Commencez par sélectionner un établissement et une année scolaire."}
@@ -588,15 +549,15 @@ export default function ClassesPage() {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent border-b border-gray-100  bg-[var(--etab-color,#075e54)] text-white">
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide">Nom</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider">Niveau</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider hidden md:table-cell">Établissement</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider hidden lg:table-cell">Année</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider ">Effectif</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider hidden sm:table-cell text-center">Taux</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-right">Actions</TableHead>
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
+                      <TableHead className="text-amber-300 font-bold">Nom de la Classe</TableHead>
+                      <TableHead className="text-white font-bold">Niveau</TableHead>
+                      <TableHead className="hidden md:table-cell text-white font-bold">Établissement</TableHead>
+                      <TableHead className="hidden lg:table-cell text-white font-bold">Année Scolaire</TableHead>
+                      <TableHead className="text-white font-bold">Effectif</TableHead>
+                      <TableHead className="hidden sm:table-cell text-center text-white font-bold">Remplissage</TableHead>
+                      <TableHead className="text-right text-white font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -606,44 +567,40 @@ export default function ClassesPage() {
                       const taux = getTauxRemplissage(eleves, max)
                       const niveauInfo = NIVEAU_MAP[classe.niveau] || {
                         label: classe.niveau,
-                        className: 'bg-gray-50 text-gray-600 border border-gray-100',
+                        className: 'bg-stone-100 text-stone-800',
                       }
 
                       return (
                         <TableRow
                           key={classe.id}
-                          className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors"
+                          className="hover:bg-amber-500/5 transition-colors"
                         >
-                          <TableCell className="font-medium text-gray-900">
+                          <TableCell className="font-bold text-stone-900 break-words">
                             {classe.nom}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant="secondary"
-                              className={`font-medium ${niveauInfo.className}`}
-                            >
+                            <Badge variant="secondary" className={niveauInfo.className}>
                               {niveauInfo.label}
                             </Badge>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-muted-foreground">
+                          <TableCell className="hidden md:table-cell font-medium text-stone-700 break-words">
                             {classe.etablissement?.nom ?? '—'}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-muted-foreground">
+                          <TableCell className="hidden lg:table-cell font-medium text-stone-600 text-xs">
                             {classe.anneeScolaire?.libelle ?? '—'}
                           </TableCell>
-                          <TableCell>
-                            <span className="font-semibold text-gray-900">{eleves}</span>
-                            <span className="text-muted-foreground text-xs"> / {max}</span>
+                          <TableCell className="font-bold text-stone-900">
+                            {eleves} <span className="text-stone-400 font-medium text-xs">/ {max}</span>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
-                            <div className="flex items-center gap-2">
-                              <div className="w-16 bg-[#a7b305] rounded-full overflow-hidden">
+                            <div className="flex items-center gap-2 justify-center">
+                              <div className="w-16 bg-stone-200 rounded-full overflow-hidden">
                                 <Progress
                                   value={taux}
-                                  className={`h-1.5 ${getTauxBarClass(taux)}`}
+                                  className={`h-2 ${getTauxBarClass(taux)}`}
                                 />
                               </div>
-                              <span className={`text-xs tabular-nums w-8 text-right ${getTauxTextClass(taux)}`}>
+                              <span className={`text-xs font-bold tabular-nums ${getTauxTextClass(taux)}`}>
                                 {taux}%
                               </span>
                             </div>
@@ -653,16 +610,18 @@ export default function ClassesPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                className="h-8 w-8 text-amber-700 hover:bg-amber-50"
                                 onClick={() => openEdit(classe)}
+                                title="Modifier"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                className="h-8 w-8 text-rose-600 hover:bg-rose-50"
                                 onClick={() => setDeleteTarget(classe)}
+                                title="Supprimer"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -678,9 +637,9 @@ export default function ClassesPage() {
 
             {/* Pagination */}
             {!loading && totalItems > 0 && (
-              <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/50 px-6 py-3 sm:flex-row">
-                <p className="text-xs text-muted-foreground">
-                  {totalItems} résultat(s) — Page {page} sur {totalPages}
+              <div className="flex flex-col items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 px-6 py-4 text-sm font-medium text-stone-600 sm:flex-row">
+                <p className="text-xs">
+                  {totalItems} classe(s) — Page <b>{page}</b> sur <b>{totalPages}</b>
                 </p>
                 <div className="flex items-center gap-1">
                   <Button
@@ -688,41 +647,20 @@ export default function ClassesPage() {
                     size="sm"
                     disabled={page <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="h-8 gap-1 text-xs"
+                    className="rounded-xl border-stone-200 text-xs font-semibold"
                   >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                    Préc
+                    <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                    Précédent
                   </Button>
-                  
-                  {/* Page Numbers */}
-                  <div className="hidden sm:flex items-center gap-1 mx-2">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1)
-                      .filter(p => p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1))
-                      .map((p, idx, arr) => (
-                        <span key={p} className="contents">
-                          {idx > 0 && arr[idx - 1] !== p - 1 && <span className="text-xs text-muted-foreground px-1">...</span>}
-                          <Button
-                            variant={page === p ? "default" : "ghost"}
-                            size="sm"
-                            onClick={() => setPage(p)}
-                            className={`h-8 w-8 p-0 text-xs ${page === p ? 'bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)]' : ''}`}
-                          >
-                            {p}
-                          </Button>
-                        </span>
-                      ))
-                    }
-                  </div>
-
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={page >= totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="h-8 gap-1 text-xs"
+                    className="rounded-xl border-stone-200 text-xs font-semibold"
                   >
-                    Suiv
-                    <ChevronRight className="h-3.5 w-3.5" />
+                    Suivant
+                    <ChevronRight className="h-3.5 w-3.5 ml-1" />
                   </Button>
                 </div>
               </div>
@@ -731,109 +669,64 @@ export default function ClassesPage() {
         </Card>
       </motion.div>
 
-            {/* ─── Create / Edit Dialog ─────────────────────────────────────────── */}
+      {/* ─── Create / Edit Dialog ─────────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-xl gap-0 p-0 overflow-hidden rounded-xl border-0 shadow-2xl">
-          
-          {/* Header moderne avec dégradé */}
-          <div className="relative px-6 py-6 bg-gradient-to-br from-[var(--etab-color,#075e54)] to-[var(--etab-color-hover,#064e46)]">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 rounded-full -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-20 h-20 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-            
-            <DialogHeader className="relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/10 border border-white/20">
-                  <GraduationCap className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <DialogTitle className="text-lg font-bold text-white">
-                    {editingId ? 'Modifier la classe' : 'Nouvelle classe'}
-                  </DialogTitle>
-                  <p className="text-sm text-white/60 mt-0.5">
-                    {editingId ? 'Mettez à jour les informations' : 'Remplissez les informations pour créer une classe'}
-                  </p>
-                </div>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <GraduationCap className="h-6 w-6" />
               </div>
-            </DialogHeader>
-          </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
+                  {editingId ? 'Modifier la classe' : 'Nouvelle classe'}
+                </DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Saisissez les caractéristiques de la classe.</p>
+              </div>
+            </div>
+          </DialogHeader>
 
-          <div className="p-6 space-y-6 max-h-[65vh] overflow-y-auto bg-white">
-            
-            {/* Nom de la classe */}
-            <div className="space-y-2">
-              <Label htmlFor="classe-nom" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nom de la classe</Label>
+          <div className="space-y-4 pt-4">
+            <div>
+              <Label htmlFor="classe-nom" className="text-xs font-semibold text-stone-600">Nom de la classe *</Label>
               <Input
                 id="classe-nom"
-                placeholder="Ex: 1ère année A, 6ème Primaire..."
+                placeholder="Ex: 1ère Année A, 6ème Primaire..."
                 value={form.nom}
                 onChange={(e) => setForm({ ...form, nom: e.target.value })}
-                className="h-11 border-gray-200 bg-white focus:bg-white text-[15px] text-black-200 font-medium"
+                className="rounded-xl border-stone-200 bg-white font-medium mt-1"
                 autoFocus
               />
             </div>
 
-            {/* Sélecteur de niveau visuel (Cards) */}
-            <div className="space-y-2.5">
-              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Niveau d'enseignement</Label>
-              <div className="grid grid-cols-3 gap-3">
-                {NIVEAUX.map((n) => {
-                  const info = NIVEAU_MAP[n]
-                  const isSelected = form.niveau === n
-                  const colorMap: Record<string, string> = {
-                    MATERNELLE: 'border-pink-300 bg-pink-50 shadow-pink-100',
-                    PRIMAIRE: 'border-emerald-300 bg-emerald-50 shadow-emerald-100',
-                    SECONDAIRE: 'border-amber-300 bg-amber-50 shadow-amber-100',
-                  }
-                  const activeColorMap: Record<string, string> = {
-                    MATERNELLE: 'border-pink-500 bg-pink-100 ring-2 ring-pink-500/20 shadow-md',
-                    PRIMAIRE: 'border-emerald-500 bg-emerald-100 ring-2 ring-emerald-500/20 shadow-md',
-                    SECONDAIRE: 'border-amber-500 bg-amber-100 ring-2 ring-amber-500/20 shadow-md',
-                  }
-                  const iconMap: Record<string, string> = {
-                    MATERNELLE: '🧸',
-                    PRIMAIRE: '📚',
-                    SECONDAIRE: '🎒',
-                  }
-
-                  return (
-                    <button
-                      type="button"
-                      key={n}
-                      onClick={() => setForm({ ...form, niveau: n })}
-                      className={`relative flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer ${isSelected ? activeColorMap[n] : colorMap[n] + ' hover:scale-[1.02]'}`}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-2 right-2">
-                          <div className={`h-5 w-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${n === 'MATERNELLE' ? 'bg-pink-500' : n === 'PRIMAIRE' ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                            ✓
-                          </div>
-                        </div>
-                      )}
-                      <span className="text-2xl">{iconMap[n]}</span>
-                      <span className={`text-xs font-bold ${isSelected ? 'text-gray-800' : 'text-gray-600'}`}>
-                        {info?.label ?? n}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Niveau d&apos;enseignement *</Label>
+              <Select value={form.niveau} onValueChange={(n) => setForm({ ...form, niveau: n })}>
+                <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {NIVEAUX.map((n) => (
+                    <SelectItem key={n} value={n}>
+                      {NIVEAU_MAP[n]?.label ?? n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Sélection Établissement & Année */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Établissement</Label>
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Établissement *</Label>
                 <Select
                   value={form.etablissementId}
-                  onValueChange={(v) =>
-                    setForm({ ...form, etablissementId: v, anneeScolaireId: '' })
-                  }
+                  onValueChange={(v) => setForm({ ...form, etablissementId: v, anneeScolaireId: '' })}
                   disabled={locked || !!editingId}
                 >
-                  <SelectTrigger className="h-11 border-gray-200 bg-gray-50/50 focus:bg-white">
+                  <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1">
                     <SelectValue placeholder="Sélectionner" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     {ecoles.map((e) => (
                       <SelectItem key={e.id} value={e.id}>
                         {e.nom}
@@ -841,25 +734,19 @@ export default function ClassesPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {locked && (
-                  <p className="text-[11px] text-gray-400 flex items-center gap-1">
-                    <ShieldAlert className="h-3 w-3" />
-                    Établissement lié à votre compte.
-                  </p>
-                )}
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Année scolaire</Label>
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Année scolaire *</Label>
                 <Select
                   value={form.anneeScolaireId}
                   onValueChange={(v) => setForm({ ...form, anneeScolaireId: v })}
                   disabled={!!editingId}
                 >
-                  <SelectTrigger className="h-11 border-gray-200 bg-gray-50/50 focus:bg-white">
+                  <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1">
                     <SelectValue placeholder="Sélectionner" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     {formAnnees.length === 0 && (
                       <SelectItem value="__none" disabled>
                         {form.etablissementId ? 'Chargement...' : 'Sélectionnez un établissement'}
@@ -872,72 +759,56 @@ export default function ClassesPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {editingId && (
-                  <p className="text-[11px] text-gray-400 flex items-center gap-1">
-                    <ShieldAlert className="h-3 w-3" />
-                    Non modifiable après création.
-                  </p>
-                )}
               </div>
             </div>
 
-            {/* Effectif Maximum avec indicateur visuel */}
-            <div className="space-y-2.5">
+            <div>
               <div className="flex items-center justify-between">
-                <Label htmlFor="effectif-max" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Effectif maximum</Label>
-                <span className="text-sm font-bold text-gray-700 tabular-nums">
+                <Label htmlFor="effectif-max" className="text-xs font-semibold text-stone-600">Effectif maximum *</Label>
+                <span className="text-xs font-bold text-[#0c241f] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   {form.effectifMax || '0'} élèves
                 </span>
               </div>
-              <div className="relative">
-                <Input
-                  id="effectif-max"
-                  type="range"
-                  min="4"
-                  max="250"
-                  step="1"
-                  value={form.effectifMax}
-                  onChange={(e) =>
-                    setForm({ ...form, effectifMax: e.target.value })
-                  }
-                  className="w-full h-2 bg-gray-200 accent-[var(--etab-color,#075e54)] cursor-pointer border-0 p-0 focus:ring-0"
-                />
-                <div className="flex justify-between mt-1">
-                  <span className="text-[10px] text-gray-400">4</span>
-                  <span className="text-[10px] text-gray-400">250</span>
-                </div>
-              </div>
+              <Input
+                id="effectif-max"
+                type="number"
+                min="1"
+                max="250"
+                value={form.effectifMax}
+                onChange={(e) => setForm({ ...form, effectifMax: e.target.value })}
+                className="rounded-xl border-stone-200 bg-white font-medium mt-1"
+              />
             </div>
-          </div>
-          
-          {/* Footer moderne */}
-          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/80">
-            <Button 
-              variant="ghost" 
-              onClick={() => setDialogOpen(false)} 
-              className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-            >
-              Annuler
-            </Button>
-            <Button
-              disabled={saving || !form.nom.trim() || !form.etablissementId || !form.anneeScolaireId}
-              className="bg-[var(--etab-color,#075e54)] text-white hover:bg-[var(--etab-color-hover,#064e46)] shadow-sm shadow-[var(--etab-color,#075e54)]/20 px-6 h-10 font-semibold"
-              onClick={handleSave}
-            >
-              {saving ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Enregistrement...
-                </span>
-              ) : editingId ? (
-                'Mettre à jour'
-              ) : (
-                'Créer la classe'
-              )}
-            </Button>
+
+            <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => setDialogOpen(false)} 
+                className="rounded-xl border-stone-200"
+              >
+                Annuler
+              </Button>
+              <Button
+                disabled={saving || !form.nom.trim() || !form.etablissementId || !form.anneeScolaireId}
+                className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md"
+                onClick={handleSave}
+              >
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Enregistrement...
+                  </span>
+                ) : editingId ? (
+                  'Mettre à jour'
+                ) : (
+                  'Créer la classe'
+                )}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
+
       {/* ─── Delete Confirmation Dialog ───────────────────────────────────── */}
       <AlertDialog
         open={!!deleteTarget}
@@ -945,49 +816,48 @@ export default function ClassesPage() {
           if (!open) setDeleteTarget(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-3xl border border-stone-200 p-6 shadow-2xl max-w-md bg-white">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+            <AlertDialogTitle className="flex items-center gap-2 text-stone-900 font-extrabold text-lg">
               {(deleteTarget?.effectif ?? 0) > 0 ? (
-                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
               ) : (
-                <Trash2 className="h-5 w-5 text-red-500" />
+                <Trash2 className="h-5 w-5 text-rose-600" />
               )}
               {(deleteTarget?.effectif ?? 0) > 0
-                ? 'Désactiver la classe'
-                : 'Supprimer la classe'}
+                ? 'Désactiver la classe ?'
+                : 'Supprimer la classe ?'}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3 pt-2 text-gray-600">
+              <div className="space-y-3 pt-2 text-stone-600 text-sm font-medium">
                 {(deleteTarget?.effectif ?? 0) > 0 ? (
                   <>
-                    <p className="font-medium text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-100">
+                    <p className="font-bold text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200">
                       ⚠️ Cette classe contient {deleteTarget!.effectif} élève(s).
                     </p>
                     <p>
-                      La désactivation retirera les élèves de cette classe.
-                      Voulez-vous continuer ?
+                      La désactivation masquera la classe. Voulez-vous continuer ?
                     </p>
                   </>
                 ) : (
                   <p>
                     Supprimer définitivement la classe{' '}
-                    <span className="font-semibold text-gray-900">{deleteTarget?.nom}</span> ?<br />
+                    <b className="text-stone-900">{deleteTarget?.nom}</b> ?
                     Cette action est irréversible.
                   </p>
                 )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel disabled={deleting} className="text-gray-600">Annuler</AlertDialogCancel>
+          <AlertDialogFooter className="pt-4">
+            <AlertDialogCancel disabled={deleting} className="rounded-xl border-stone-200 font-semibold">Annuler</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={deleting}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold"
             >
               {deleting
-                ? 'Suppression...'
+                ? 'Traitement...'
                 : (deleteTarget?.effectif ?? 0) > 0
                   ? 'Désactiver'
                   : 'Supprimer définitivement'}

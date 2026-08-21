@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { motion, type Variants } from 'framer-motion'
 import {
   AlertTriangle,
   CalendarDays,
@@ -42,6 +43,7 @@ import {
   TrendingDown,
   UserRound,
   X,
+  Sparkles
 } from 'lucide-react'
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -103,8 +105,7 @@ const DEVISE_DEFAUT = 'CDF'
 
 const ETAB_NOM = 'Complexe Scolaire Le Bon Berger'
 const ETAB_SITE = 'Dav/Kahinda'
-const ETAB_SIGNATURE = "L'Administration\nCS Le Bon Berger (Kahinda/DAV)"
-const ETAB_SOUS_TITRE = 'Kahinda / DAV — Service Comptabilité'
+const ETAB_SIGNATURE = "L'Administration\nCS Le Bon Berger (Dav/Kahinda)"
 const ETAB_TELEPHONE = '+243 000 000 000'
 const ETAB_LIEU_PAIEMENT = "Secrétariat de l'établissement."
 const ETAB_HORAIRES = 'du lundi au vendredi, 08h00 – 15h00'
@@ -119,17 +120,27 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  PAYE: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200',
-  PARTIELLEMENT_PAYE: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
-  EN_RETARD: 'border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-200',
-  EN_ATTENTE: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200',
+  PAYE: 'border-emerald-300 bg-emerald-100 text-emerald-900 font-semibold',
+  PARTIELLEMENT_PAYE: 'border-amber-300 bg-amber-100 text-amber-900 font-semibold',
+  EN_RETARD: 'border-rose-300 bg-rose-100 text-rose-900 font-semibold',
+  EN_ATTENTE: 'border-stone-300 bg-stone-100 text-stone-800 font-semibold',
 }
 
 const STATUS_DOT: Record<string, string> = {
-  PAYE: 'bg-emerald-500',
-  PARTIELLEMENT_PAYE: 'bg-amber-500',
-  EN_RETARD: 'bg-red-500',
-  EN_ATTENTE: 'bg-slate-400',
+  PAYE: 'bg-emerald-600',
+  PARTIELLEMENT_PAYE: 'bg-amber-600',
+  EN_RETARD: 'bg-rose-600',
+  EN_ATTENTE: 'bg-stone-500',
+}
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.07 } },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
 }
 
 const SUMMARY_CARDS: {
@@ -144,33 +155,33 @@ const SUMMARY_CARDS: {
     key: 'PAYE',
     label: 'Payés',
     icon: CheckCircle,
-    bubble: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    value: 'text-emerald-700 dark:text-emerald-300',
-    ring: 'ring-emerald-500',
+    bubble: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    value: 'text-emerald-700',
+    ring: 'ring-emerald-600',
   },
   {
     key: 'PARTIELLEMENT_PAYE',
     label: 'Partiellement payés',
     icon: Clock,
-    bubble: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-    value: 'text-amber-700 dark:text-amber-300',
-    ring: 'ring-amber-500',
+    bubble: 'bg-amber-100 text-amber-800 border border-amber-200',
+    value: 'text-amber-700',
+    ring: 'ring-amber-600',
   },
   {
     key: 'EN_RETARD',
     label: 'En retard',
     icon: AlertTriangle,
-    bubble: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-    value: 'text-red-700 dark:text-red-300',
-    ring: 'ring-red-500',
+    bubble: 'bg-rose-100 text-rose-800 border border-rose-200',
+    value: 'text-rose-700',
+    ring: 'ring-rose-600',
   },
   {
     key: 'EN_ATTENTE',
     label: 'En attente',
     icon: TrendingDown,
-    bubble: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-    value: 'text-slate-700 dark:text-slate-200',
-    ring: 'ring-slate-400',
+    bubble: 'bg-stone-100 text-stone-700 border border-stone-200',
+    value: 'text-stone-700',
+    ring: 'ring-stone-500',
   },
 ]
 
@@ -251,25 +262,25 @@ function ProgressBar({ value, total }: { value: number; total: number }) {
   const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0
   const bar =
     pct >= 100
-      ? 'bg-emerald-500'
+      ? 'bg-emerald-600'
       : pct >= 60
-        ? 'bg-lime-500'
+        ? 'bg-emerald-500'
         : pct >= 25
-          ? 'bg-amber-500'
+          ? 'bg-amber-600'
           : pct > 0
-            ? 'bg-orange-500'
-            : 'bg-slate-300 dark:bg-slate-600'
+            ? 'bg-rose-500'
+            : 'bg-stone-300'
   const txt =
     pct >= 100
-      ? 'text-emerald-700 dark:text-emerald-300'
+      ? 'text-emerald-700 font-bold'
       : pct > 0
-        ? 'text-slate-700 dark:text-slate-200'
-        : 'text-slate-400'
+        ? 'text-stone-700 font-bold'
+        : 'text-stone-400 font-medium'
 
   return (
     <div className="flex items-center gap-2">
       <div
-        className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+        className="h-2 flex-1 overflow-hidden rounded-full bg-stone-200"
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
@@ -280,7 +291,7 @@ function ProgressBar({ value, total }: { value: number; total: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={`w-10 shrink-0 text-right text-xs font-semibold tabular-nums ${txt}`}>
+      <span className={`w-10 shrink-0 text-right text-xs font-bold tabular-nums ${txt}`}>
         {pct}%
       </span>
     </div>
@@ -477,10 +488,10 @@ export default function EcheancesPage() {
       }
       .sheet { max-width: 174mm; margin: 0 auto; }
       .header {
-        border-bottom: 3px solid #075e54; padding-bottom: 14px; margin-bottom: 22px;
+        border-bottom: 3px solid #0c241f; padding-bottom: 14px; margin-bottom: 22px;
         display: flex; justify-content: space-between; align-items: flex-end;
       }
-      .header h1 { margin: 0; font-size: 22px; color: #075e54; letter-spacing: -0.3px; }
+      .header h1 { margin: 0; font-size: 22px; color: #0c241f; letter-spacing: -0.3px; }
       .header .sub { margin: 4px 0 0; color: #6b7280; font-size: 12px; }
       .header .ref { text-align: right; font-size: 11px; color: #6b7280; }
       .tag {
@@ -493,15 +504,15 @@ export default function EcheancesPage() {
       .lien { font-weight: 400; color: #6b7280; font-size: 12px; }
       .muted { font-weight: 400; color: #9ca3af; font-style: italic; }
       .dest {
-        border-left: 3px solid #075e54; background: #f0fdf4;
+        border-left: 3px solid #0c241f; background: #f0fdf4;
         padding: 10px 14px; margin-bottom: 20px; border-radius: 0 6px 6px 0;
       }
       .dest-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #6b7280; }
-      .dest-name { font-size: 15px; font-weight: 700; color: #064e46; margin-top: 2px; }
+      .dest-name { font-size: 15px; font-weight: 700; color: #0c241f; margin-top: 2px; }
       .dest-sub { font-size: 11px; color: #6b7280; margin-top: 1px; }
       table.detail { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 11px; }
       table.detail th {
-        background: #075e54; color: #fff; padding: 6px 8px; text-align: left;
+        background: #0c241f; color: #fff; padding: 6px 8px; text-align: left;
         font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px;
       }
       table.detail th.n, table.detail td.n { text-align: right; }
@@ -518,10 +529,10 @@ export default function EcheancesPage() {
       .pay-box { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 14px;
                  margin-bottom: 16px; background: #f9fafb; break-inside: avoid; }
       .pay-box h3 { font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px;
-                    color: #075e54; margin: 0 0 6px; font-weight: 800; }
+                    color: #0c241f; margin: 0 0 6px; font-weight: 800; }
       .pay-box ul { list-style: none; margin: 0; padding: 0; font-size: 11px; color: #374151; }
       .pay-box li { padding: 2px 0 2px 13px; position: relative; }
-      .pay-box li:before { content: '▸'; position: absolute; left: 0; color: #075e54; }
+      .pay-box li:before { content: '▸'; position: absolute; left: 0; color: #0c241f; }
       table.info { width: 100%; border-collapse: collapse; margin-bottom: 22px; }
       table.info td { padding: 7px 0; vertical-align: top; border-bottom: 1px solid #f3f4f6; }
       table.info td.k { color: #6b7280; width: 42%; font-size: 12px; }
@@ -691,7 +702,7 @@ export default function EcheancesPage() {
     const L: string[] = []
     L.push(`Bonjour ${civilite},`)
     L.push('')
-    L.push(`L'équipe du ${ETAB_NOM} (${ETAB_SITE}) vous informe de la situation des frais de scolarité de votre enfant ${eleve}${matricule}${classe}.`)
+    L.push(`La comptabilité du ${ETAB_NOM} (${ETAB_SITE}) vous informe de la situation des frais de scolarité de votre enfant ${eleve}${matricule}${classe}.`)
     L.push('')
     L.push('📌 RÉCAPITULATIF DU COMPTE')
     L.push(SEP)
@@ -747,68 +758,80 @@ export default function EcheancesPage() {
     return L.join('\n')
   }
 
-  function sendWhatsApp(e: Echeance) {
-    const phone = (e.tuteurTelephone ?? '').replace(/\D/g, '')
-    if (!phone) { toast.error('Aucun numéro de tuteur enregistré.'); return }
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(buildRelanceMessage(e))}`
-    openExternal(url)
+  async function sendWhatsApp(e: Echeance) {
+  const phone = (e.tuteurTelephone ?? '').replace(/\D/g, '')
+  if (!phone) { 
+    toast.error('Aucun numéro de tuteur enregistré.')
+    return 
   }
+  const { open } = await import('@tauri-apps/plugin-shell')
 
-  /* ── Rendu ──────────────────────────────────────────────────────────── */
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(buildRelanceMessage(e))}`
+  
+  try {
+    // Ouvre directement le lien dans l'application par défaut (WhatsApp ou navigateur)
+    await open(url)
+  } catch (error) {
+    console.error("Erreur lors de l'ouverture du lien :", error)
+    toast.error("Impossible d'ouvrir WhatsApp. Vérifiez qu'il est installé sur cet appareil.")
+  }
+}
+
   return (
-    <main className="mx-auto w-full max-w-[1400px] space-y-6 p-4 md:p-6">
-      <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <motion.main variants={containerVariants} initial="hidden" animate="visible" className="mx-auto w-full max-w-[1400px] space-y-6 p-2 sm:p-4 md:p-6">
+      {/* Banner Header */}
+      <motion.header variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <CalendarDays className="h-6 w-6 text-[var(--etab-color,#075e54)]" />
-            Suivi des échéances
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <CalendarDays className="h-3.5 w-3.5" /> Recouvrement des Frais
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">
+            Suivi des Échéances & Relances
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Suivi des frais scolaires par élève, établissement et année.
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+            Suivi individuel du solde dû par élève, relances imprimables et avis WhatsApp.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => loadEcheances()} disabled={loading} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => loadEcheances()} disabled={loading} className="gap-1.5 rounded-xl border-stone-200 font-semibold text-stone-700">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
           {!loading && (resteParDevise.length > 0 || totalReste > 0) && (
-            <div className="rounded-lg border border-emerald-200 bg-[var(--etab-color,#075e54)] px-4 py-2 dark:border-emerald-800 dark:bg-[var(--etab-color,#075e54)]">
-              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Reste à percevoir</p>
+            <div className="rounded-xl border border-emerald-900/20 bg-[#0c241f] px-4 py-2 text-white shadow-sm">
+              <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Reste à percevoir</p>
               {resteParDevise.length > 0 ? (
                 <div className="space-y-0.5">
                   {resteParDevise.filter((t) => t.reste > 0.009).map((t) => (
-                    <p key={t.devise} className="whitespace-nowrap text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+                    <p key={t.devise} className="whitespace-nowrap text-base font-extrabold tabular-nums text-white">
                       {money(t.reste, t.devise)}
                     </p>
                   ))}
                   {resteParDevise.every((t) => t.reste <= 0.009) && (
-                    <p className="text-lg font-bold text-emerald-800 dark:text-emerald-300">Tout est réglé</p>
+                    <p className="text-base font-bold text-emerald-300">Scolarité soldée</p>
                   )}
                 </div>
               ) : (
-                <p className="text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+                <p className="text-base font-extrabold tabular-nums text-white">
                   {money(totalReste, rows[0]?.devise)}
                 </p>
               )}
             </div>
           )}
         </div>
-      </header>
+      </motion.header>
 
       {schemaInfo && !schemaInfo.hasClasseTargeting && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs font-medium text-amber-900 shadow-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <p>
-            <span className="font-semibold">Ciblage par classe indisponible.</span>{' '}
-            La base ne contient ni <code className="font-mono text-xs">FraisScolaire.classe_ids</code>{' '}
-            ni la table <code className="font-mono text-xs">FraisClasse</code> : tous les frais de
-            l’établissement sont appliqués à chaque élève. Les montants estimés peuvent être trop élevés.
+            <b>Ciblage par classe indisponible :</b> Tous les frais de l’établissement sont actuellement appliqués à chaque élève.
           </p>
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Stats Cards */}
+      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {SUMMARY_CARDS.map(({ key, label, icon: Icon, bubble, value, ring }) => {
           const active = statut === key
           return (
@@ -817,265 +840,240 @@ export default function EcheancesPage() {
               type="button"
               onClick={() => setStatut(active ? '' : key)}
               aria-pressed={active}
-              className={`group relative overflow-hidden rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+              className={`group relative overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:shadow-md ${
                 active
-                  ? `border-transparent ring-2 ring-offset-2 ${ring} dark:ring-offset-slate-950`
-                  : 'border-slate-200 dark:border-slate-800'
+                  ? `border-[#0c241f] ring-2 ring-offset-1 ring-[#0c241f]`
+                  : 'border-stone-200/80'
               }`}
             >
               <div className="flex items-center gap-3">
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${bubble}`}>
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bubble}`}>
                   <Icon className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <p className={`text-2xl font-bold leading-none tabular-nums ${value}`}>{summary[key]}</p>
-                  <p className="mt-1 truncate text-xs font-medium text-muted-foreground">{label}</p>
+                  <p className={`text-2xl font-extrabold leading-none tabular-nums ${value}`}>{summary[key]}</p>
+                  <p className="mt-1 text-xs font-bold text-stone-600 break-words">{label}</p>
                 </div>
               </div>
               {active && (
-                <span className="absolute right-2 top-2 rounded-full bg-foreground/80 px-1.5 py-0.5 text-[9px] font-bold uppercase text-background">
+                <span className="absolute right-2 top-2 rounded-full bg-[#0c241f] px-2 py-0.5 text-[9px] font-bold uppercase text-amber-400">
                   filtré
                 </span>
               )}
             </button>
           )
         })}
-      </div>
-      <p className="-mt-4 text-right text-[11px] text-muted-foreground">
-        Répartition sur l’ensemble du périmètre · cliquez sur une carte pour filtrer
-      </p>
+      </motion.div>
 
-      <Card>
-        <CardContent className="grid gap-3 p-4 md:grid-cols-2 lg:grid-cols-5">
-          <div className="relative lg:col-span-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9 pr-9" placeholder="Nom ou matricule" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Rechercher un élève" />
-            {search && (
-              <button type="button" onClick={() => setSearch('')} aria-label="Effacer la recherche"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-          <Select value={school || 'all'} onValueChange={(v) => { setSchool(v === 'all' ? '' : v); setYear(''); setClasse(''); yearAutoPicked.current = false }} disabled={locked}>
-            <SelectTrigger aria-label="Établissement"><SelectValue placeholder="Établissement" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous les établissements</SelectItem>
-              {schools.map((s) => (<SelectItem key={s.id} value={s.id}>{s.nom}</SelectItem>))}
-            </SelectContent>
-          </Select>
-          <Select value={year || 'all'} onValueChange={(v) => { setYear(v === 'all' ? '' : v); setClasse('') }} disabled={years.length === 0}>
-            <SelectTrigger aria-label="Année scolaire"><SelectValue placeholder="Année scolaire" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes les années</SelectItem>
-              {years.map((y) => (<SelectItem key={y.id} value={y.id}>{y.libelle}{y.active ? ' ★' : ''}</SelectItem>))}
-            </SelectContent>
-          </Select>
-          <Select value={classe || 'all'} onValueChange={(v) => setClasse(v === 'all' ? '' : v)} disabled={classes.length === 0}>
-            <SelectTrigger aria-label="Classe"><SelectValue placeholder="Classe" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes les classes</SelectItem>
-              {classes.map((c) => (<SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>))}
-            </SelectContent>
-          </Select>
-          <div className="flex gap-2">
-            <Select value={statut || 'all'} onValueChange={(v) => setStatut(v === 'all' ? '' : v)}>
-              <SelectTrigger className="flex-1" aria-label="Statut"><SelectValue placeholder="Statut" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les statuts</SelectItem>
-                {Object.entries(STATUS_LABEL).map(([k, v]) => (<SelectItem key={k} value={k}>{v}</SelectItem>))}
+      {/* Filter Row */}
+      <motion.div variants={itemVariants}>
+        <Card className="rounded-2xl border-stone-200/80 shadow-sm">
+          <CardContent className="grid gap-3 p-4 md:grid-cols-2 lg:grid-cols-5">
+            <div className="relative lg:col-span-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+              <Input className="pl-9 pr-9 rounded-xl border-stone-200 font-medium" placeholder="Rechercher nom ou matricule..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-stone-400 hover:text-stone-700">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <Select value={school || 'all'} onValueChange={(v) => { setSchool(v === 'all' ? '' : v); setYear(''); setClasse(''); yearAutoPicked.current = false }} disabled={locked}>
+              <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Établissement" /></SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="all">Tous les établissements</SelectItem>
+                {schools.map((s) => (<SelectItem key={s.id} value={s.id}>{s.nom}</SelectItem>))}
               </SelectContent>
             </Select>
-            {hasFilters && (
-              <Button variant="ghost" size="icon" onClick={resetFilters} aria-label="Réinitialiser les filtres" title="Réinitialiser les filtres" className="shrink-0 text-muted-foreground">
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            <Select value={year || 'all'} onValueChange={(v) => { setYear(v === 'all' ? '' : v); setClasse('') }} disabled={years.length === 0}>
+              <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Année scolaire" /></SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="all">Toutes les années</SelectItem>
+                {years.map((y) => (<SelectItem key={y.id} value={y.id}>{y.libelle}{y.active ? ' ★' : ''}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <Select value={classe || 'all'} onValueChange={(v) => setClasse(v === 'all' ? '' : v)} disabled={classes.length === 0}>
+              <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Classe" /></SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="all">Toutes les classes</SelectItem>
+                {classes.map((c) => (<SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Select value={statut || 'all'} onValueChange={(v) => setStatut(v === 'all' ? '' : v)}>
+                <SelectTrigger className="flex-1 rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Statut" /></SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="all">Tous les statuts</SelectItem>
+                  {Object.entries(STATUS_LABEL).map(([k, v]) => (<SelectItem key={k} value={k}>{v}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              {hasFilters && (
+                <Button variant="ghost" size="icon" onClick={resetFilters} title="Réinitialiser les filtres" className="shrink-0 text-stone-500 rounded-xl">
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
-      <Card>
-        <CardHeader className="py-4">
-          <CardTitle className="text-base font-semibold">{total} élève{total > 1 ? 's' : ''} avec échéances</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b-2 border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Élève</TableHead>
-                  <TableHead className="hidden text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 md:table-cell">Classe</TableHead>
-                  <TableHead className="hidden text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 lg:table-cell">Total dû</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Reste</TableHead>
-                  <TableHead className="w-[180px] text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progression</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Statut</TableHead>
-                  <TableHead className="hidden text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 xl:table-cell">Échéance</TableHead>
-                  <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={8} className="py-4"><div className="h-6 w-full animate-pulse rounded bg-slate-100 dark:bg-slate-800" /></TableCell>
-                    </TableRow>
-                  ))
-                ) : rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="p-12 text-center">
-                      <CalendarDays className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-                      <p className="font-medium">Aucune échéance trouvée.</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{hasFilters ? 'Essayez d’élargir vos filtres.' : 'Aucun frais n’est actuellement dû.'}</p>
-                      {hasFilters && <Button variant="outline" size="sm" onClick={resetFilters} className="mt-4 gap-1.5"><X className="h-3.5 w-3.5" />Réinitialiser</Button>}
-                    </TableCell>
+      {/* Table */}
+      <motion.div variants={itemVariants}>
+        <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+          <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+            <CardTitle className="text-base font-bold text-stone-900">{total} élève{total > 1 ? 's' : ''} enregistré(s)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-[#0c241f] text-white">
+                  <TableRow className="hover:bg-[#0c241f]">
+                    <TableHead className="text-amber-300 font-bold">Élève</TableHead>
+                    <TableHead className="hidden md:table-cell text-white font-bold">Classe</TableHead>
+                    <TableHead className="hidden lg:table-cell text-white font-bold">Total Dû</TableHead>
+                    <TableHead className="text-white font-bold">Solde Restant</TableHead>
+                    <TableHead className="w-[180px] text-white font-bold">Progression</TableHead>
+                    <TableHead className="text-white font-bold">Statut</TableHead>
+                    <TableHead className="hidden xl:table-cell text-white font-bold">Date Échéance</TableHead>
+                    <TableHead className="text-right text-white font-bold">Action</TableHead>
                   </TableRow>
-                ) : (
-                  rows.map((e) => {
-                    const retard = getRetard(e)
-                    return (
-                      <TableRow key={e.eleveId} className="group transition-colors even:bg-slate-50/50 hover:bg-slate-100 dark:even:bg-slate-900/30 dark:hover:bg-slate-800/50">
-                        <TableCell className="py-3">
-                          <div className="font-medium">{e.elevePrenom} {e.eleveNom}</div>
-                          <div className="text-xs text-muted-foreground">{e.eleveMatricule || '—'}<span className="md:hidden"> · {e.classeNom || '—'}</span></div>
-                          {e.tuteurNom && (
-                            <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                              <UserRound className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{e.tuteurNom}{e.tuteurLien ? ` (${e.tuteurLien})` : ''}</span>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden py-3 text-sm text-muted-foreground md:table-cell">{e.classeNom || '—'}</TableCell>
-                        <TableCell className="hidden py-3 lg:table-cell">
-                          <div className="text-sm tabular-nums">{moneyMulti(e.totaux, 'totalDu')}</div>
-                          <div className="text-xs text-muted-foreground tabular-nums">Payé : {moneyMulti(e.totaux, 'totalPaye')}{e.nbEcheances ? ` · ${e.nbEcheances} échéance${e.nbEcheances > 1 ? 's' : ''}` : ''}</div>
-                          {e.nbEcheances === 0 && <span className="mt-0.5 inline-block cursor-help rounded bg-sky-100 px-1.5 py-px text-[10px] font-semibold text-sky-800 dark:bg-sky-900/50 dark:text-sky-200">Estimé (sans échéance)</span>}
-                        </TableCell>
-                        <TableCell className="py-3 font-semibold tabular-nums">
-                          {(e.totaux?.length ?? 0) > 0 ? (
-                            <div className="space-y-0.5">
-                              {e.totaux!.map((t) => (
-                                <div key={t.devise} className={`whitespace-nowrap ${t.reste > 0.009 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                  {money(t.reste, t.devise)}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className={e.reste > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>{money(e.reste, e.devise)}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="py-3">
-                          {(e.totaux?.length ?? 0) > 1 ? (
-                            <div className="space-y-1">
-                              {e.totaux!.map((t) => (
-                                <div key={t.devise} className="flex items-center gap-1.5">
-                                  <span className="w-8 shrink-0 text-[9px] font-bold text-muted-foreground">{t.devise}</span>
-                                  <div className="flex-1"><ProgressBar value={t.totalPaye} total={t.totalDu} /></div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <ProgressBar value={e.totaux?.[0]?.totalPaye ?? e.totalPaye} total={e.totaux?.[0]?.totalDu ?? e.totalDu} />
-                          )}
-                        </TableCell>
-                        <TableCell className="py-3">
-                          <Badge variant="outline" className={`gap-1.5 whitespace-nowrap text-xs font-semibold ${STATUS_BADGE[e.statut] ?? STATUS_BADGE.EN_ATTENTE}`}>
-                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[e.statut] ?? STATUS_DOT.EN_ATTENTE}`} />
-                            {STATUS_LABEL[e.statut] ?? e.statut}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden py-3 text-sm xl:table-cell">
-                          <div className="text-muted-foreground">{formatDate(e.dateEcheance)}</div>
-                          {retard > 0 && <div className="text-xs font-medium text-red-500">+{retard} j de retard</div>}
-                        </TableCell>
-                        <TableCell className="py-3 text-right">
-                          <Button size="icon" variant="ghost" aria-label={`Relancer ${e.elevePrenom} ${e.eleveNom}`} title="Relance de paiement"
-                            className="h-8 w-8 border border-slate-200 text-slate-600 transition-colors hover:border-white hover:bg-white hover:text-black dark:border-slate-700 dark:text-slate-300"
-                            onClick={() => setSelectedId(e.eleveId)}>
-                            <Printer className="h-4 w-4 text-[var(--etab-color,#075e54)]" />
-                          </Button>
-                        </TableCell>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell colSpan={8} className="py-4"><div className="h-6 w-full animate-pulse rounded bg-stone-100" /></TableCell>
                       </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          {totalPages > 1 && (
-            <div className="flex flex-col items-center justify-between gap-3 border-t p-4 sm:flex-row">
-              <span className="text-sm text-muted-foreground">Page <b className="text-foreground">{currentPage}</b> sur <b className="text-foreground">{totalPages}</b> · {total} résultat{total > 1 ? 's' : ''}</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={currentPage <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>Précédent</Button>
-                <Button size="sm" variant="outline" disabled={currentPage >= totalPages || loading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Suivant</Button>
+                    ))
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="p-12 text-center text-stone-400">
+                        <CalendarDays className="mx-auto mb-3 h-10 w-10 opacity-30" />
+                        <p className="font-bold text-stone-700">Aucune échéance trouvée.</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((e) => {
+                      const retard = getRetard(e)
+                      return (
+                        <TableRow key={e.eleveId} className="hover:bg-amber-500/5 transition-colors">
+                          <TableCell className="py-3">
+                            <div className="font-bold text-stone-900 break-words">{e.elevePrenom} {e.eleveNom}</div>
+                            <div className="text-xs text-stone-400 font-mono font-semibold">{e.eleveMatricule || '—'}<span className="md:hidden font-sans"> · {e.classeNom || '—'}</span></div>
+                            {e.tuteurNom && (
+                              <div className="mt-0.5 flex items-center gap-1 text-xs text-stone-500 font-medium">
+                                <UserRound className="h-3 w-3 shrink-0 text-amber-600" />
+                                <span className="break-words">{e.tuteurNom}{e.tuteurLien ? ` (${e.tuteurLien})` : ''}</span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="hidden py-3 text-sm font-semibold text-stone-700 md:table-cell">{e.classeNom || '—'}</TableCell>
+                          <TableCell className="hidden py-3 lg:table-cell">
+                            <div className="text-sm font-bold tabular-nums text-stone-900">{moneyMulti(e.totaux, 'totalDu')}</div>
+                            <div className="text-xs text-stone-400 tabular-nums font-medium">Payé : {moneyMulti(e.totaux, 'totalPaye')}</div>
+                          </TableCell>
+                          <TableCell className="py-3 font-extrabold tabular-nums">
+                            {(e.totaux?.length ?? 0) > 0 ? (
+                              <div className="space-y-0.5">
+                                {e.totaux!.map((t) => (
+                                  <div key={t.devise} className={`whitespace-nowrap ${t.reste > 0.009 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                    {money(t.reste, t.devise)}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className={e.reste > 0 ? 'text-rose-600' : 'text-emerald-700'}>{money(e.reste, e.devise)}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            {(e.totaux?.length ?? 0) > 1 ? (
+                              <div className="space-y-1">
+                                {e.totaux!.map((t) => (
+                                  <div key={t.devise} className="flex items-center gap-1.5">
+                                    <span className="w-8 shrink-0 text-[9px] font-bold text-stone-500">{t.devise}</span>
+                                    <div className="flex-1"><ProgressBar value={t.totalPaye} total={t.totalDu} /></div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <ProgressBar value={e.totaux?.[0]?.totalPaye ?? e.totalPaye} total={e.totaux?.[0]?.totalDu ?? e.totalDu} />
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <Badge variant="outline" className={`gap-1.5 text-xs ${STATUS_BADGE[e.statut] ?? STATUS_BADGE.EN_ATTENTE}`}>
+                              <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[e.statut] ?? STATUS_DOT.EN_ATTENTE}`} />
+                              {STATUS_LABEL[e.statut] ?? e.statut}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden py-3 text-xs font-semibold xl:table-cell">
+                            <div className="text-stone-700">{formatDate(e.dateEcheance)}</div>
+                            {retard > 0 && <div className="text-rose-600 font-bold">+{retard} j de retard</div>}
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
+                            <Button size="icon" variant="ghost" title="Imprimer l'avis de relance"
+                              className="h-8 w-8 text-[#0c241f] hover:bg-stone-100"
+                              onClick={() => setSelectedId(e.eleveId)}>
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex flex-col items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 p-4 sm:flex-row text-sm font-semibold text-stone-600">
+                <span>Page <b>{currentPage}</b> sur <b>{totalPages}</b> · {total} résultat(s)</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="rounded-xl border-stone-200" disabled={currentPage <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>Précédent</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl border-stone-200" disabled={currentPage >= totalPages || loading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Suivant</Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* ── DIALOG DE RELANCE DE PAIEMENT ── */}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
+        <DialogContent className="sm:max-w-md bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <Printer className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">Relance de Paiement</DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Avis individuel pour parents/tuteurs.</p>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <DialogContent className="sm:max-w-md bg-white dark:bg-white-900">
-          <DialogHeader>
-            <DialogTitle>Relance de paiement</DialogTitle>
           </DialogHeader>
           {selected && (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900/50">
-                <p className="font-medium">{selected.elevePrenom} {selected.eleveNom}</p>
-                <p className="text-sm text-muted-foreground">{selected.eleveMatricule || '—'} · {selected.classeNom || '—'}</p>
-                {selected.motif && !(selected.lignes?.length) && (
-                  <p className="mt-2 text-sm"><span className="font-medium">Motif :</span> {selected.motif}</p>
-                )}
-                <p className="mt-2 text-sm"><span className="font-medium">Total dû :</span> {moneyMulti(selected.totaux, 'totalDu')}</p>
-                <div className="mt-1 text-sm">
-                  <span className="font-medium">Reste :</span>{' '}
-                  {(selected.totaux?.length ?? 0) > 0 ? (
-                    <span className="font-bold text-red-600 dark:text-red-400">{moneyMulti(selected.totaux, 'reste')}</span>
-                  ) : (
-                    <span className="font-bold text-red-600 dark:text-red-400">{money(selected.reste, selected.devise)}</span>
-                  )}
+            <div className="space-y-4 pt-2">
+              <div className="rounded-2xl bg-stone-50 p-4 border border-stone-200 space-y-1">
+                <p className="font-extrabold text-stone-900 text-base break-words">{selected.elevePrenom} {selected.eleveNom}</p>
+                <p className="text-xs text-stone-500 font-medium">{selected.eleveMatricule || '—'} · {selected.classeNom || '—'}</p>
+                <div className="mt-3 pt-2 border-t border-stone-200/80 space-y-1 text-xs font-semibold text-stone-700">
+                  <p><span className="text-stone-500">Total Dû :</span> {moneyMulti(selected.totaux, 'totalDu')}</p>
+                  <p><span className="text-stone-500">Reste :</span> <b className="text-rose-600">{moneyMulti(selected.totaux, 'reste')}</b></p>
+                  <p><span className="text-stone-500">Date Échéance :</span> {formatDate(selected.dateEcheance)} {getRetard(selected) > 0 && <span className="text-rose-600">({getRetard(selected)} j de retard)</span>}</p>
                 </div>
-                <p className="mt-1 text-sm">
-                  <span className="font-medium">Échéance :</span> {formatDate(selected.dateEcheance)}
-                  {getRetard(selected) > 0 && <span className="text-red-500"> ({getRetard(selected)} jour(s) de retard)</span>}
-                </p>
               </div>
-              {!!selected.lignes?.length && (
-                <div className="overflow-hidden rounded-lg border">
-                  <p className="border-b bg-slate-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground dark:bg-slate-900/50">Détail des frais</p>
-                  <ul className="divide-y">
-                    {[...splitLignes(selected).partiels, ...splitLignes(selected).dus, ...splitLignes(selected).payes].map((x, i) => (
-                      <li key={i} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{x.libelle}</p>
-                          <p className="text-xs text-muted-foreground tabular-nums">{money(x.montantPaye, x.devise)} / {money(x.montantDu, x.devise)}{x.dateEcheance ? ` · éch. ${formatDate(x.dateEcheance)}` : ''}</p>
-                          {x.etat !== 'PAYE' && joursRetard(x.dateEcheance) > 0 && (
-                            <p className="text-xs font-medium text-red-500">En retard de {joursRetard(x.dateEcheance)} jour(s)</p>
-                          )}
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className={`text-sm font-bold tabular-nums ${x.etat === 'PAYE' ? 'text-emerald-600 dark:text-emerald-400' : x.etat === 'PARTIEL' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {x.etat === 'PAYE' ? 'Réglé' : money(x.reste, x.devise)}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <div className="grid grid-cols-3 gap-2">
+
+              <div className="grid grid-cols-3 gap-2 pt-2">
                 <Button
                   variant="outline"
-                  className="h-auto flex-col bg-[var(--etab-color,#075e54)] gap-1.5 border-slate-200 py-3 text-xs font-semibold text-slate-700 hover:border-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color,#075e54)] hover:text-white dark:border-slate-700 dark:text-slate-300"
+                  className="rounded-xl border-stone-200 bg-[#0c241f] text-white hover:bg-[#071916] font-bold text-xs py-3 gap-1.5 shadow-md"
                   onClick={() => printRelance(selected)}
                 >
-                  <Printer className="h-4 w-4" />
+                  <Printer className="h-4 w-4 text-amber-400" />
                   Imprimer
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-auto bg-[var(--etab-color,#075e54)] flex-col gap-1.5 border-slate-200 py-3 text-xs font-semibold text-slate-700 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white dark:border-slate-700 dark:text-slate-300"
+                  className="rounded-xl border-stone-200 bg-[#d97706] text-white hover:bg-[#b45309] font-bold text-xs py-3 gap-1.5 shadow-md"
                   onClick={() => downloadRelance(selected)}
                 >
                   <Download className="h-4 w-4" />
@@ -1083,7 +1081,7 @@ export default function EcheancesPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-auto bg-[var(--etab-color,#075e54)] flex-col gap-1.5 border-slate-200 py-3 text-xs font-semibold text-slate-700 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white dark:border-slate-700 dark:text-slate-300"
+                  className="rounded-xl border-emerald-300 bg-emerald-700 text-white hover:bg-emerald-800 font-bold text-xs py-3 gap-1.5 shadow-md disabled:opacity-50"
                   onClick={() => sendWhatsApp(selected)}
                   disabled={!selected.tuteurTelephone}
                 >
@@ -1093,15 +1091,15 @@ export default function EcheancesPage() {
               </div>
 
               {!selected.tuteurTelephone && (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                  <AlertTriangle className="mr-1 inline-block h-3 w-3" />
-                  Aucun numéro de téléphone de tuteur enregistré. L'envoi WhatsApp est désactivé.
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 font-medium">
+                  <AlertTriangle className="mr-1 inline-block h-3.5 w-3.5 text-amber-600" />
+                  Aucun numéro de téléphone de tuteur enregistré. L&apos;envoi WhatsApp est désactivé.
                 </p>
               )}
             </div>
           )}
         </DialogContent>
       </Dialog>
-    </main>
+    </motion.main>
   )
 }

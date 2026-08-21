@@ -98,20 +98,20 @@ export default function Sidebar({ etablissements }: SidebarProps) {
         variant="ghost"
         onClick={() => setPage(item.key)}
         className={`
-          relative w-full flex items-center gap-2.5 px-2.5 h-8 rounded-md
-          text-[13px] font-medium transition-all duration-150
+          relative w-full flex items-center gap-2.5 px-3 h-9 rounded-lg
+          text-[13px] font-medium transition-all duration-200
           ${sidebarOpen ? 'justify-start' : 'justify-center'}
           ${isActive
-            ? 'text-white bg-white/[0.08]'
-            : 'text-[#a7b305] hover:bg-white/[0.04] hover:text-zinc-200'
+            ? 'text-amber-400 bg-white/10 font-semibold shadow-inner'
+            : 'text-stone-300 hover:bg-white/5 hover:text-white'
           }
         `}
-         style={isActive
-          ? { borderLeft: `2px solid ${accentColor}`, paddingLeft: '8px' }
-          : { borderLeft: '2px solid transparent', paddingLeft: '8px' }
+        style={isActive
+          ? { borderLeft: `3px solid #d97706`, paddingLeft: '10px' }
+          : { borderLeft: '3px solid transparent', paddingLeft: '10px' }
         }
       >
-        <Icon className="h-4 w-4 shrink-0" strokeWidth={isActive ? 2.2 : 1.5} />
+        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-stone-400'}`} strokeWidth={isActive ? 2.2 : 1.5} />
         <AnimatePresence>
           {sidebarOpen && (
             <motion.span
@@ -161,28 +161,27 @@ export default function Sidebar({ etablissements }: SidebarProps) {
       {/* Sidebar Container */}
       <motion.aside
         initial={false}
-        animate={{ width: sidebarOpen ? 240 : 60 }}
+        animate={{ width: sidebarOpen ? 260 : 64 }}
         transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
         className={`
           fixed top-0 left-0 z-50 h-screen flex flex-col
-           bg-[var(--etab-color,#075e54)] border-r border-white/[0.06]
+          bg-[#0c241f] border-r border-emerald-900/40 shadow-xl
           ${sidebarOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}
           md:translate-x-0 transition-transform duration-200
-          overflow-hidden
         `}
       >
         <TooltipProvider>
           {/* Top accent bar */}
-          <div className="h-[2px] shrink-0 w-full" style={{ backgroundColor: accentColor }} />
+          <div className="h-1 shrink-0 w-full bg-[#d97706]" />
           
           {/* Logo Section - Compact */}
-          <div className="flex flex-col items-center gap-2.5 px-3 h-22 mt-4 shrink-0">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md" style={{ backgroundColor: `${accentColor}25` }}>
+          <div className="flex items-center gap-3 px-3.5 h-16 mt-2 shrink-0 border-b border-emerald-900/30">
+            <div className="relative h-10 w-10 shrink-0 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center p-1">
               <Image
                 src={logoSrc}
                 alt="Logo"
                 fill
-                sizes="28px"
+                sizes="32px"
                 className="object-contain p-0.5"
                 priority
               />
@@ -190,14 +189,17 @@ export default function Sidebar({ etablissements }: SidebarProps) {
             <AnimatePresence>
               {sidebarOpen && (
                 <motion.div
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="overflow-hidden whitespace-wrap flex-1 min-w-0" /* <-- CORRIGÉ ICI */
+                  className="flex-1 min-w-0"
                 >
-                  <span className="text-sm font-bold tracking-tight text-[#a7b305] text-justify"> {/* <-- CORRIGÉ ICI */}
+                  <span className="text-xs font-bold leading-snug text-white block break-words">
                     {schoolName}
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-semibold block mt-0.5">
+                    Système SGFS-ME
                   </span>
                 </motion.div>
               )}
@@ -205,32 +207,28 @@ export default function Sidebar({ etablissements }: SidebarProps) {
           </div>
 
           {/* User Section - Compact */}
-          <div className="flex items-center gap-2.5 px-3 py-1.5 shrink-0">
-            <div className="flex items-center justify-center h-7 w-7 rounded-full shrink-0 text-[10px] font-bold text-white" style={{ backgroundColor: `${accentColor}CC` }}>
+          <div className="flex items-center gap-3 px-3.5 py-3 shrink-0 bg-emerald-950/40 border-b border-emerald-900/20">
+            <div className="flex items-center justify-center h-8 w-8 rounded-full shrink-0 text-xs font-bold text-white bg-[#d97706] shadow-sm">
               {getUserInitials(user?.nomComplet, user?.username)}
             </div>
             <AnimatePresence>
               {sidebarOpen && (
                 <motion.div
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="overflow-hidden whitespace-nowrap flex-1 min-w-0"
+                  className="flex-1 min-w-0"
                 >
-                  <p className="text-xs font-semibold text-zinc-200 leading-tight truncate">
+                  <p className="text-xs font-semibold text-stone-100 leading-snug break-words">
                     {user?.nomComplet || user?.username || 'Administrateur'}
                   </p>
-                  <p className="text-[10px] text-zinc-500 leading-tight">
+                  <p className="text-[10px] text-amber-400 font-medium leading-tight mt-0.5">
                     {getRoleLabel(user?.role || 'COORDINATEUR')}
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-
-          <div className="px-3">
-            <Separator className="bg-white/[0.06]" />
           </div>
 
           {/* Navigation - Scrollable & Compact */}

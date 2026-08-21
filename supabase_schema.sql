@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS "Paiement" (
     echeance_id           TEXT REFERENCES "Echeance"(id) ON UPDATE CASCADE ON DELETE SET NULL,
     etablissement_id      TEXT NOT NULL REFERENCES "Etablissement"(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     annee_scolaire_id     TEXT NOT NULL REFERENCES "AnneeScolaire"(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    user_id               TEXT NOT NULL REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    user_id               TEXT REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE SET NULL,
     motif                 TEXT NOT NULL,
     montant               DOUBLE PRECISION NOT NULL,
     devise                TEXT NOT NULL DEFAULT 'CDF',

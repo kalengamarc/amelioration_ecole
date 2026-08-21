@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAppStore, canManageEtablissements } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,6 +43,7 @@ import {
   Building2,
   ToggleLeft,
   ToggleRight,
+  Sparkles
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -71,28 +72,28 @@ const TYPE_MAP: Record<string, { label: string; className: string; icon: string 
   MATERNELLE: {
     label: 'Maternelle',
     icon: '🧒',
-    className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    className: 'bg-amber-100 text-amber-900 border border-amber-200 font-semibold',
   },
   PRIMAIRE: {
     label: 'Primaire',
     icon: '📚',
-    className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    className: 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold',
   },
   SECONDAIRE: {
     label: 'Secondaire',
     icon: '🎓',
-    className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    className: 'bg-sky-100 text-sky-900 border border-sky-200 font-semibold',
   },
   COMPLEXE: {
     label: 'Complexe',
     icon: '🏫',
-    className: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
+    className: 'bg-purple-100 text-purple-900 border border-purple-200 font-semibold',
   },
 }
 
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  true: { label: 'Actif', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-  false: { label: 'Inactif', className: 'bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400' },
+  true: { label: 'Actif', className: 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold' },
+  false: { label: 'Inactif', className: 'bg-rose-100 text-rose-800 border border-rose-200 font-semibold' },
 }
 
 const emptyForm = {
@@ -101,7 +102,7 @@ const emptyForm = {
   adresse: '',
   telephone: '',
   email: '',
-  couleurPrincipale: '#075e54',
+  couleurPrincipale: '#0c241f',
   devise: 'CDF',
   rccm: '',
   idNat: '',
@@ -124,21 +125,16 @@ const itemVariants = {
 export default function EtablissementsPage() {
   const { user } = useAppStore()
 
-  // Data & Loading states
   const [etablissements, setEtablissements] = useState<Etablissement[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
-  // Dialog & Form states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
 
-  // Filter states
   const [search, setSearch] = useState('')
-
-  // ─── Data Fetching ─────────────────────────────────────────────────────────
 
   async function fetchEtablissements() {
     setLoading(true)
@@ -158,15 +154,11 @@ export default function EtablissementsPage() {
     fetchEtablissements()
   }, [user])
 
-  // ─── Filtered Data ─────────────────────────────────────────────────────────
-
   const filteredList = useMemo(() => {
     if (!search.trim()) return etablissements
     const q = search.toLowerCase()
     return etablissements.filter((e) => e.nom.toLowerCase().includes(q))
   }, [etablissements, search])
-
-  // ─── Stats Calculations ────────────────────────────────────────────────────
 
   const totalEleves = useMemo(
     () => etablissements.reduce((sum, e) => sum + (e.nombreEleves || 0), 0),
@@ -178,8 +170,6 @@ export default function EtablissementsPage() {
     [etablissements]
   )
 
-  // ─── Access Control ────────────────────────────────────────────────────────
-
   if (user && !canManageEtablissements(user.role)) {
     return (
       <motion.div
@@ -187,18 +177,16 @@ export default function EtablissementsPage() {
         animate={{ opacity: 1, y: 0 }}
         className="flex min-h-[60vh] flex-col items-center justify-center gap-4"
       >
-        <ShieldAlert className="h-16 w-16 text-red-400" />
-        <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-200">
+        <ShieldAlert className="h-16 w-16 text-rose-500" />
+        <h2 className="text-2xl font-bold text-stone-800">
           Accès réservé
         </h2>
-        <p className="text-gray-500 dark:text-gray-400">
-          La gestion des établissements est réservée au coordonnateur.
+        <p className="text-stone-500">
+          La gestion des établissements est réservée au coordonnateur ou à l'administrateur.
         </p>
       </motion.div>
     )
   }
-
-  // ─── CRUD Handlers ─────────────────────────────────────────────────────────
 
   function openCreate() {
     setEditingId(null)
@@ -214,7 +202,7 @@ export default function EtablissementsPage() {
       adresse: e.adresse || '',
       telephone: e.telephone || '',
       email: e.email || '',
-      couleurPrincipale: e.couleurPrincipale || '#075e54',
+      couleurPrincipale: e.couleurPrincipale || '#0c241f',
       devise: e.devise || 'CDF',
       rccm: e.rccm || '',
       idNat: e.idNat || '',
@@ -224,7 +212,7 @@ export default function EtablissementsPage() {
 
   async function handleSave() {
     if (!form.nom.trim()) {
-      toast.error("Le nom de l'établissement est obligatoire")
+      toast.error("Le nom de l'établissement est obligatoire (*)")
       return
     }
 
@@ -276,33 +264,34 @@ export default function EtablissementsPage() {
     }
   }
 
-  // ─── Render ────────────────────────────────────────────────────────────────
-
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-6 p-2 sm:p-4 md:p-6"
     >
-      {/* Header */}
+      {/* Banner Header */}
       <motion.div
         variants={itemVariants}
-        className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm"
       >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Établissements
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <Building2 className="h-3.5 w-3.5" /> Établissements Scolaires
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">
+            Répertoire des Établissements
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Gérez les écoles et centres de formation du système.
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+            Gérez les écoles, types d&apos;enseignement et paramètres de chaque site.
           </p>
         </div>
         <Button
           onClick={openCreate}
-          className="gap-2 bg-[var(--etab-color,#075e54)] text-white hover:bg-[var(--etab-color-hover,#064e46)]"
+          className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 text-amber-400" />
           Nouvel établissement
         </Button>
       </motion.div>
@@ -312,46 +301,46 @@ export default function EtablissementsPage() {
         variants={itemVariants}
         className="grid grid-cols-1 gap-4 sm:grid-cols-3"
       >
-        <Card className="border-l-4 border-l-[var(--etab-color,#075e54)]">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="rounded-full bg-[var(--etab-color,#075e54)]/10 p-3">
-              <Building2 className="h-6 w-6 text-[var(--etab-color,#075e54)]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <Building2 className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total établissements
+              <p className="text-xs font-semibold text-stone-500">
+                Total Établissements
               </p>
-              <p className="text-xl font-bold text-gray-900 dark:text-black">
+              <p className="text-2xl font-extrabold text-stone-900">
                 {etablissements.length}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-[#25d366]">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="rounded-full bg-[#25d366]/10 p-3">
-              <Users className="h-6 w-6 text-[#25d366]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-emerald-600">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-emerald-500/10 p-3.5 border border-emerald-500/20">
+              <Users className="h-6 w-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total élèves
+              <p className="text-xs font-semibold text-stone-500">
+                Total Élèves Inscrits
               </p>
-              <p className="text-xl font-bold text-gray-900 dark:text-black">
+              <p className="text-2xl font-extrabold text-stone-900">
                 {totalEleves}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="rounded-full bg-amber-500/10 p-3">
-              <LayoutGrid className="h-6 w-6 text-amber-500" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-amber-500">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-amber-500/10 p-3.5 border border-amber-500/20">
+              <LayoutGrid className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total classes
+              <p className="text-xs font-semibold text-stone-500">
+                Total Classes
               </p>
-              <p className="text-xl font-bold text-gray-900 dark:text-black">
+              <p className="text-2xl font-extrabold text-stone-900">
                 {totalClasses}
               </p>
             </div>
@@ -362,36 +351,31 @@ export default function EtablissementsPage() {
       {/* Search Filter */}
       <motion.div variants={itemVariants} className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
           <Input
-            placeholder="Rechercher un établissement..."
+            placeholder="Rechercher un établissement par nom..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="pl-9 rounded-xl border-stone-200 font-medium"
           />
         </div>
       </motion.div>
 
       {/* Table */}
       <motion.div variants={itemVariants}>
-        <Card>
+        <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             {loading ? (
-              <div className="space-y-4 p-6">
+              <div className="space-y-4 p-8">
                 {Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="flex gap-4">
-                    <Skeleton className="h-8 w-1/4" />
-                    <Skeleton className="h-8 w-1/6" />
-                    <Skeleton className="h-8 w-1/5" />
-                    <Skeleton className="h-8 w-1/6" />
-                  </div>
+                  <Skeleton key={index} className="h-10 w-full rounded-xl" />
                 ))}
               </div>
             ) : filteredList.length === 0 ? (
-              <div className="p-12 text-center text-gray-500 dark:text-gray-400">
+              <div className="p-12 text-center text-stone-400">
                 <School className="mx-auto mb-3 h-12 w-12 opacity-30" />
-                <p className="text-lg font-medium">Aucun établissement trouvé</p>
-                <p className="mt-1 text-sm">
+                <p className="text-base font-bold text-stone-700">Aucun établissement trouvé</p>
+                <p className="mt-1 text-xs">
                   {search.trim()
                     ? 'Essayez un autre terme de recherche.'
                     : "Commencez par créer votre premier établissement."}
@@ -400,16 +384,16 @@ export default function EtablissementsPage() {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50  bg-[var(--etab-color,#075e54)] text-white">
-                      <TableHead>Nom</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Téléphone</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead className="text-center">Élèves</TableHead>
-                      <TableHead className="text-center">Classes</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
+                      <TableHead className="text-amber-300 font-bold">Nom de l&apos;Établissement</TableHead>
+                      <TableHead className="text-white font-bold">Type</TableHead>
+                      <TableHead className="text-white font-bold">Téléphone</TableHead>
+                      <TableHead className="text-white font-bold">Email</TableHead>
+                      <TableHead className="text-center text-white font-bold">Élèves</TableHead>
+                      <TableHead className="text-center text-white font-bold">Classes</TableHead>
+                      <TableHead className="text-white font-bold">Statut</TableHead>
+                      <TableHead className="text-right text-white font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -417,42 +401,42 @@ export default function EtablissementsPage() {
                       const typeInfo =
                         TYPE_MAP[e.type] || {
                           label: e.type,
-                          className: 'bg-[#044314] text-[#a7b305]',
+                          className: 'bg-stone-100 text-stone-800',
                         }
                       const statusInfo =
                         STATUS_MAP[String(e.actif)] || {
                           label: e.actif ? 'Actif' : 'Inactif',
-                          className: 'bg-[#044314] text-[#a7b305]',
+                          className: 'bg-stone-100 text-stone-800',
                         }
                       return (
                         <TableRow
                           key={e.id}
-                          className="hover:bg-[#044314] dark:hover:bg-gray-800/30"
+                          className="hover:bg-amber-500/5 transition-colors"
                         >
                           <TableCell>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5">
                               <div
-                                className="h-3 w-3 rounded-full flex-shrink-0"
+                                className="h-3.5 w-3.5 rounded-full flex-shrink-0 shadow-sm border border-black/10"
                                 style={{
-                                  backgroundColor: e.couleurPrincipale || '#075e54',
+                                  backgroundColor: e.couleurPrincipale || '#0c241f',
                                 }}
                               />
-                              <span className="font-medium">{e.nom}</span>
+                              <span className="font-bold text-stone-900 break-words">{e.nom}</span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="bg-[#044314] text-[#a7b305]">
+                            <Badge variant="secondary" className={typeInfo.className}>
                               {(typeInfo as any).icon || ''} {typeInfo.label}
                             </Badge>
                           </TableCell>
-                          <TableCell>{e.telephone || '—'}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">
+                          <TableCell className="font-medium text-stone-700">{e.telephone || '—'}</TableCell>
+                          <TableCell className="font-medium text-stone-700 break-words">
                             {e.email || '—'}
                           </TableCell>
-                          <TableCell className="text-center font-medium">
+                          <TableCell className="text-center font-bold text-stone-900">
                             {e.nombreEleves || 0}
                           </TableCell>
-                          <TableCell className="text-center font-medium">
+                          <TableCell className="text-center font-bold text-stone-900">
                             {e.nombreClasses || 0}
                           </TableCell>
                           <TableCell>
@@ -465,7 +449,7 @@ export default function EtablissementsPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                className="h-8 w-8 text-amber-700 hover:bg-amber-50"
                                 onClick={() => openEdit(e)}
                                 title="Modifier"
                               >
@@ -474,11 +458,11 @@ export default function EtablissementsPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className={
+                                className={`h-8 w-8 ${
                                   e.actif
-                                    ? 'text-amber-500 hover:text-amber-700 hover:bg-[#044314]'
-                                    : 'text-green-500 hover:text-green-700 hover:bg-[#044314]'
-                                }
+                                    ? 'text-amber-600 hover:bg-amber-50'
+                                    : 'text-emerald-600 hover:bg-emerald-50'
+                                }`}
                                 onClick={() => handleToggleActif(e)}
                                 disabled={togglingId === e.id}
                                 title={e.actif ? 'Désactiver' : 'Activer'}
@@ -504,42 +488,44 @@ export default function EtablissementsPage() {
 
       {/* ─── Dialog: Create / Edit ───────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto bg-white/90">
-          <DialogHeader>
-            <DialogTitle
-              className="text-lg font-semibold"
-              style={{ color: 'var(--etab-color, #075e54)' }}
-            >
-              {editingId
-                ? "Modifier l'établissement"
-                : 'Nouvel établissement'}
-            </DialogTitle>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
+                  {editingId ? "Modifier l'établissement" : 'Nouvel établissement'}
+                </DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Saisissez les coordonnées et caractéristiques du site.</p>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
-            {/* Nom */}
-            <div className="space-y-2">
-              <Label htmlFor="etab-nom">Nom *</Label>
+          <div className="space-y-4 pt-4">
+            <div>
+              <Label htmlFor="etab-nom" className="text-xs font-semibold text-stone-600">Nom de l&apos;établissement *</Label>
               <Input
                 id="etab-nom"
-                placeholder="Ex: Complexe Scolaire La Réussite"
+                placeholder="Ex: Complexe Scolaire Le Bon Berger"
                 value={form.nom}
                 onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                className="rounded-xl border-stone-200 bg-white font-medium mt-1"
               />
             </div>
 
-            {/* Type + Devise */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="etab-type">Type</Label>
+              <div>
+                <Label htmlFor="etab-type" className="text-xs font-semibold text-stone-600">Type d&apos;enseignement</Label>
                 <Select
                   value={form.type}
                   onValueChange={(v) => setForm({ ...form, type: v })}
                 >
-                  <SelectTrigger id="etab-type">
+                  <SelectTrigger id="etab-type" className="rounded-xl border-stone-200 bg-white font-medium mt-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white/90">
+                  <SelectContent className="rounded-xl">
                     <SelectItem value="MATERNELLE">🧒 Maternelle</SelectItem>
                     <SelectItem value="PRIMAIRE">📚 Primaire</SelectItem>
                     <SelectItem value="SECONDAIRE">🎓 Secondaire</SelectItem>
@@ -547,38 +533,38 @@ export default function EtablissementsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="etab-devise">Devise par défaut</Label>
+              <div>
+                <Label htmlFor="etab-devise" className="text-xs font-semibold text-stone-600">Devise par défaut</Label>
                 <Select
                   value={form.devise}
                   onValueChange={(v) => setForm({ ...form, devise: v })}
                 >
-                  <SelectTrigger id="etab-devise">
+                  <SelectTrigger id="etab-devise" className="rounded-xl border-stone-200 bg-white font-medium mt-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     <SelectItem value="CDF">CDF (Franc congolais)</SelectItem>
                     <SelectItem value="USD">USD ($)</SelectItem>
+                    <SelectItem value="BIF">BIF (Franc burundais)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Adresse */}
-            <div className="space-y-2">
-              <Label htmlFor="etab-adresse">Adresse</Label>
+            <div>
+              <Label htmlFor="etab-adresse" className="text-xs font-semibold text-stone-600">Adresse physique</Label>
               <Input
                 id="etab-adresse"
-                placeholder="Ex: 123, Av. de la Paix, Gombe"
+                placeholder="Ex: N° 12, Avenue de la Paix, Q/ Buhero"
                 value={form.adresse}
                 onChange={(e) => setForm({ ...form, adresse: e.target.value })}
+                className="rounded-xl border-stone-200 bg-white font-medium mt-1"
               />
             </div>
 
-            {/* Téléphone + Email */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="etab-tel">Téléphone</Label>
+              <div>
+                <Label htmlFor="etab-tel" className="text-xs font-semibold text-stone-600">Téléphone de contact</Label>
                 <Input
                   id="etab-tel"
                   placeholder="Ex: +243 812 345 678"
@@ -586,10 +572,11 @@ export default function EtablissementsPage() {
                   onChange={(e) =>
                     setForm({ ...form, telephone: e.target.value })
                   }
+                  className="rounded-xl border-stone-200 bg-white font-medium mt-1"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="etab-email">Email</Label>
+              <div>
+                <Label htmlFor="etab-email" className="text-xs font-semibold text-stone-600">Email professionnel</Label>
                 <Input
                   id="etab-email"
                   type="email"
@@ -598,14 +585,14 @@ export default function EtablissementsPage() {
                   onChange={(e) =>
                     setForm({ ...form, email: e.target.value })
                   }
+                  className="rounded-xl border-stone-200 bg-white font-medium mt-1"
                 />
               </div>
             </div>
 
-            {/* Couleur principale */}
-            <div className="space-y-2">
-              <Label htmlFor="etab-couleur">Couleur principale</Label>
-              <div className="flex items-center gap-3">
+            <div>
+              <Label htmlFor="etab-couleur" className="text-xs font-semibold text-stone-600">Couleur thématique principale</Label>
+              <div className="flex items-center gap-3 mt-1">
                 <input
                   id="etab-couleur"
                   type="color"
@@ -613,18 +600,17 @@ export default function EtablissementsPage() {
                   onChange={(e) =>
                     setForm({ ...form, couleurPrincipale: e.target.value })
                   }
-                  className="h-10 w-14 cursor-pointer rounded-md border border-gray-200 bg-transparent"
+                  className="h-10 w-16 cursor-pointer rounded-xl border border-stone-200 bg-transparent p-1"
                 />
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+                <span className="text-xs font-mono font-bold text-stone-700 bg-stone-100 px-3 py-1.5 rounded-lg border border-stone-200">
                   {form.couleurPrincipale}
                 </span>
               </div>
             </div>
 
-            {/* RCCM + ID Nat */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="etab-rccm">RCCM</Label>
+              <div>
+                <Label htmlFor="etab-rccm" className="text-xs font-semibold text-stone-600">Numéro RCCM</Label>
                 <Input
                   id="etab-rccm"
                   placeholder="N° RCCM"
@@ -632,10 +618,11 @@ export default function EtablissementsPage() {
                   onChange={(e) =>
                     setForm({ ...form, rccm: e.target.value })
                   }
+                  className="rounded-xl border-stone-200 bg-white font-medium mt-1"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="etab-idnat">ID National</Label>
+              <div>
+                <Label htmlFor="etab-idnat" className="text-xs font-semibold text-stone-600">Identifiant National</Label>
                 <Input
                   id="etab-idnat"
                   placeholder="N° Id. National"
@@ -643,14 +630,15 @@ export default function EtablissementsPage() {
                   onChange={(e) =>
                     setForm({ ...form, idNat: e.target.value })
                   }
+                  className="rounded-xl border-stone-200 bg-white font-medium mt-1"
                 />
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
               <Button
                 variant="outline"
+                className="rounded-xl border-stone-200"
                 onClick={() => setDialogOpen(false)}
               >
                 Annuler
@@ -658,13 +646,13 @@ export default function EtablissementsPage() {
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-[var(--etab-color,#075e54)] text-white hover:bg-[var(--etab-color-hover,#064e46)]"
+                className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md"
               >
                 {saving
                   ? 'Enregistrement...'
                   : editingId
                     ? 'Mettre à jour'
-                    : 'Créer'}
+                    : 'Créer l’établissement'}
               </Button>
             </div>
           </div>

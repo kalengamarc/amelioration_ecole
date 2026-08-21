@@ -34,7 +34,20 @@ export async function getEtablissement(id: string) {
   return cmd('get_etablissement', { id })
 }
 export async function createEtablissement(data: Record<string, any>) {
-  return cmd('create_etablissement', data)
+  const couleur = data.couleurPrincipale || data.couleur_principale || '#0c241f'
+
+  return cmd('create_etablissement', {
+    nom: data.nom,
+    type: data.type || 'PRIMAIRE',
+    adresse: data.adresse || null,
+    telephone: data.telephone || null,
+    email: data.email || null,
+    logoUrl: data.logoUrl || data.logo_url || null,
+    logo_url: data.logoUrl || data.logo_url || null,
+    couleurPrincipale: couleur,
+    couleur_principale: couleur,
+    devise: data.devise || 'CDF',
+  })
 }
 export async function updateEtablissement(id: string, data: Record<string, any>) {
   return cmd('update_etablissement', { id, ...data })
@@ -49,13 +62,41 @@ export async function getEtablissementContext(id: string) {
 // ── Années Scolaires ────────────────────────────────────────
 
 export async function listAnneesScolaires(etablissementId?: string) {
-  return cmd('list_annees_scolaires', { etablissementId: etablissementId || null })
+  const etabId = etablissementId || null
+  return cmd('list_annees_scolaires', {
+    etablissementId: etabId,
+    etablissement_id: etabId,
+  })
 }
 export async function createAnneeScolaire(data: Record<string, any>) {
-  return cmd('create_annee_scolaire', data)
+  const etabId = data.etablissementId || data.etablissement_id
+  const libelle = data.libelle
+  const dateDebut = data.dateDebut || data.date_debut || null
+  const dateFin = data.dateFin || data.date_fin || null
+
+  return cmd('create_annee_scolaire', {
+    libelle,
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    dateDebut,
+    date_debut: dateDebut,
+    dateFin,
+    date_fin: dateFin,
+  })
 }
 export async function updateAnneeScolaire(id: string, data: Record<string, any>) {
-  return cmd('update_annee_scolaire', { id, ...data })
+  const dateDebut = data.dateDebut || data.date_debut || null
+  const dateFin = data.dateFin || data.date_fin || null
+
+  return cmd('update_annee_scolaire', {
+    id,
+    libelle: data.libelle,
+    dateDebut,
+    date_debut: dateDebut,
+    dateFin,
+    date_fin: dateFin,
+    active: data.active,
+  })
 }
 export async function deleteAnneeScolaire(id: string) {
   return cmd('delete_annee_scolaire', { id })
@@ -67,13 +108,35 @@ export async function activerAnneeScolaire(id: string) {
 // ── Classes ─────────────────────────────────────────────────
 
 export async function listClasses(etablissementId?: string, anneeScolaireId?: string) {
-  return cmd('list_classes', { etablissementId: etablissementId || null, anneeScolaireId: anneeScolaireId || null })
+  const etabId = etablissementId || null
+  const anneeId = anneeScolaireId || null
+  return cmd('list_classes', {
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+  })
 }
 export async function getClasse(id: string) {
   return cmd('get_classe', { id })
 }
 export async function createClasse(data: Record<string, any>) {
-  return cmd('create_classe', data)
+  const etabId = data.etablissementId || data.etablissement_id
+  const anneeId = data.anneeScolaireId || data.annee_scolaire_id
+  const nom = data.nom
+  const niveau = data.niveau || 'PRIMAIRE'
+  const effectifMax = data.effectifMax || data.effectif_max || 40
+
+  return cmd('create_classe', {
+    nom,
+    niveau,
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+    effectifMax,
+    effectif_max: effectifMax,
+  })
 }
 export async function updateClasse(id: string, data: Record<string, any>) {
   return cmd('update_classe', { id, ...data })
@@ -86,16 +149,24 @@ export async function deleteClasse(id: string) {
 
 export async function listEleves(params: {
   etablissementId?: string; anneeScolaireId?: string; classeId?: string;
-  statut?: string; search?: string; page?: number; pageSize?: number; // ✅ CORRIGÉ : pageSize
+  statut?: string; search?: string; page?: number; pageSize?: number;
 } = {}) {
+  const etabId = params.etablissementId || null
+  const anneeId = params.anneeScolaireId || null
+  const classeId = params.classeId || null
+
   return cmd('list_eleves', {
-    etablissementId: params.etablissementId || null,
-    anneeScolaireId: params.anneeScolaireId || null,
-    classeId: params.classeId || null,
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+    classeId,
+    classe_id: classeId,
     statut: params.statut || null,
     search: params.search || null,
     page: params.page || 1,
-    pageSize: params.pageSize || 20, // ✅ CORRIGÉ : pageSize
+    pageSize: params.pageSize || 20,
+    page_size: params.pageSize || 20,
   })
 }
 
@@ -104,11 +175,58 @@ export async function getEleve(id: string) {
 }
 
 export async function createEleve(data: Record<string, any>) {
-  return cmd('create_eleve', { data })          
+  const etabId = data.etablissementId || data.etablissement_id
+  const anneeId = data.anneeScolaireId || data.annee_scolaire_id
+  const classeId = data.classeId || data.classe_id
+  const dateNaissance = data.dateNaissance || data.date_naissance || null
+  const lieuNaissance = data.lieuNaissance || data.lieu_naissance || null
+
+  return cmd('create_eleve', {
+    data: {
+      nom: data.nom,
+      prenom: data.prenom,
+      sexe: data.sexe || 'M',
+      dateNaissance,
+      date_naissance: dateNaissance,
+      lieuNaissance,
+      lieu_naissance: lieuNaissance,
+      etablissementId: etabId,
+      etablissement_id: etabId,
+      anneeScolaireId: anneeId,
+      annee_scolaire_id: anneeId,
+      classeId,
+      classe_id: classeId,
+      tuteurs: data.tuteurs || [],
+    }
+  })
 }
 
 export async function updateEleve(id: string, data: Record<string, any>) {
-  return cmd('update_eleve', { id, data })      
+  const etabId = data.etablissementId || data.etablissement_id
+  const anneeId = data.anneeScolaireId || data.annee_scolaire_id
+  const classeId = data.classeId || data.classe_id
+  const dateNaissance = data.dateNaissance || data.date_naissance || null
+  const lieuNaissance = data.lieuNaissance || data.lieu_naissance || null
+
+  return cmd('update_eleve', {
+    id,
+    data: {
+      nom: data.nom,
+      prenom: data.prenom,
+      sexe: data.sexe,
+      dateNaissance,
+      date_naissance: dateNaissance,
+      lieuNaissance,
+      lieu_naissance: lieuNaissance,
+      etablissementId: etabId,
+      etablissement_id: etabId,
+      anneeScolaireId: anneeId,
+      annee_scolaire_id: anneeId,
+      classeId,
+      classe_id: classeId,
+      tuteurs: data.tuteurs || [],
+    }
+  })
 }
 
 export async function deleteEleve(id: string) {
@@ -116,19 +234,72 @@ export async function deleteEleve(id: string) {
 }
 
 export async function getEleveStats(etablissementId?: string, anneeScolaireId?: string) {
-  return cmd('get_eleve_stats', { etablissementId: etablissementId || null, anneeScolaireId: anneeScolaireId || null })
+  const etabId = etablissementId || null
+  const anneeId = anneeScolaireId || null
+  return cmd('get_eleve_stats', {
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+  })
 }
 
 // ── Frais Scolaires ─────────────────────────────────────────
 
 export async function listFrais(etablissementId?: string, anneeScolaireId?: string, actif?: boolean) {
-  return cmd('list_frais', { etablissementId: etablissementId || null, anneeScolaireId: anneeScolaireId || null, actif: actif ?? null })
+  const etabId = etablissementId || null
+  const anneeId = anneeScolaireId || null
+  return cmd('list_frais', {
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+    actif: actif ?? null,
+  })
 }
 export async function createFrais(data: Record<string, any>) {
-  return cmd('create_frais', data)
+  const etabId = data.etablissementId || data.etablissement_id
+  const anneeId = data.anneeScolaireId || data.annee_scolaire_id || null
+  const typeVal = data.type || data.type_ || 'SCOLARITE'
+  const dev = data.devise || 'BIF'
+
+  return cmd('create_frais', {
+    libelle: data.libelle,
+    type: typeVal,
+    type_: typeVal,
+    montant: Number(data.montant),
+    devise: dev,
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+    tranche: data.tranche || null,
+    dateEcheance: data.dateEcheance || data.date_echeance || null,
+    date_echeance: data.dateEcheance || data.date_echeance || null,
+    classeIds: data.classeIds || data.classe_ids || data.fraisClasses || null,
+    classe_ids: data.classeIds || data.classe_ids || data.fraisClasses || null,
+  })
 }
 export async function updateFrais(id: string, data: Record<string, any>) {
-  return cmd('update_frais', { id, ...data })
+  const typeVal = data.type || data.type_
+  const dev = data.devise
+  const dateEch = data.dateEcheance || data.date_echeance
+  const cIds = data.classeIds || data.classe_ids || data.fraisClasses
+
+  return cmd('update_frais', {
+    id,
+    libelle: data.libelle,
+    type: typeVal,
+    type_: typeVal,
+    montant: data.montant != null ? Number(data.montant) : undefined,
+    devise: dev,
+    tranche: data.tranche != null ? Number(data.tranche) : undefined,
+    dateEcheance: dateEch,
+    date_echeance: dateEch,
+    actif: data.actif,
+    classeIds: cIds,
+    classe_ids: cIds,
+  })
 }
 export async function deleteFrais(id: string) {
   return cmd('delete_frais', { id })
@@ -256,29 +427,85 @@ export async function deleteEcheance(id: string) {
 export async function listPaiements(params: {
   etablissementId?: string; anneeScolaireId?: string; eleveId?: string;
   annule?: boolean; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number;
-  search?: string;       // ✅ NOUVEAU
-    modePaiement?: string; // ✅ NOUVEAU
-  } = {}) {
-    return cmd('list_paiements', {
-      etablissementId: params.etablissementId || null,
-      anneeScolaireId: params.anneeScolaireId || null,
-      eleveId: params.eleveId || null,
-      annule: params.annule ?? null,
-      dateFrom: params.dateFrom || null,
-      dateTo: params.dateTo || null,
-      search: params.search || null,       // ✅ NOUVEAU
-      modePaiement: params.modePaiement || null, // ✅ NOUVEAU
-      page: params.page || 1,
-      pageSize: params.pageSize || 20,
-    })
-  }
-  // ... (gardez le reste de vos fonctions paiements tel quel)
+  search?: string;
+  modePaiement?: string;
+} = {}) {
+  const etablissementId = params.etablissementId || null
+  const anneeScolaireId = params.anneeScolaireId || null
+  const eleveId = params.eleveId || null
+  const annule = params.annule ?? null
+  const dateFrom = params.dateFrom || null
+  const dateTo = params.dateTo || null
+  const page = params.page || 1
+  const pageSize = params.pageSize || 20
+
+  return cmd('list_paiements', {
+    etablissementId,
+    etablissement_id: etablissementId,
+    anneeScolaireId,
+    annee_scolaire_id: anneeScolaireId,
+    eleveId,
+    eleve_id: eleveId,
+    annule,
+    dateFrom,
+    date_from: dateFrom,
+    dateTo,
+    date_to: dateTo,
+    page,
+    pageSize,
+    page_size: pageSize,
+  })
+}
+
 export async function createPaiement(data: Record<string, any>) {
-  return cmd('create_paiement', data)
+  const eleveId = data.eleveId || data.eleve_id
+  const echeanceId = data.echeanceId || data.echeance_id || null
+  const etablissementId = data.etablissementId || data.etablissement_id
+  const anneeScolaireId = data.anneeScolaireId || data.annee_scolaire_id || null
+  const userId = data.userId || data.user_id
+  const motif = data.motif
+  const montant = Number(data.montant)
+  const devise = data.devise || 'CDF'
+  const montantAffecte = data.montantAffecte ?? data.montant_affecte ?? null
+  const deviseEcheance = data.deviseEcheance || data.devise_echeance || null
+  const modePaiement = data.modePaiement || data.mode_paiement
+  const referencePaiement = data.referencePaiement || data.reference_paiement || null
+  const tauxChange = data.tauxChange ?? data.taux_change ?? null
+  const montantOriginal = data.montantOriginal ?? data.montant_original ?? null
+
+  return cmd('create_paiement', {
+    eleveId,
+    eleve_id: eleveId,
+    echeanceId,
+    echeance_id: echeanceId,
+    etablissementId,
+    etablissement_id: etablissementId,
+    anneeScolaireId,
+    annee_scolaire_id: anneeScolaireId,
+    userId,
+    user_id: userId,
+    motif,
+    montant,
+    devise,
+    montantAffecte,
+    montant_affecte: montantAffecte,
+    deviseEcheance,
+    devise_echeance: deviseEcheance,
+    modePaiement,
+    mode_paiement: modePaiement,
+    referencePaiement,
+    reference_paiement: referencePaiement,
+    tauxChange,
+    taux_change: tauxChange,
+    montantOriginal,
+    montant_original: montantOriginal,
+  })
 }
+
 export async function annulerPaiement(id: string, userId: string, motif: string) {
-  return cmd('annuler_paiement', { id, userId, motif })
+  return cmd('annuler_paiement', { id, userId, user_id: userId, motif })
 }
+
 export async function getPaiement(id: string) {
   return cmd('get_paiement', { id })
 }
@@ -300,18 +527,31 @@ export async function listDepenses(params: {
 }
 
 export async function createDepense(data: Record<string, any>) {
+  const etabId = data.etablissementId || data.etablissement_id
+  const anneeId = data.anneeScolaireId || data.annee_scolaire_id || null
+  const createdBy = data.createdById || data.created_by_id || data.userId || null
+  const dateDepense = data.dateDepense || data.date_depense || new Date().toISOString().slice(0, 10)
+  const refPiece = data.referencePiece || data.reference_piece || null
+  const justif = data.justificatifUrl || data.justificatif_url || null
+
   return cmd('create_depense', {
-    etablissementId: data.etablissementId,
-    anneeScolaireId: data.anneeScolaireId || undefined,   // optionnel
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
     categorie: data.categorie,
     libelle: data.libelle,
-    montant: data.montant,
+    montant: Number(data.montant),
     devise: data.devise || 'BIF',
     beneficiaire: data.beneficiaire || null,
-    dateDepense: data.dateDepense,
-    referencePiece: data.referencePiece || null,
-    justificatifUrl: data.justificatifUrl || null,
-    createdById: data.createdById || null,
+    dateDepense: dateDepense,
+    date_depense: dateDepense,
+    referencePiece: refPiece,
+    reference_piece: refPiece,
+    justificatifUrl: justif,
+    justificatif_url: justif,
+    createdById: createdBy,
+    created_by_id: createdBy,
   })
 }
 
@@ -352,7 +592,18 @@ export async function listUtilisateurs(etablissementId?: string) {
   return cmd('list_utilisateurs', { etablissementId: etablissementId || null })
 }
 export async function createUtilisateur(data: Record<string, any>) {
-  return cmd('create_utilisateur', data)
+  const etabId = data.etablissementId || data.etablissement_id || null
+  const nomComp = data.nomComplet || data.nom_complet || data.username
+
+  return cmd('create_utilisateur', {
+    username: data.username,
+    password: data.password,
+    nomComplet: nomComp,
+    nom_complet: nomComp,
+    role: data.role || 'CAISSIER',
+    etablissementId: etabId,
+    etablissement_id: etabId,
+  })
 }
 export async function updateUtilisateur(id: string, data: Record<string, any>) {
   return cmd('update_utilisateur', { id, ...data })
@@ -384,6 +635,7 @@ export async function listAuditLogs(params: {
   })
 }
 export async function syncStatus() { return cmd('sync_status') }
+export async function validateSyncReady() { return cmd('validate_sync_ready') }
 export async function syncPush() { return cmd('sync_push') }
 export async function syncPull() { return cmd('sync_pull') }
 export async function saveSyncConfig(supabaseUrl: string, supabaseKey: string) {

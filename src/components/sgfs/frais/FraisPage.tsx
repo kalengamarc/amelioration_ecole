@@ -15,10 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { Coins, DollarSign, Edit, Plus, Search, ShieldAlert, Trash2, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Coins, DollarSign, Edit, Plus, Search, ShieldAlert, Trash2, TrendingUp, ChevronLeft, ChevronRight, Banknote, Sparkles } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 
-// ─── Types (camelCase, grâce au rename_all dans models.rs) ──────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface Frais {
   id: string
   libelle: string
@@ -47,9 +47,9 @@ interface ClasseItem {
 
 // ─── Constants & Helpers ─────────────────────────────────────────────────────
 const TYPE_MAP: Record<string, { label: string; className: string }> = {
-  SCOLARITE: { label: 'Scolarité', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-  INSCRIPTION: { label: 'Inscription', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-  ANNEXE: { label: 'Annexe', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
+  SCOLARITE: { label: 'Scolarité', className: 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold' },
+  INSCRIPTION: { label: 'Inscription', className: 'bg-sky-100 text-sky-800 border border-sky-200 font-semibold' },
+  ANNEXE: { label: 'Annexe', className: 'bg-amber-100 text-amber-800 border border-amber-200 font-semibold' },
 }
 
 function formatDate(date?: string | null) {
@@ -87,7 +87,7 @@ export default function FraisPage() {
   const [saving, setSaving] = useState(false)
 
   const [page, setPage] = useState(1)
-  const limit = 6
+  const limit = 8
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -98,7 +98,6 @@ export default function FraisPage() {
   const [filterEcole, setFilterEcole] = useState('all')
   const [filterType, setFilterType] = useState('all')
 
-  // ─── Charger les écoles ──────────────────────────────────────────────────
   const fetchEcoles = useCallback(async () => {
     try {
       const res = await tc.listEtablissements()
@@ -108,10 +107,8 @@ export default function FraisPage() {
     }
   }, [])
 
-  // ─── Charger les classes pour un établissement ───────────────────────────
   const fetchClasses = useCallback(async (etablissementId: string) => {
     try {
-      // On peut filtrer par année active si on veut, mais pour simplifier on prend toutes les classes
       const res = await tc.listClasses(etablissementId)
       setClassesDisponibles(res?.classes ?? [])
     } catch (error) {
@@ -120,7 +117,6 @@ export default function FraisPage() {
     }
   }, [])
 
-  // ─── Charger les frais ───────────────────────────────────────────────────
   const fetchFrais = useCallback(async () => {
     if (!user || !canManageFees(user.role)) return
     setLoading(true)
@@ -147,7 +143,6 @@ export default function FraisPage() {
     return () => window.clearTimeout(timer)
   }, [fetchFrais])
 
-  // Charger les classes quand l'établissement du filtre change (pour le formulaire aussi)
   const currentEtabForForm = form.etablissementId || (filterEcole !== 'all' ? filterEcole : '')
   useEffect(() => {
     if (currentEtabForForm) {
@@ -157,12 +152,10 @@ export default function FraisPage() {
     }
   }, [currentEtabForForm, fetchClasses])
 
-  // Reset page on filter change
   useEffect(() => {
     setPage(1)
   }, [search, filterEcole, filterType])
 
-  // ─── Filtrage & Pagination côté client ──────────────────────────────────
   const filteredFrais = useMemo(() => {
     return fraisList.filter((f) => {
       if (search.trim()) {
@@ -182,7 +175,6 @@ export default function FraisPage() {
     return filteredFrais.slice(start, start + limit)
   }, [filteredFrais, page, limit])
 
-  // ─── Stats ──────────────────────────────────────────────────────────────
   const actifs = useMemo(() => fraisList.filter((f) => f.actif !== false), [fraisList])
   const typesUniques = useMemo(() => new Set(fraisList.map((f) => f.type)).size, [fraisList])
 
@@ -197,18 +189,16 @@ export default function FraisPage() {
     return Object.entries(grouped).map(([devise, v]) => ({ devise, moyenne: v.total / v.count }))
   }, [actifs])
 
-  // ─── Access Control ──────────────────────────────────────────────────────
   if (user && !canManageFees(user.role)) {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-        <ShieldAlert className="h-16 w-16 text-red-400" />
-        <h2 className="text-2xl font-bold">Accès réservé</h2>
-        <p className="text-muted-foreground">Accès réservé au coordonnateur ou à l'administration.</p>
+        <ShieldAlert className="h-16 w-16 text-rose-500" />
+        <h2 className="text-2xl font-bold text-stone-800">Accès réservé</h2>
+        <p className="text-stone-500">La gestion des frais scolaires est réservée au coordonnateur ou à l'administrateur.</p>
       </motion.div>
     )
   }
 
-  // ─── Handlers ────────────────────────────────────────────────────────────
   function openCreate() {
     setEditingId(null)
     setForm({ ...emptyForm, etablissementId: user?.etablissementId || '' })
@@ -228,7 +218,6 @@ export default function FraisPage() {
       dateEcheance: frais.dateEcheance ? frais.dateEcheance.split('T')[0] : '',
     })
     setSelectedClasseIds(frais.classesIds || [])
-    // Charger les classes pour l'établissement si pas déjà fait
     if (frais.etablissementId) {
       fetchClasses(frais.etablissementId)
     }
@@ -244,7 +233,7 @@ export default function FraisPage() {
   async function handleSave() {
     const montant = Number(form.montant)
     if (!form.libelle.trim() || !form.etablissementId || !Number.isFinite(montant) || montant <= 0) {
-      toast.error('Le libellé, l\'établissement et un montant positif sont obligatoires')
+      toast.error('Le libellé, l\'établissement et un montant positif sont obligatoires (*)')
       return
     }
 
@@ -288,57 +277,61 @@ export default function FraisPage() {
     }
   }
 
-  // ─── Rendu ──────────────────────────────────────────────────────────────
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 p-4 md:p-6">
-      {/* Header */}
-      <motion.div variants={itemVariants} className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 p-2 sm:p-4 md:p-6">
+      {/* Banner Header */}
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestion des Frais Scolaires</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Définissez et gérez les différents types de frais par classe.</p>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <Banknote className="h-3.5 w-3.5" /> Barème Tarifaire
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Gestion des Frais Scolaires</h1>
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">Définissez et gérez les différents types de frais par classe et par tranche.</p>
         </div>
-        <Button onClick={openCreate} className="gap-2 bg-[var(--etab-color,#075e54)] text-white hover:bg-[var(--etab-color-hover,#064e46)]">
-          <Plus className="h-4 w-4" /> Nouveau frais
+        <Button onClick={openCreate} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
+          <Plus className="h-4 w-4 text-amber-400" /> Nouveau frais
         </Button>
       </motion.div>
 
       {/* Stats Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="border-l-4 border-l-[var(--etab-color,#075e54)]">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="rounded-full bg-[var(--etab-color,#075e54)]/10 p-3">
-              <DollarSign className="h-6 w-6 text-[var(--etab-color,#075e54)]" />
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <DollarSign className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total frais actifs</p>
-              <p className="text-xl font-bold">{actifs.length}</p>
+              <p className="text-xs font-semibold text-stone-500">Total Frais Actifs</p>
+              <p className="text-2xl font-extrabold text-stone-900">{actifs.length}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-[#25d366]">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="rounded-full bg-[#25d366]/10 p-3">
-              <Coins className="h-6 w-6 text-[#25d366]" />
+
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-emerald-600">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-emerald-500/10 p-3.5 border border-emerald-500/20">
+              <Coins className="h-6 w-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Nombre de types</p>
-              <p className="text-xl font-bold">{typesUniques}</p>
+              <p className="text-xs font-semibold text-stone-500">Types de Frais</p>
+              <p className="text-2xl font-extrabold text-stone-900">{typesUniques}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="rounded-full bg-blue-500/10 p-3">
-              <TrendingUp className="h-6 w-6 text-blue-500" />
+
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-amber-500">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-amber-500/10 p-3.5 border border-amber-500/20">
+              <TrendingUp className="h-6 w-6 text-amber-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">Moyenne par devise</p>
+              <p className="text-xs font-semibold text-stone-500">Moyenne par Devise</p>
               {moyennesParDevise.length === 0 ? (
-                <p className="text-xl font-bold">—</p>
+                <p className="text-2xl font-extrabold text-stone-900">—</p>
               ) : (
                 <div className="space-y-0.5">
                   {moyennesParDevise.map(({ devise, moyenne }) => (
-                    <p key={devise} className="text-lg font-bold">{formatMoney(moyenne, devise)}</p>
+                    <p key={devise} className="text-base font-bold text-stone-900 tabular-nums">{formatMoney(moyenne, devise)}</p>
                   ))}
                 </div>
               )}
@@ -350,12 +343,12 @@ export default function FraisPage() {
       {/* Filters */}
       <motion.div variants={itemVariants} className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input className="pl-9" placeholder="Rechercher un frais..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+          <Input className="pl-9 rounded-xl border-stone-200 font-medium" placeholder="Rechercher un frais..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={filterEcole} onValueChange={(v) => { setFilterEcole(v); onEtabSelect(v, ecoles) }}>
-          <SelectTrigger className="w-full sm:w-52"><SelectValue placeholder="Toutes les écoles" /></SelectTrigger>
-          <SelectContent>
+          <SelectTrigger className="w-full sm:w-52 rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Toutes les écoles" /></SelectTrigger>
+          <SelectContent className="rounded-xl">
             <SelectItem value="all">Toutes les écoles</SelectItem>
             {ecoles.map((ecole) => (
               <SelectItem key={ecole.id} value={ecole.id}>{`${getTypeIcon(ecole.type || '')} ${ecole.nom}`}</SelectItem>
@@ -363,8 +356,8 @@ export default function FraisPage() {
           </SelectContent>
         </Select>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Tous les types" /></SelectTrigger>
-          <SelectContent>
+          <SelectTrigger className="w-full sm:w-44 rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Tous les types" /></SelectTrigger>
+          <SelectContent className="rounded-xl">
             <SelectItem value="all">Tous les types</SelectItem>
             <SelectItem value="SCOLARITE">Scolarité</SelectItem>
             <SelectItem value="INSCRIPTION">Inscription</SelectItem>
@@ -375,62 +368,59 @@ export default function FraisPage() {
 
       {/* Table */}
       <motion.div variants={itemVariants}>
-        <Card>
+        <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             {loading ? (
-              <div className="space-y-4 p-6">
+              <div className="space-y-4 p-8">
                 {Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="flex gap-4">
-                    <Skeleton className="h-8 w-1/4" /><Skeleton className="h-8 w-1/6" /><Skeleton className="h-8 w-1/6" /><Skeleton className="h-8 w-1/5" />
-                  </div>
+                  <Skeleton key={index} className="h-10 w-full rounded-xl" />
                 ))}
               </div>
             ) : paginatedFrais.length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground">
+              <div className="p-12 text-center text-stone-400">
                 <DollarSign className="mx-auto mb-3 h-12 w-12 opacity-30" />
-                <p>Aucun frais trouvé.</p>
+                <p className="text-base font-bold text-stone-700">Aucun frais trouvé.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50 dark:bg-[var(--etab-color,#075e54)] text-white">
-                      <TableHead>Libellé</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Montant</TableHead>
-                      <TableHead>Devise</TableHead>
-                      <TableHead className='text-center'>École</TableHead>
-                      <TableHead>Classes</TableHead>
-                      <TableHead>Tranche</TableHead>
-                      <TableHead>Échéance</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
+                      <TableHead className="text-amber-300 font-bold">Libellé du Frais</TableHead>
+                      <TableHead className="text-white font-bold">Type</TableHead>
+                      <TableHead className="text-white font-bold">Montant</TableHead>
+                      <TableHead className="text-white font-bold">Devise</TableHead>
+                      <TableHead className="text-white font-bold">Établissement</TableHead>
+                      <TableHead className="text-white font-bold">Classes</TableHead>
+                      <TableHead className="text-white font-bold">Tranche</TableHead>
+                      <TableHead className="text-white font-bold">Échéance</TableHead>
+                      <TableHead className="text-white font-bold">Statut</TableHead>
+                      <TableHead className="text-right text-white font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedFrais.map((frais) => {
-                      const typeInfo = TYPE_MAP[frais.type] || { label: frais.type, className: 'bg-gray-100 text-gray-600' }
+                      const typeInfo = TYPE_MAP[frais.type] || { label: frais.type, className: 'bg-stone-100 text-stone-800' }
                       const isActif = frais.actif !== false
-                      const statusClass = isActif ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                      // Affichage des classes : nous n'avons que les IDs, il faudrait les noms. On peut afficher le nombre ou les IDs.
+                      const statusClass = isActif ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold' : 'bg-stone-100 text-stone-700'
                       const classesLabel = frais.classesIds.length > 0
                         ? `${frais.classesIds.length} classe(s)`
-                        : 'Toutes'
+                        : 'Toutes les classes'
                       return (
-                        <TableRow key={frais.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                          <TableCell className="font-medium">{frais.libelle}</TableCell>
+                        <TableRow key={frais.id} className="hover:bg-amber-500/5 transition-colors">
+                          <TableCell className="font-bold text-stone-900 break-words">{frais.libelle}</TableCell>
                           <TableCell><Badge variant="secondary" className={typeInfo.className}>{typeInfo.label}</Badge></TableCell>
-                          <TableCell className="font-semibold">{formatMoney(frais.montant, frais.devise)}</TableCell>
-                          <TableCell>{frais.devise || 'CDF'}</TableCell>
-                          <TableCell>{frais.etablissementNom || '—'}</TableCell>
-                          <TableCell>{classesLabel}</TableCell>
-                          <TableCell>{frais.tranche ? `Tranche ${frais.tranche}` : '—'}</TableCell>
-                          <TableCell>{formatDate(frais.dateEcheance)}</TableCell>
+                          <TableCell className="font-extrabold text-stone-900 tabular-nums">{formatMoney(frais.montant, frais.devise)}</TableCell>
+                          <TableCell className="font-bold text-stone-700">{frais.devise || 'CDF'}</TableCell>
+                          <TableCell className="font-medium text-stone-700 break-words">{frais.etablissementNom || '—'}</TableCell>
+                          <TableCell className="font-medium text-stone-600">{classesLabel}</TableCell>
+                          <TableCell className="font-medium text-stone-600">{frais.tranche ? `Tranche ${frais.tranche}` : '—'}</TableCell>
+                          <TableCell className="font-medium text-stone-600">{formatDate(frais.dateEcheance)}</TableCell>
                           <TableCell><Badge variant="secondary" className={statusClass}>{isActif ? 'Actif' : 'Inactif'}</Badge></TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="icon" className="text-blue-500" onClick={() => openEdit(frais)}><Edit className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDelete(frais.id)}><Trash2 className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-700 hover:bg-amber-50" onClick={() => openEdit(frais)} title="Modifier"><Edit className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:bg-rose-50" onClick={() => handleDelete(frais.id)} title="Désactiver"><Trash2 className="h-4 w-4" /></Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -441,14 +431,17 @@ export default function FraisPage() {
               </div>
             )}
             {!loading && totalItems > 0 && (
-              <div className="flex flex-col items-center justify-between gap-3 border-t px-6 py-4 sm:flex-row">
-                <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 px-6 py-4 text-sm font-medium text-stone-600 sm:flex-row">
+                <p className="text-xs">
                   {totalItems} frais au total — Page <b>{page}</b> sur <b>{totalPages}</b>
                 </p>
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="gap-1"><ChevronLeft className="h-4 w-4" /> Précédent</Button>
-                  <span className="px-3 text-sm font-medium text-muted-foreground">{page} / {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="gap-1">Suivant <ChevronRight className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="rounded-xl border-stone-200 text-xs font-semibold">
+                    <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Précédent
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="rounded-xl border-stone-200 text-xs font-semibold">
+                    Suivant <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
                 </div>
               </div>
             )}
@@ -458,34 +451,44 @@ export default function FraisPage() {
 
       {/* Dialog Create/Edit */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto bg-white/90">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold text-[var(--etab-color,#075e54)]">
-              {editingId ? 'Modifier le frais' : 'Nouveau frais'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="libelle">Libellé *</Label>
-              <Input id="libelle" placeholder="Ex. Frais de scolarité" value={form.libelle} onChange={(e) => setForm({ ...form, libelle: e.target.value })} />
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <Banknote className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
+                  {editingId ? 'Modifier le frais' : 'Nouveau frais'}
+                </DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Définissez les modalités financières.</p>
+              </div>
             </div>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-4">
+            <div>
+              <Label htmlFor="libelle" className="text-xs font-semibold text-stone-600">Libellé du frais *</Label>
+              <Input id="libelle" placeholder="Ex. Minerval T1, Frais d'inscription" value={form.libelle} onChange={(e) => setForm({ ...form, libelle: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Type *</Label>
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Type de frais *</Label>
                 <Select value={form.type} onValueChange={(value) => setForm({ ...form, type: value })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
                     <SelectItem value="SCOLARITE">Scolarité</SelectItem>
                     <SelectItem value="INSCRIPTION">Inscription</SelectItem>
                     <SelectItem value="ANNEXE">Annexe</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>École *</Label>
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Établissement *</Label>
                 <Select value={form.etablissementId} onValueChange={(value) => { setForm({ ...form, etablissementId: value }); setSelectedClasseIds([]); }}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
                     {ecoles.map((ecole) => (
                       <SelectItem key={ecole.id} value={ecole.id}>{ecole.nom}</SelectItem>
                     ))}
@@ -493,58 +496,61 @@ export default function FraisPage() {
                 </Select>
               </div>
             </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="montant">Montant *</Label>
-                <Input id="montant" type="number" min="0" step="1" placeholder="0" value={form.montant} onChange={(e) => setForm({ ...form, montant: e.target.value })} />
+              <div>
+                <Label htmlFor="montant" className="text-xs font-semibold text-stone-600">Montant *</Label>
+                <Input id="montant" type="number" min="0" step="1" placeholder="0" value={form.montant} onChange={(e) => setForm({ ...form, montant: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold text-stone-900 mt-1" />
               </div>
-              <div className="space-y-2">
-                <Label>Devise</Label>
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Devise *</Label>
                 <Select value={form.devise} onValueChange={(value) => setForm({ ...form, devise: value })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
                     <SelectItem value="CDF">CDF (Franc congolais)</SelectItem>
                     <SelectItem value="USD">USD ($)</SelectItem>
+                    <SelectItem value="BIF">BIF (Franc burundais)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="tranche">Tranche (optionnel)</Label>
-                <Input id="tranche" type="number" min="1" step="1" placeholder="Ex. 1" value={form.tranche} onChange={(e) => setForm({ ...form, tranche: e.target.value })} />
+              <div>
+                <Label htmlFor="tranche" className="text-xs font-semibold text-stone-600">Numéro de Tranche</Label>
+                <Input id="tranche" type="number" min="1" step="1" placeholder="Ex. 1" value={form.tranche} onChange={(e) => setForm({ ...form, tranche: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="dateEcheance">Date d'échéance</Label>
-                <Input id="dateEcheance" type="date" value={form.dateEcheance} onChange={(e) => setForm({ ...form, dateEcheance: e.target.value })} />
+              <div>
+                <Label htmlFor="dateEcheance" className="text-xs font-semibold text-stone-600">Date d&apos;échéance</Label>
+                <Input id="dateEcheance" type="date" value={form.dateEcheance} onChange={(e) => setForm({ ...form, dateEcheance: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
               </div>
             </div>
 
             {/* Sélection des classes */}
             <div className="space-y-2">
-              <Label>Classes concernées (aucune = toutes)</Label>
+              <Label className="text-xs font-semibold text-stone-600">Classes concernées (si vide = s&apos;applique à toutes)</Label>
               {classesDisponibles.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aucune classe disponible pour cet établissement.</p>
+                <p className="text-xs text-stone-400 font-medium p-3 rounded-xl bg-stone-50 border border-stone-100">Aucune classe disponible pour cet établissement.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                <div className="max-h-40 overflow-y-auto border border-stone-200/80 rounded-2xl p-3 space-y-1.5 bg-stone-50/50">
                   {classesDisponibles.map((classe) => (
-                    <div key={classe.id} className="flex items-center space-x-2">
+                    <div key={classe.id} className="flex items-center space-x-2.5">
                       <Checkbox
                         id={`classe-${classe.id}`}
                         checked={selectedClasseIds.includes(classe.id)}
                         onCheckedChange={() => toggleClasseId(classe.id)}
                       />
-                      <label htmlFor={`classe-${classe.id}`} className="text-sm cursor-pointer">{classe.nom}</label>
+                      <label htmlFor={`classe-${classe.id}`} className="text-xs font-semibold text-stone-700 cursor-pointer">{classe.nom}</label>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button disabled={saving} className="bg-[var(--etab-color,#075e54)] text-white hover:bg-[var(--etab-color-hover,#064e46)]" onClick={handleSave}>
-                {saving ? 'Enregistrement...' : editingId ? 'Mettre à jour' : 'Créer'}
+            <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
+              <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md" onClick={handleSave}>
+                {saving ? 'Enregistrement...' : editingId ? 'Mettre à jour' : 'Créer le frais'}
               </Button>
             </div>
           </div>

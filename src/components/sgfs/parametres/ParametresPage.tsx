@@ -16,7 +16,7 @@ import { motion } from 'framer-motion'
 import {
   ShieldAlert, Save, Palette, MapPin, CalendarDays, Settings, Upload, Plus,
   ToggleLeft, ToggleRight, Building2, RefreshCw, Globe, Database, Key, CheckCircle2,
-  AlertCircle, Loader2
+  AlertCircle, Loader2, Sparkles
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -45,7 +45,7 @@ export default function ParametresPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [identiteForm, setIdentiteForm] = useState({ logo: '', couleurPrimaire: '#075e54' })
+  const [identiteForm, setIdentiteForm] = useState({ logo: '', couleurPrimaire: '#0c241f' })
   const [contactForm, setContactForm] = useState({ nom: '', telephone: '', email: '', adresse: '', rccm: '', idNat: '' })
   const [annees, setAnnees] = useState<AnneeScolaire[]>([])
   const [newAnnee, setNewAnnee] = useState({ libelle: '', dateDebut: '', dateFin: '' })
@@ -54,6 +54,7 @@ export default function ParametresPage() {
 
   const [syncConfig, setSyncConfig] = useState({ supabaseUrl: '', supabaseKey: '' })
   const [syncStatus, setSyncStatus] = useState<{ configured: boolean; lastSync: string | null } | null>(null)
+  const [syncValidation, setSyncValidation] = useState<any>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncSummary, setSyncSummary] = useState<any>(null)
 
@@ -74,6 +75,17 @@ export default function ParametresPage() {
     }
   }
 
+  async function fetchSyncValidation() {
+    try {
+      const res = await tc.validateSyncReady()
+      const data = res?.data ?? res ?? {}
+      setSyncValidation(data)
+    } catch (err) {
+      console.error("Erreur fetchSyncValidation:", err)
+      setSyncValidation({ ready: false, issues: ['Validation impossible dans l’application.'], configured: false })
+    }
+  }
+
   async function handleSaveSyncConfig() {
     if (!syncConfig.supabaseUrl.trim() || !syncConfig.supabaseKey.trim()) {
       return toast.error("L'URL et la clé d'API Supabase sont obligatoires.")
@@ -81,7 +93,7 @@ export default function ParametresPage() {
     setSaving(true)
     try {
       await tc.saveSyncConfig(syncConfig.supabaseUrl.trim(), syncConfig.supabaseKey.trim())
-      toast.success("Configuration de synchronisation enregistrée.")
+      toast.success("Configuration de synchronisation enregistrée avec succès.")
       fetchSyncStatus()
     } catch (err: any) {
       const msg = typeof err === 'string' ? err : (err?.message || err?.error || JSON.stringify(err))
@@ -92,6 +104,17 @@ export default function ParametresPage() {
   }
 
   async function handleRunSync() {
+    if (!syncStatus?.configured) {
+      toast.error("Configurez d’abord l’URL et la clé API Supabase avant de synchroniser.")
+      return
+    }
+
+    if (syncValidation && !syncValidation.ready) {
+      const issueText = syncValidation.issues?.length ? syncValidation.issues.join(' • ') : 'La base n’est pas prête.'
+      toast.error(`Base non prête pour la sync: ${issueText}`)
+      return
+    }
+
     setSyncing(true)
     setSyncSummary(null)
     try {
@@ -101,6 +124,7 @@ export default function ParametresPage() {
         toast.success(data.message || "Synchronisation réussie.")
         setSyncSummary(data)
         fetchSyncStatus()
+        fetchSyncValidation()
       } else {
         toast.error(data.message || "La synchronisation a échoué.")
       }
@@ -112,7 +136,6 @@ export default function ParametresPage() {
     }
   }
 
-  // ── Fetch Établissements ─────────────────────────────────────────────────
   async function fetchEcoles() {
     try {
       const response = await tc.listEtablissements()
@@ -125,7 +148,6 @@ export default function ParametresPage() {
     }
   }
 
-  // ── Fetch Paramètres ──────────────────────────────────────────────────────
   async function fetchParametres() {
     if (!selectedEcole) return
     try {
@@ -144,7 +166,6 @@ export default function ParametresPage() {
     }
   }
 
-  // ── Fetch Années Scolaires ────────────────────────────────────────────────
   async function fetchAnnees() {
     if (!selectedEcole) { setAnnees([]); return }
     try {
@@ -161,6 +182,7 @@ export default function ParametresPage() {
     if (user) {
       fetchEcoles()
       fetchSyncStatus()
+      fetchSyncValidation()
     }
   }, [user])
 
@@ -170,7 +192,7 @@ export default function ParametresPage() {
     if (ecole) {
       setIdentiteForm({
         logo: ecole.logoUrl || '',
-        couleurPrimaire: ecole.couleurPrincipale || '#11ceb8'
+        couleurPrimaire: ecole.couleurPrincipale || '#0c241f'
       })
       setContactForm({
         nom: ecole.nom || '', telephone: ecole.telephone || '', email: ecole.email || '',
@@ -181,18 +203,16 @@ export default function ParametresPage() {
     Promise.all([fetchParametres(), fetchAnnees()]).finally(() => setLoading(false))
   }, [selectedEcole, ecoles])
 
-  // ── Permission Guard ──────────────────────────────────────────────────────
   if (user && !canManageSettings(user.role || '')) {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <ShieldAlert className="w-16 h-16 text-red-400" />
-        <h2 className="text-2xl font-bold text-gray-700">Accès réservé</h2>
-        <p className="text-gray-500">Accès réservé au coordonnateur ou à l'administrateur</p>
+        <ShieldAlert className="w-16 h-16 text-rose-500" />
+        <h2 className="text-2xl font-bold text-stone-800">Accès réservé</h2>
+        <p className="text-stone-500">La configuration générale est réservée au coordonnateur ou à l'administrateur.</p>
       </motion.div>
     )
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   function getSelectedEcoleName() { return ecoles.find((e) => e.id === selectedEcole)?.nom || contactForm.nom || '' }
   function getSelectedAnneeLabel() {
     const anneeId = configForm.anneeScolaireId
@@ -200,7 +220,6 @@ export default function ParametresPage() {
     return annees.find((a) => a.id === anneeId)?.libelle || ''
   }
 
-  // ── Sauvegardes ──────────────────────────────────────────────────────────
   async function saveIdentite() {
     setSaving(true)
     try {
@@ -208,14 +227,14 @@ export default function ParametresPage() {
         logoUrl: identiteForm.logo || null,
         couleurPrincipale: identiteForm.couleurPrimaire,
       })
-      toast.success('Identité visuelle mise à jour')
+      toast.success('Identité visuelle mise à jour avec succès')
       fetchEcoles()
     } catch (err: any) { toast.error(err.message || 'Erreur lors de la sauvegarde') }
     finally { setSaving(false) }
   }
 
   async function saveContact() {
-    if (!contactForm.nom.trim()) return toast.error('Le nom de l\'établissement est obligatoire')
+    if (!contactForm.nom.trim()) return toast.error('Le nom de l\'établissement est obligatoire (*)')
     setSaving(true)
     try {
       await tc.updateEtablissement(selectedEcole, {
@@ -226,7 +245,7 @@ export default function ParametresPage() {
         rccm: contactForm.rccm || null,
         idNat: contactForm.idNat || null,
       })
-      toast.success('Coordonnées mises à jour')
+      toast.success('Coordonnées mises à jour avec succès')
       fetchEcoles()
     } catch (err: any) { toast.error(err.message || 'Erreur lors de la sauvegarde') }
     finally { setSaving(false) }
@@ -243,7 +262,7 @@ export default function ParametresPage() {
         tauxChangeUsdBif: configForm.tauxChangeUsdBif ? Number(configForm.tauxChangeUsdBif) : null,
         deviseDefaut: "CDF",
       })
-      toast.success('Configuration mise à jour')
+      toast.success('Configuration mise à jour avec succès')
     } catch (err: any) { toast.error(err.message || 'Erreur lors de la sauvegarde') }
     finally { setSaving(false) }
   }
@@ -253,13 +272,13 @@ export default function ParametresPage() {
       const annee = annees.find((a) => a.id === id)
       if (!annee) return
       await tc.updateAnneeScolaire(id, { active: !annee.active })
-      toast.success(annee.active ? 'Année désactivée' : 'Année activée')
+      toast.success(annee.active ? 'Année désactivée avec succès' : 'Année activée avec succès')
       fetchAnnees()
     } catch (err: any) { toast.error(err.message || 'Erreur lors de la modification') }
   }
 
   async function createAnnee() {
-    if (!newAnnee.libelle) return toast.error("Veuillez saisir l'année scolaire")
+    if (!newAnnee.libelle) return toast.error("Veuillez saisir l'année scolaire (*)")
     setSaving(true)
     try {
       await tc.createAnneeScolaire({
@@ -268,7 +287,7 @@ export default function ParametresPage() {
         dateDebut: newAnnee.dateDebut || null,
         dateFin: newAnnee.dateFin || null,
       })
-      toast.success('Année scolaire créée')
+      toast.success('Année scolaire créée avec succès')
       setAnneeDialogOpen(false)
       setNewAnnee({ libelle: '', dateDebut: '', dateFin: '' })
       fetchAnnees()
@@ -276,24 +295,28 @@ export default function ParametresPage() {
     finally { setSaving(false) }
   }
 
-  // ── Rendu ─────────────────────────────────────────────────────────────────
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 p-4 md:p-6">
-      {/* Header */}
-      <motion.div variants={itemVariants}>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Paramètres du Système</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Configurez les paramètres généraux et spécifiques par établissement</p>
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 p-2 sm:p-4 md:p-6">
+      {/* Banner Header */}
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200/80 shadow-sm">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 text-xs font-bold border border-amber-500/20 mb-2">
+            <Settings className="h-3.5 w-3.5" /> Configuration Générale
+          </div>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Paramètres du Système</h1>
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">Identité visuelle, coordonnées, années scolaires, devises et synchronisation Supabase.</p>
+        </div>
       </motion.div>
 
       {/* School Selector */}
-      <motion.div variants={itemVariants}>
-        <div className="max-w-sm">
-          <Label>Établissement</Label>
+      <motion.div variants={itemVariants} className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm">
+        <div className="max-w-md">
+          <Label className="text-xs font-semibold text-stone-600">Établissement actif pour la configuration *</Label>
           <Select value={selectedEcole} onValueChange={(v) => { setSelectedEcole(v); onEtabSelect(v, ecoles) }}>
-            <SelectTrigger className="mt-1">
+            <SelectTrigger className="mt-1 rounded-xl border-stone-200 font-medium">
               <SelectValue placeholder="Sélectionner un établissement" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-xl">
               {ecoles.map((e) => (
                 <SelectItem key={e.id} value={e.id}>
                   {`${getTypeIcon(e.type || '')} ${e.nom}`}
@@ -306,67 +329,67 @@ export default function ParametresPage() {
 
       {/* Tabs */}
       <motion.div variants={itemVariants}>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6">
-            <TabsTrigger value="identite" className="gap-1.5 text-xs sm:text-sm">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6 bg-stone-100 p-1 rounded-xl border border-stone-200">
+            <TabsTrigger value="identite" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <Palette className="w-4 h-4 hidden sm:block" /> Identité visuelle
             </TabsTrigger>
-            <TabsTrigger value="coordonnees" className="gap-1.5 text-xs sm:text-sm">
+            <TabsTrigger value="coordonnees" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <MapPin className="w-4 h-4 hidden sm:block" /> Coordonnées
             </TabsTrigger>
-            <TabsTrigger value="annees" className="gap-1.5 text-xs sm:text-sm">
+            <TabsTrigger value="annees" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <CalendarDays className="w-4 h-4 hidden sm:block" /> Années scolaires
             </TabsTrigger>
-            <TabsTrigger value="configuration" className="gap-1.5 text-xs sm:text-sm">
+            <TabsTrigger value="configuration" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <Settings className="w-4 h-4 hidden sm:block" /> Configuration
             </TabsTrigger>
-            <TabsTrigger value="synchronisation" className="gap-1.5 text-xs sm:text-sm">
+            <TabsTrigger value="synchronisation" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <RefreshCw className="w-4 h-4 hidden sm:block" /> Synchronisation
             </TabsTrigger>
           </TabsList>
 
           {/* ═══ Onglet Identité Visuelle ═══ */}
           <TabsContent value="identite">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2" style={{ color: 'var(--etab-color, #075e54)' }}>
-                  <Palette className="w-5 h-5" /> Identité visuelle
+            <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+              <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-amber-600" /> Identité Visuelle & Couleurs
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 {loading ? (
-                  <div className="space-y-4"><Skeleton className="h-40 w-60" /><Skeleton className="h-10 w-full" /></div>
+                  <div className="space-y-4"><Skeleton className="h-40 w-60 rounded-xl" /><Skeleton className="h-10 w-full rounded-xl" /></div>
                 ) : (
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <Label>Logo de l&apos;établissement</Label>
-                      <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 flex flex-col items-center gap-3 hover:border-[var(--etab-color,#075e54)] transition-colors cursor-pointer">
-                        <Upload className="w-10 h-10 text-gray-400" />
-                        <p className="text-sm text-gray-500">Cliquez ou glissez pour télécharger le logo</p>
-                        <p className="text-xs text-gray-400">PNG, JPG, SVG — Max 2 Mo</p>
-                        {identiteForm.logo && <Badge variant="secondary" className="bg-green-100 text-green-700">Logo actuel</Badge>}
+                    <div>
+                      <Label className="text-xs font-semibold text-stone-600">Logo de l&apos;établissement</Label>
+                      <div className="border-2 border-dashed border-stone-300 rounded-2xl p-8 flex flex-col items-center gap-3 hover:border-[#0c241f] transition-colors cursor-pointer bg-stone-50/50 mt-1">
+                        <Upload className="w-10 h-10 text-stone-400" />
+                        <p className="text-xs font-semibold text-stone-600">Cliquez ou glissez pour télécharger le logo officiel</p>
+                        <p className="text-[11px] text-stone-400">PNG, JPG, SVG — Max 2 Mo</p>
+                        {identiteForm.logo && <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold">Logo configuré</Badge>}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="couleurPrimaire">Couleur principale</Label>
-                      <div className="flex items-center gap-3">
-                        <input id="couleurPrimaire" type="color" value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-12 h-10 rounded cursor-pointer border-0" />
-                        <Input value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-36 font-mono" placeholder="#075e54" />
+                    <div>
+                      <Label htmlFor="couleurPrimaire" className="text-xs font-semibold text-stone-600">Couleur thématique principale</Label>
+                      <div className="flex items-center gap-3 mt-1">
+                        <input id="couleurPrimaire" type="color" value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-14 h-10 rounded-xl cursor-pointer border border-stone-200 bg-transparent p-1" />
+                        <Input value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-36 font-mono font-bold rounded-xl border-stone-200" placeholder="#0c241f" />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-gray-400">Aperçu de la couleur</Label>
-                      <div className="flex items-center gap-4">
-                        <div className="w-32 h-20 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm" style={{ backgroundColor: identiteForm.couleurPrimaire }} />
-                        <div className="flex-1 h-20 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex flex-col justify-center" style={{ backgroundColor: identiteForm.couleurPrimaire, color: '#ffffff' }}>
-                          <span className="text-xs opacity-80">Texte exemple</span>
-                          <span className="text-base font-bold">{getSelectedEcoleName() || 'Mon École'}</span>
+                    <div>
+                      <Label className="text-xs font-semibold text-stone-600">Aperçu du thème</Label>
+                      <div className="flex items-center gap-4 mt-1">
+                        <div className="w-32 h-20 rounded-2xl border border-stone-200 shadow-sm" style={{ backgroundColor: identiteForm.couleurPrimaire }} />
+                        <div className="flex-1 h-20 rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-center" style={{ backgroundColor: identiteForm.couleurPrimaire, color: '#ffffff' }}>
+                          <span className="text-xs opacity-80 font-medium">Exemple de carte</span>
+                          <span className="text-base font-extrabold break-words">{getSelectedEcoleName() || 'Mon École'}</span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex justify-end">
-                      <Button onClick={saveIdentite} disabled={saving} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white gap-2">
-                        <Save className="w-4 h-4" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
+                    <div className="flex justify-end pt-2 border-t border-stone-100">
+                      <Button onClick={saveIdentite} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md gap-2">
+                        <Save className="w-4 h-4 text-amber-400" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
                       </Button>
                     </div>
                   </div>
@@ -377,53 +400,50 @@ export default function ParametresPage() {
 
           {/* ═══ Onglet Coordonnées ═══ */}
           <TabsContent value="coordonnees">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2" style={{ color: 'var(--etab-color, #075e54)' }}>
-                  <MapPin className="w-5 h-5" /> Coordonnées de l&apos;établissement
+            <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+              <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-amber-600" /> Coordonnées Officielles
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 {loading ? (
                   <div className="space-y-4">
-                    {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nom-etab">Nom de l&apos;établissement</Label>
-                      <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input id="nom-etab" placeholder="Ex: Complexe Scolaire ABC" value={contactForm.nom} onChange={(e) => setContactForm({ ...contactForm, nom: e.target.value })} className="pl-9 font-semibold" />
-                      </div>
+                    <div>
+                      <Label htmlFor="nom-etab" className="text-xs font-semibold text-stone-600">Nom de l&apos;établissement *</Label>
+                      <Input id="nom-etab" placeholder="Ex: Complexe Scolaire Le Bon Berger" value={contactForm.nom} onChange={(e) => setContactForm({ ...contactForm, nom: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold mt-1" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="tel">Téléphone</Label>
-                        <Input id="tel" placeholder="+243 xxx xxx xxx" value={contactForm.telephone} onChange={(e) => setContactForm({ ...contactForm, telephone: e.target.value })} />
+                      <div>
+                        <Label htmlFor="tel" className="text-xs font-semibold text-stone-600">Téléphone</Label>
+                        <Input id="tel" placeholder="+243 xxx xxx xxx" value={contactForm.telephone} onChange={(e) => setContactForm({ ...contactForm, telephone: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email</Label>
-                        <Input id="email" type="email" placeholder="contact@ecole.cd" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} />
+                      <div>
+                        <Label htmlFor="email" className="text-xs font-semibold text-stone-600">Email professionnel</Label>
+                        <Input id="email" type="email" placeholder="contact@ecole.cd" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="adresse">Adresse</Label>
-                      <Input id="adresse" placeholder="N° XX, Avenue ..., Quartier ..., Commune ..." value={contactForm.adresse} onChange={(e) => setContactForm({ ...contactForm, adresse: e.target.value })} />
+                    <div>
+                      <Label htmlFor="adresse" className="text-xs font-semibold text-stone-600">Adresse physique</Label>
+                      <Input id="adresse" placeholder="N° XX, Avenue ..., Quartier ..., Commune ..." value={contactForm.adresse} onChange={(e) => setContactForm({ ...contactForm, adresse: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="rccm">RCCM</Label>
-                        <Input id="rccm" placeholder="N° RCCM" value={contactForm.rccm} onChange={(e) => setContactForm({ ...contactForm, rccm: e.target.value })} />
+                      <div>
+                        <Label htmlFor="rccm" className="text-xs font-semibold text-stone-600">Numéro RCCM</Label>
+                        <Input id="rccm" placeholder="N° RCCM" value={contactForm.rccm} onChange={(e) => setContactForm({ ...contactForm, rccm: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="idnat">ID. NAT</Label>
-                        <Input id="idnat" placeholder="N° Identifiant National" value={contactForm.idNat} onChange={(e) => setContactForm({ ...contactForm, idNat: e.target.value })} />
+                      <div>
+                        <Label htmlFor="idnat" className="text-xs font-semibold text-stone-600">ID. NAT</Label>
+                        <Input id="idnat" placeholder="N° Identifiant National" value={contactForm.idNat} onChange={(e) => setContactForm({ ...contactForm, idNat: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
                       </div>
                     </div>
-                    <div className="flex justify-end pt-2">
-                      <Button onClick={saveContact} disabled={saving} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white gap-2">
-                        <Save className="w-4 h-4" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
+                    <div className="flex justify-end pt-3 border-t border-stone-100">
+                      <Button onClick={saveContact} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md gap-2">
+                        <Save className="w-4 h-4 text-amber-400" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
                       </Button>
                     </div>
                   </div>
@@ -434,47 +454,47 @@ export default function ParametresPage() {
 
           {/* ═══ Onglet Années Scolaires ═══ */}
           <TabsContent value="annees">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2" style={{ color: 'var(--etab-color, #075e54)' }}>
-                  <CalendarDays className="w-5 h-5" /> Années scolaires
+            <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+              <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5 text-amber-600" /> Années Scolaires Configuées
                 </CardTitle>
-                <Button onClick={() => setAnneeDialogOpen(true)} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white gap-2" size="sm">
-                  <Plus className="w-4 h-4" /> Nouvelle année
+                <Button onClick={() => setAnneeDialogOpen(true)} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl gap-2" size="sm">
+                  <Plus className="w-4 h-4 text-amber-400" /> Nouvelle année
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0">
                 {loading ? (
-                  <div className="space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+                  <div className="p-6 space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}</div>
                 ) : annees.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                  <div className="p-12 text-center text-stone-400">
                     <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p>Aucune année scolaire configurée</p>
+                    <p className="font-bold text-stone-700">Aucune année scolaire configurée.</p>
                   </div>
                 ) : (
                   <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                        <TableHead>Année scolaire</TableHead>
-                        <TableHead>Date début</TableHead>
-                        <TableHead>Date fin</TableHead>
-                        <TableHead>Statut</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
+                        <TableHead className="text-amber-300 font-bold">Année Scolaire</TableHead>
+                        <TableHead className="text-white font-bold">Date Début</TableHead>
+                        <TableHead className="text-white font-bold">Date Fin</TableHead>
+                        <TableHead className="text-white font-bold">Statut</TableHead>
+                        <TableHead className="text-right text-white font-bold">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {annees.map((a) => (
-                        <TableRow key={a.id}>
-                          <TableCell className="font-semibold">{a.libelle}</TableCell>
-                          <TableCell>{a.dateDebut ? new Date(a.dateDebut).toLocaleDateString('fr-FR') : '—'}</TableCell>
-                          <TableCell>{a.dateFin ? new Date(a.dateFin).toLocaleDateString('fr-FR') : '—'}</TableCell>
+                        <TableRow key={a.id} className="hover:bg-amber-500/5 transition-colors">
+                          <TableCell className="font-extrabold text-stone-900">{a.libelle}</TableCell>
+                          <TableCell className="font-medium text-stone-600">{a.dateDebut ? new Date(a.dateDebut).toLocaleDateString('fr-FR') : '—'}</TableCell>
+                          <TableCell className="font-medium text-stone-600">{a.dateFin ? new Date(a.dateFin).toLocaleDateString('fr-FR') : '—'}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className={a.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
+                            <Badge variant="secondary" className={a.active ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold' : 'bg-stone-100 text-stone-700'}>
                               {a.active ? 'Active' : 'Inactive'}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => toggleAnneeActive(a.id)} className={`gap-1.5 ${a.active ? 'text-red-500 hover:text-red-700 hover:bg-red-50' : 'text-green-500 hover:text-green-700 hover:bg-green-50'}`}>
+                            <Button variant="ghost" size="sm" onClick={() => toggleAnneeActive(a.id)} className={`gap-1.5 font-semibold ${a.active ? 'text-rose-600 hover:bg-rose-50' : 'text-emerald-700 hover:bg-emerald-50'}`}>
                               {a.active ? <><ToggleRight className="w-5 h-5" /> Désactiver</> : <><ToggleLeft className="w-5 h-5" /> Activer</>}
                             </Button>
                           </TableCell>
@@ -489,60 +509,47 @@ export default function ParametresPage() {
 
           {/* ═══ Onglet Configuration ═══ */}
           <TabsContent value="configuration">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2" style={{ color: 'var(--etab-color, #075e54)' }}>
-                  <Settings className="w-5 h-5" /> Configuration générale
+            <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+              <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-amber-600" /> Configuration des Reçus & Impresse
                 </CardTitle>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="text-sm px-3 py-1" style={{ borderColor: identiteForm.couleurPrimaire, color: identiteForm.couleurPrimaire }}>
-                    <Building2 className="w-3.5 h-3.5 mr-1.5" /> {getSelectedEcoleName()}
-                  </Badge>
-                  {getSelectedAnneeLabel() && (
-                    <Badge variant="secondary" className="text-sm px-3 py-1">
-                      <CalendarDays className="w-3.5 h-3.5 mr-1.5" /> {getSelectedAnneeLabel()}
-                    </Badge>
-                  )}
-                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 {loading ? (
-                  <div className="space-y-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                  <div className="space-y-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}</div>
                 ) : (
                   <div className="space-y-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="annee-active">Année scolaire active (pour les paramètres)</Label>
+                    <div>
+                      <Label htmlFor="annee-active" className="text-xs font-semibold text-stone-600">Année scolaire active pour l&apos;établissement *</Label>
                       <Select value={configForm.anneeScolaireId} onValueChange={(v) => setConfigForm({ ...configForm, anneeScolaireId: v })}>
-                        <SelectTrigger><SelectValue placeholder="Choisir une année" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Choisir une année" /></SelectTrigger>
+                        <SelectContent className="rounded-xl">
                           {annees.map((a) => (<SelectItem key={a.id} value={a.id}>{a.libelle} {a.active ? '• Active' : ''}</SelectItem>))}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-gray-400">Sera utilisée pour les documents et calculs par défaut.</p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="taux-change">Taux de change USD → CDF</Label>
-                        <Input id="taux-change" type="number" min="0" placeholder="Ex: 2900" value={configForm.tauxChangeUsdBif} onChange={(e) => setConfigForm({ ...configForm, tauxChangeUsdBif: e.target.value })} />
-                        <p className="text-xs text-gray-400">Utilisé pour les conversions automatiques</p>
+                      <div>
+                        <Label htmlFor="taux-change" className="text-xs font-semibold text-stone-600">Taux de change (1 USD = X CDF) *</Label>
+                        <Input id="taux-change" type="number" min="0" placeholder="Ex: 2900" value={configForm.tauxChangeUsdBif} onChange={(e) => setConfigForm({ ...configForm, tauxChangeUsdBif: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold text-stone-900 mt-1" />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="imprimante">Nom de l&apos;imprimante</Label>
-                        <Input id="imprimante" placeholder="Ex: EPSON TM-T20III" value={configForm.nomImprimante} onChange={(e) => setConfigForm({ ...configForm, nomImprimante: e.target.value })} />
-                        <p className="text-xs text-gray-400">Imprimante par défaut pour les reçus</p>
+                      <div>
+                        <Label htmlFor="imprimante" className="text-xs font-semibold text-stone-600">Nom de l&apos;imprimante thermique</Label>
+                        <Input id="imprimante" placeholder="Ex: EPSON TM-T20III" value={configForm.nomImprimante} onChange={(e) => setConfigForm({ ...configForm, nomImprimante: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="mentions-legales">Mentions légales</Label>
-                      <textarea id="mentions-legales" className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y" placeholder="Entrez les mentions légales..." value={configForm.mentionsLegales} onChange={(e) => setConfigForm({ ...configForm, mentionsLegales: e.target.value })} />
+                    <div>
+                      <Label htmlFor="mentions-legales" className="text-xs font-semibold text-stone-600">Mentions légales imprimées</Label>
+                      <textarea id="mentions-legales" className="flex min-h-[90px] w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs font-medium mt-1" placeholder="Entrez les mentions légales..." value={configForm.mentionsLegales} onChange={(e) => setConfigForm({ ...configForm, mentionsLegales: e.target.value })} />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pied-page">Pied de page des reçus</Label>
-                      <textarea id="pied-page" className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y" placeholder="Texte affiché en bas des reçus..." value={configForm.piedPageRecu} onChange={(e) => setConfigForm({ ...configForm, piedPageRecu: e.target.value })} />
+                    <div>
+                      <Label htmlFor="pied-page" className="text-xs font-semibold text-stone-600">Pied de page des reçus POS</Label>
+                      <textarea id="pied-page" className="flex min-h-[80px] w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs font-medium mt-1" placeholder="Texte affiché en bas des reçus..." value={configForm.piedPageRecu} onChange={(e) => setConfigForm({ ...configForm, piedPageRecu: e.target.value })} />
                     </div>
-                    <div className="flex justify-end pt-2">
-                      <Button onClick={saveConfig} disabled={saving} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white gap-2">
-                        <Save className="w-4 h-4" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
+                    <div className="flex justify-end pt-3 border-t border-stone-100">
+                      <Button onClick={saveConfig} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md gap-2">
+                        <Save className="w-4 h-4 text-amber-400" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
                       </Button>
                     </div>
                   </div>
@@ -555,109 +562,132 @@ export default function ParametresPage() {
           <TabsContent value="synchronisation">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Configuration Column */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2" style={{ color: 'var(--etab-color, #075e54)' }}>
-                    <Settings className="w-5 h-5" /> Configurer la connexion
+              <Card className="lg:col-span-1 rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+                  <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-amber-600" /> Connexion Supabase
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5"><Globe className="w-4 h-4 text-gray-400" /> URL de l&apos;API Supabase</Label>
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <Label className="text-xs font-semibold text-stone-600">URL de l&apos;API Supabase *</Label>
                     <Input
                       placeholder="https://xyz.supabase.co"
                       value={syncConfig.supabaseUrl}
                       onChange={(e) => setSyncConfig({ ...syncConfig, supabaseUrl: e.target.value })}
+                      className="rounded-xl border-stone-200 bg-white font-mono text-xs mt-1"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5"><Key className="w-4 h-4 text-gray-400" /> Clé d&apos;API Supabase (Service Role / Anon)</Label>
+                  <div>
+                    <Label className="text-xs font-semibold text-stone-600">Clé d&apos;API Supabase (Service Role / Anon) *</Label>
                     <Input
                       type="password"
-                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR..."
                       value={syncConfig.supabaseKey}
                       onChange={(e) => setSyncConfig({ ...syncConfig, supabaseKey: e.target.value })}
+                      className="rounded-xl border-stone-200 bg-white font-mono text-xs mt-1"
                     />
                   </div>
                   <Button
                     onClick={handleSaveSyncConfig}
                     disabled={saving || syncing}
-                    className="w-full bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white gap-2 mt-2"
+                    className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-11 shadow-md gap-2"
                   >
-                    <Save className="w-4 h-4" /> Enregistrer la configuration
+                    <Save className="w-4 h-4 text-amber-400" /> Enregistrer les Identifiants
                   </Button>
                 </CardContent>
               </Card>
 
               {/* Status and Action Column */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2" style={{ color: 'var(--etab-color, #075e54)' }}>
-                    <RefreshCw className="w-5 h-5" /> Actions de synchronisation
+              <Card className="lg:col-span-2 rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
+                <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
+                  <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
+                    <RefreshCw className="w-5 h-5 text-amber-600" /> Synchronisation Bidirectionnelle
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="p-6 space-y-6">
                   {syncStatus ? (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Statut de la connexion :</span>
-                          {syncStatus.configured ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Configuré</Badge>
-                          ) : (
-                            <Badge variant="destructive" className="gap-1"><AlertCircle className="w-3.5 h-3.5" /> Non configuré</Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Dernière synchronisation réussie : <span className="font-semibold text-gray-700 dark:text-gray-300">{syncStatus.lastSync ? new Date(syncStatus.lastSync).toLocaleString('fr-FR') : "Jamais"}</span>
-                        </p>
-                        {syncStatus.configured && (
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
-                            <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 gap-1 font-normal">
-                              <RefreshCw className="w-3 h-3 text-emerald-600 animate-spin" /> Synchro automatique activée (toutes les 5 min)
-                            </Badge>
-                            <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 gap-1 font-normal">
-                              <Database className="w-3 h-3 text-blue-600" /> Rétention AuditLog : max 200 entrées
-                            </Badge>
+                    <div className="flex flex-col gap-4 p-5 rounded-2xl bg-stone-50 border border-stone-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-stone-700">Statut de la connexion :</span>
+                            {syncStatus.configured ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Configuré</Badge>
+                            ) : (
+                              <Badge variant="destructive" className="gap-1 font-semibold"><AlertCircle className="w-3.5 h-3.5" /> Non configuré</Badge>
+                            )}
                           </div>
-                        )}
+                          <p className="text-xs text-stone-500 mt-1.5 font-medium">
+                            Dernière synchronisation réussie : <b className="text-stone-800">{syncStatus.lastSync ? new Date(syncStatus.lastSync).toLocaleString('fr-FR') : "Jamais"}</b>
+                          </p>
+                        </div>
+
+                        <Button
+                          onClick={handleRunSync}
+                          disabled={!syncStatus.configured || syncing || saving || !!(syncValidation && !syncValidation.ready)}
+                          className="bg-[#d97706] hover:bg-[#b45309] text-white font-bold rounded-xl h-11 px-6 shadow-md gap-2"
+                        >
+                          {syncing ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Synchronisation...</>
+                          ) : (
+                            <><RefreshCw className="w-4 h-4" /> Lancer la Synchro</>
+                          )}
+                        </Button>
                       </div>
 
-                      <Button
-                        onClick={handleRunSync}
-                        disabled={!syncStatus.configured || syncing || saving}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[180px]"
-                      >
-                        {syncing ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Synchronisation...</>
-                        ) : (
-                          <><RefreshCw className="w-4 h-4" /> Lancer la synchro</>
-                        )}
-                      </Button>
+                      {syncValidation && (
+                        <div className={`rounded-xl border p-3 text-xs ${syncValidation.ready ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                          <div className="flex items-center gap-2 font-bold">
+                            {syncValidation.ready ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                            {syncValidation.message || 'Validation de la base locale'}
+                          </div>
+                          {syncValidation.issues?.length ? (
+                            <ul className="mt-2 list-disc list-inside space-y-1 opacity-90">
+                              {syncValidation.issues.slice(0, 3).map((issue: string, idx: number) => (
+                                <li key={idx}>{issue}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 opacity-90">Aucune anomalie détectée dans la structure et les données locales.</p>
+                          )}
+                        </div>
+                      )}
+
+                      {syncStatus.configured && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-800 gap-1 font-semibold">
+                            <RefreshCw className="w-3 h-3 text-emerald-600" /> Synchro automatique activée (toutes les 5 min)
+                          </Badge>
+                          <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-800 gap-1 font-semibold">
+                            <Database className="w-3 h-3 text-amber-600" /> Rétention AuditLog : max 200 entrées
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="flex justify-center p-4"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+                    <div className="flex justify-center p-4"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
                   )}
 
                   {/* Sync Summary Section */}
                   {syncSummary && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                      <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5"><Database className="w-4 h-4" /> Rapport de synchronisation</h3>
-                      <div className="max-h-[220px] overflow-y-auto border border-gray-100 dark:border-gray-800 rounded-lg">
+                      <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5"><Database className="w-4 h-4 text-[#0c241f]" /> Rapport de synchronisation</h3>
+                      <div className="max-h-[220px] overflow-y-auto border border-stone-200 rounded-2xl overflow-hidden">
                         <Table>
-                          <TableHeader className="sticky top-0 bg-white dark:bg-gray-900 z-10">
-                            <TableRow className="bg-gray-50 dark:bg-gray-800">
-                              <TableHead>Table</TableHead>
-                              <TableHead className="text-center text-blue-600">Poussés ↑</TableHead>
-                              <TableHead className="text-center text-emerald-600 font-semibold">Rapatriés ↓</TableHead>
+                          <TableHeader className="sticky top-0 bg-[#0c241f] text-white z-10">
+                            <TableRow className="hover:bg-[#0c241f]">
+                              <TableHead className="text-amber-300 font-bold">Table</TableHead>
+                              <TableHead className="text-center text-sky-300 font-bold">Poussés ↑</TableHead>
+                              <TableHead className="text-center text-emerald-300 font-bold">Rapatriés ↓</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {syncSummary.stats.map((stat: any) => (
-                              <TableRow key={stat.table_name} className={stat.pushed > 0 || stat.pulled > 0 ? "bg-emerald-50/10 dark:bg-emerald-900/5 font-semibold" : "opacity-60"}>
-                                <TableCell className="py-2">{stat.table_name}</TableCell>
-                                <TableCell className="text-center text-blue-600 py-2">{stat.pushed}</TableCell>
-                                <TableCell className="text-center text-emerald-600 py-2">{stat.pulled}</TableCell>
+                              <TableRow key={stat.table_name} className={stat.pushed > 0 || stat.pulled > 0 ? "bg-emerald-50/50 font-bold" : "opacity-60"}>
+                                <TableCell className="py-2.5 text-xs font-bold text-stone-800 break-words">{stat.table_name}</TableCell>
+                                <TableCell className="text-center text-sky-700 py-2.5 text-xs font-extrabold">{stat.pushed}</TableCell>
+                                <TableCell className="text-center text-emerald-700 py-2.5 text-xs font-extrabold">{stat.pulled}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -665,17 +695,6 @@ export default function ParametresPage() {
                       </div>
                     </motion.div>
                   )}
-
-                  {/* Documentation / Guide */}
-                  <div className="rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100/50 dark:border-amber-900/20 p-4 text-xs space-y-2 text-amber-800 dark:text-amber-300">
-                    <h4 className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-500" /> Guide rapide de configuration</h4>
-                    <ol className="list-decimal list-inside space-y-1.5 ml-1">
-                      <li>Créez un projet de base de données sur <strong>Supabase</strong>.</li>
-                      <li>Accédez à l&apos;éditeur SQL de Supabase et exécutez le script d&apos;initialisation <strong><code className="bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded">supabase_schema.sql</code></strong> fourni à la racine de ce projet.</li>
-                      <li>Désactivez les politiques de sécurité (RLS) sur les tables créées ou configurez les accès adéquats.</li>
-                      <li>Récupérez l&apos;URL et la clé d&apos;API dans les paramètres <strong>API Settings</strong> de votre projet Supabase et copiez-les ci-contre.</li>
-                    </ol>
-                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -685,29 +704,37 @@ export default function ParametresPage() {
 
       {/* Dialogue Nouvelle Année */}
       <Dialog open={anneeDialogOpen} onOpenChange={setAnneeDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold" style={{ color: 'var(--etab-color, #075e54)' }}>Nouvelle année scolaire</DialogTitle>
+        <DialogContent className="max-w-md bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+                <CalendarDays className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">Nouvelle année scolaire</DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">Définissez la période scolaire.</p>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="new-annee">Année scolaire *</Label>
-              <Input id="new-annee" placeholder="Ex: 2024-2025" value={newAnnee.libelle} onChange={(e) => setNewAnnee({ ...newAnnee, libelle: e.target.value })} />
+          <div className="space-y-4 pt-3">
+            <div>
+              <Label htmlFor="new-annee" className="text-xs font-semibold text-stone-600">Année scolaire *</Label>
+              <Input id="new-annee" placeholder="Ex: 2024-2025" value={newAnnee.libelle} onChange={(e) => setNewAnnee({ ...newAnnee, libelle: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold mt-1" />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="date-debut">Date début</Label>
-                <Input id="date-debut" type="date" value={newAnnee.dateDebut} onChange={(e) => setNewAnnee({ ...newAnnee, dateDebut: e.target.value })} />
+              <div>
+                <Label htmlFor="date-debut" className="text-xs font-semibold text-stone-600">Date début</Label>
+                <Input id="date-debut" type="date" value={newAnnee.dateDebut} onChange={(e) => setNewAnnee({ ...newAnnee, dateDebut: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="date-fin">Date fin</Label>
-                <Input id="date-fin" type="date" value={newAnnee.dateFin} onChange={(e) => setNewAnnee({ ...newAnnee, dateFin: e.target.value })} />
+              <div>
+                <Label htmlFor="date-fin" className="text-xs font-semibold text-stone-600">Date fin</Label>
+                <Input id="date-fin" type="date" value={newAnnee.dateFin} onChange={(e) => setNewAnnee({ ...newAnnee, dateFin: e.target.value })} className="rounded-xl border-stone-200 bg-white font-medium mt-1" />
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setAnneeDialogOpen(false)}>Annuler</Button>
-              <Button onClick={createAnnee} disabled={saving} className="bg-[var(--etab-color,#075e54)] hover:bg-[var(--etab-color-hover,#064e46)] text-white">
-                {saving ? 'Création...' : 'Créer'}
+            <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
+              <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setAnneeDialogOpen(false)}>Annuler</Button>
+              <Button onClick={createAnnee} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md">
+                {saving ? 'Création...' : 'Créer l’année'}
               </Button>
             </div>
           </div>

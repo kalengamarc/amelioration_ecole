@@ -31,13 +31,34 @@ pub struct UserInfo {
 }
 
 
-fn user_to_info(u: &User) -> UserInfo {
+fn user_to_info_with_conn(conn: &rusqlite::Connection, u: &User) -> UserInfo {
+    let mut etab_id = u.etablissement_id.clone();
+
+    if etab_id.is_none() || etab_id.as_deref().unwrap_or("").trim().is_empty() {
+        let role_upper = u.role.to_uppercase();
+        let target_type = if role_upper.contains("MATERNELLE") {
+            Some("MATERNELLE")
+        } else if role_upper.contains("PRIMAIRE") {
+            Some("PRIMAIRE")
+        } else if role_upper.contains("SECONDAIRE") {
+            Some("SECONDAIRE")
+        } else {
+            None
+        };
+
+        if let Some(t) = target_type {
+            if let Ok(id) = conn.query_row("SELECT id FROM Etablissement WHERE type = ? AND COALESCE(actif, 1) = 1 LIMIT 1", params![t], |r| r.get::<_, String>(0)) {
+                etab_id = Some(id);
+            }
+        }
+    }
+
     UserInfo {
         id: u.id.clone(),
         username: u.username.clone(),
         nom_complet: u.nom_complet.clone(),
         role: u.role.clone(),
-        etablissement_id: u.etablissement_id.clone(),
+        etablissement_id: etab_id,
     }
 }
 
@@ -81,9 +102,14 @@ pub fn login(db: State<'_, DbConn>, req: LoginRequest) -> Result<serde_json::Val
 
     log_audit(&db, Some(&user.id), "LOGIN", "USER", Some(&user.id), None);
 
+    let info = {
+        let conn = db.lock()?;
+        user_to_info_with_conn(&conn, &user)
+    };
+
     Ok(api_response(Ok(LoginResponse {
         token: user.id.clone(),
-        user: user_to_info(&user),
+        user: info,
     })))
 }
 
@@ -110,5 +136,7 @@ pub fn get_me(db: State<'_, DbConn>, token: String) -> Result<serde_json::Value,
         }
     };
 
-    Ok(api_response(Ok(user_to_info(&user))))
+    let info = user_to_info_with_conn(&conn, &user);
+
+    Ok(api_response(Ok(info)))
 }

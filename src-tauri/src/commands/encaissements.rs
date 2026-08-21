@@ -3,7 +3,7 @@ use rusqlite::params;
 use serde_json::json;
 
 use crate::error::{AppError, api_response};
-use crate::db::{DbConn, bool_to_int, int_to_bool, now_iso};
+use crate::db::{DbConn, bool_to_int, now_iso};
 use crate::utils::{id::{generate_id, generate_receipt_number}, audit_logger::log_audit};
 
 #[tauri::command]
@@ -110,7 +110,7 @@ pub fn list_paiements(
             "montantOriginal": row.get::<_, Option<f64>>(15)?,
             "annule": annule_val != 0,
             "dateAnnulation": row.get::<_, Option<String>>(17)?,
-            "dateEncaissement": row.get::<_, String>(18)?,   // created_at
+            "dateEncaissement": row.get::<_, String>(18)?,
             "updatedAt": row.get::<_, String>(19)?,
             "eleveNom": row.get::<_, String>(20)?,
             "eleveMatricule": row.get::<_, String>(21)?,
@@ -136,8 +136,8 @@ pub fn list_paiements(
 #[tauri::command]
 pub fn create_paiement(
     db: State<'_, DbConn>,
-    _eleve_id: String,
-    _echeance_id: Option<String>,
+    eleve_id: String,
+    echeance_id: Option<String>,
     etablissement_id: String,
     annee_scolaire_id: Option<String>,
     user_id: String,
@@ -156,26 +156,94 @@ pub fn create_paiement(
     let id = generate_id();
     let numero_recu = generate_receipt_number(&conn);
 
-    // Déterminer l'année scolaire active si non fournie
-    let annee_id = match annee_scolaire_id {
-        Some(ref a) if !a.is_empty() => a.clone(),
-        _ => {
-            conn.query_row(
-                "SELECT id FROM AnneeScolaire WHERE etablissement_id = ? AND active = 1 LIMIT 1",
-                params![etablissement_id],
-                |row| row.get::<_, String>(0),
-            ).map_err(|_| AppError::Validation("Aucune année scolaire active pour cet établissement".into()))?
+    let eleve_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM Eleve WHERE id = ?",
+        params![eleve_id],
+        |r| r.get(0),
+    ).unwrap_or(false);
+
+    if !eleve_exists {
+        return Err(AppError::Validation("L'élève sélectionné n'existe pas dans la base de données locale. Veuillez le synchroniser ou rafraîchir.".into()));
+    }
+
+    let etab_id = if conn.query_row("SELECT COUNT(*) > 0 FROM Etablissement WHERE id = ?", params![etablissement_id], |r| r.get::<_, bool>(0)).unwrap_or(false) {
+        etablissement_id
+    } else {
+        conn.query_row("SELECT id FROM Etablissement LIMIT 1", [], |r| r.get::<_, String>(0)).unwrap_or(etablissement_id)
+    };
+
+    let mut valid_annee_id: Option<String> = None;
+    if let Some(ref a) = annee_scolaire_id {
+        if !a.trim().is_empty() && a != "undefined" && a != "null" {
+            if conn.query_row("SELECT COUNT(*) > 0 FROM AnneeScolaire WHERE id = ?", params![a], |r| r.get::<_, bool>(0)).unwrap_or(false) {
+                valid_annee_id = Some(a.clone());
+            }
         }
+    }
+    if valid_annee_id.is_none() {
+        valid_annee_id = conn.query_row(
+            "SELECT id FROM AnneeScolaire WHERE etablissement_id = ? AND active = 1 LIMIT 1",
+            params![etab_id],
+            |r| r.get::<_, String>(0),
+        ).ok();
+    }
+    if valid_annee_id.is_none() {
+        valid_annee_id = conn.query_row(
+            "SELECT id FROM AnneeScolaire WHERE etablissement_id = ? LIMIT 1",
+            params![etab_id],
+            |r| r.get::<_, String>(0),
+        ).ok();
+    }
+    if valid_annee_id.is_none() {
+        valid_annee_id = conn.query_row("SELECT id FROM AnneeScolaire LIMIT 1", [], |r| r.get::<_, String>(0)).ok();
+    }
+    let final_annee_id = match valid_annee_id {
+        Some(a) => a,
+        None => {
+            let new_annee_id = generate_id();
+            let year_lbl = format!("{}-{}", chrono::Datelike::year(&chrono::Utc::now()), chrono::Datelike::year(&chrono::Utc::now()) + 1);
+            conn.execute(
+                "INSERT INTO AnneeScolaire (id, libelle, etablissement_id, date_debut, date_fin, active, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
+                params![new_annee_id, year_lbl, etab_id, "2026-09-01", "2027-07-01", now],
+            )?;
+            new_annee_id
+        }
+    };
+
+    let valid_user_id = if !user_id.trim().is_empty() && user_id != "undefined" && user_id != "null" && conn.query_row("SELECT COUNT(*) > 0 FROM User WHERE id = ?", params![user_id], |r| r.get::<_, bool>(0)).unwrap_or(false) {
+        user_id
+    } else {
+        conn.query_row("SELECT id FROM User LIMIT 1", [], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "admin".to_string())
+    };
+
+    let ech_clean = match echeance_id {
+        Some(ref e) if !e.trim().is_empty() && e != "undefined" && e != "null" => {
+            if conn.query_row("SELECT COUNT(*) > 0 FROM Echeance WHERE id = ?", params![e], |r| r.get::<_, bool>(0)).unwrap_or(false) {
+                Some(e.clone())
+            } else {
+                None
+            }
+        }
+        _ => None,
     };
 
     let montant_affecte_val = montant_affecte.unwrap_or(montant);
     let devise_echeance_val = devise_echeance.unwrap_or_else(|| devise.clone());
 
+    // Insert payment record with echeance_id
     conn.execute(
         "INSERT INTO Paiement (id, eleve_id, echeance_id, etablissement_id, annee_scolaire_id, user_id, motif, montant, devise, montant_affecte, devise_echeance, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, annule, created_at, updated_at)
-         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 0, ?16, ?17)",
-        params![id, _eleve_id, etablissement_id, annee_id, user_id, motif, montant, devise, montant_affecte_val, devise_echeance_val, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, now, now],
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, ?17, ?17)",
+        params![id, eleve_id, ech_clean, etab_id, final_annee_id, valid_user_id, motif, montant, devise, montant_affecte_val, devise_echeance_val, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, now],
     )?;
+
+    // Update Echeance.montant_paye if echeance_id is provided
+    if let Some(ref ech_id) = ech_clean {
+        let _ = conn.execute(
+            "UPDATE Echeance SET montant_paye = montant_paye + ?, updated_at = ? WHERE id = ?",
+            params![montant_affecte_val, now, ech_id],
+        );
+    }
 
     drop(conn);
     log_audit(&db, None, "CREATE", "paiement", Some(&id), Some(&format!("n° recu={}, montant={}", numero_recu, montant)));
@@ -186,15 +254,15 @@ pub fn create_paiement(
                 p.user_id, p.motif, p.montant, p.devise, p.montant_affecte, p.devise_echeance,
                 p.mode_paiement, p.reference_paiement, p.taux_change, p.montant_original,
                 p.annule, p.date_annulation, p.created_at, p.updated_at,
-                TRIM(el.nom || ' ' || el.prenom) as eleve_nom,
-                el.matricule as eleve_matricule,
+                TRIM(COALESCE(el.nom, '') || ' ' || COALESCE(el.prenom, '')) as eleve_nom,
+                COALESCE(el.matricule, '—') as eleve_matricule,
                 COALESCE(c.nom, '—') as classe_nom,
-                u.nom_complet as user_nom_complet
+                COALESCE(u.nom_complet, 'Système') as user_nom_complet
          FROM Paiement p
-         JOIN Eleve el ON p.eleve_id = el.id
+         LEFT JOIN Eleve el ON p.eleve_id = el.id
          LEFT JOIN EleveClasse ec ON ec.eleve_id = el.id AND ec.statut = 'ACTIF'
          LEFT JOIN Classe c ON c.id = ec.classe_id
-         JOIN User u ON p.user_id = u.id
+         LEFT JOIN User u ON p.user_id = u.id
          WHERE p.id = ?",
         params![id],
         |row| {
@@ -222,7 +290,7 @@ pub fn create_paiement(
                 "eleveNom": row.get::<_, String>(20)?,
                 "eleveMatricule": row.get::<_, String>(21)?,
                 "eleveClasse": row.get::<_, String>(22)?,
-                "caissierNom": row.get::<_, String>(23)?,
+                "caissierNom": row.get::<_, Option<String>>(23)?.unwrap_or_else(|| "Système".to_string()),
             }))
         },
     )?;
@@ -230,7 +298,6 @@ pub fn create_paiement(
     Ok(api_response(Ok(result)))
 }
 
-// annuler_paiement et get_paiement sont également mis à jour avec les mêmes champs plats
 #[tauri::command]
 pub fn annuler_paiement(
     db: State<'_, DbConn>,
@@ -240,9 +307,9 @@ pub fn annuler_paiement(
 ) -> Result<serde_json::Value, AppError> {
     let conn = db.lock()?;
 
-    let (already_annule, _eleve_id, montant, devise, numero_recu): (bool, String, f64, String, String) = conn
+    let (already_annule, _eleve_id, montant, devise, numero_recu, echeance_id, montant_affecte_val): (bool, String, f64, String, String, Option<String>, Option<f64>) = conn
         .query_row(
-            "SELECT annule, eleve_id, montant, devise, numero_recu FROM Paiement WHERE id = ?",
+            "SELECT annule, eleve_id, montant, devise, numero_recu, echeance_id, montant_affecte FROM Paiement WHERE id = ?",
             params![id],
             |row| {
                 let annule_int: i32 = row.get(0)?;
@@ -252,6 +319,8 @@ pub fn annuler_paiement(
                     row.get::<_, f64>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<f64>>(6)?,
                 ))
             },
         )
@@ -267,6 +336,17 @@ pub fn annuler_paiement(
         "UPDATE Paiement SET annule = 1, date_annulation = ?, updated_at = ? WHERE id = ?",
         params![now, now, id],
     )?;
+
+    // Revert Echeance.montant_paye if linked to an echeance
+    if let Some(ref ech_id) = echeance_id {
+        if !ech_id.trim().is_empty() {
+            let m_affecte = montant_affecte_val.unwrap_or(montant);
+            let _ = conn.execute(
+                "UPDATE Echeance SET montant_paye = MAX(0, montant_paye - ?), updated_at = ? WHERE id = ?",
+                params![m_affecte, now, ech_id],
+            );
+        }
+    }
 
     let annulation_id = generate_id();
     conn.execute(

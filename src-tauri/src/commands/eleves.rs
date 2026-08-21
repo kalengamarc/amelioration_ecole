@@ -162,12 +162,29 @@ pub struct UpdateEleveInput {
 
 fn generate_matricule(conn: &rusqlite::Connection, etablissement_id: &str) -> Result<String, AppError> {
     let year = chrono::Utc::now().format("%Y").to_string();
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM Eleve WHERE etablissement_id = ? AND matricule LIKE ?",
-        params![etablissement_id, format!("ELV-{}-%", year)],
+    let prefix = format!("ELV-{}-", year);
+    
+    // Trouver le suffixe numérique maximum existant pour cette année
+    let max_num: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(CAST(SUBSTR(matricule, 10) AS INTEGER)), 0) FROM Eleve WHERE matricule LIKE ?",
+        params![format!("{}%", prefix)],
         |row| row.get(0),
-    )?;
-    Ok(format!("ELV-{}-{:04}", year, count + 1))
+    ).unwrap_or(0);
+
+    let mut next_num = max_num + 1;
+    loop {
+        let candidate = format!("ELV-{}-{:04}", year, next_num);
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM Eleve WHERE matricule = ?",
+            params![candidate],
+            |row| row.get(0),
+        ).unwrap_or(false);
+
+        if !exists {
+            return Ok(candidate);
+        }
+        next_num += 1;
+    }
 }
 
 fn fetch_inscriptions(conn: &rusqlite::Connection, eleve_id: &str) -> Result<Vec<InscriptionRef>, AppError> {
@@ -246,10 +263,10 @@ fn fetch_echeances(conn: &rusqlite::Connection, eleve_id: &str) -> Result<Vec<Ec
         SELECT
             fa.id,
             fa.montant,
-            COALESCE(SUM(p.montant_affecte), 0) as montant_paye,
+            COALESCE(SUM(COALESCE(p.montant_affecte, p.montant)), 0) as montant_paye,
             CASE
-                WHEN COALESCE(SUM(p.montant_affecte), 0) >= fa.montant THEN 'PAYE'
-                WHEN COALESCE(SUM(p.montant_affecte), 0) = 0 THEN 'EN_ATTENTE'
+                WHEN COALESCE(SUM(COALESCE(p.montant_affecte, p.montant)), 0) >= fa.montant THEN 'PAYE'
+                WHEN COALESCE(SUM(COALESCE(p.montant_affecte, p.montant)), 0) = 0 THEN 'EN_ATTENTE'
                 ELSE 'PARTIELLEMENT_PAYE'
             END as statut,
             fa.date_echeance,
@@ -257,8 +274,15 @@ fn fetch_echeances(conn: &rusqlite::Connection, eleve_id: &str) -> Result<Vec<Ec
             fa.devise
         FROM frais_applicables fa
         LEFT JOIN Paiement p ON p.eleve_id = ?1
-            AND p.motif = fa.libelle
-            AND p.annule = 0
+            AND COALESCE(p.annule, 0) = 0
+            AND (
+                p.echeance_id = fa.id
+                OR (
+                    (p.echeance_id IS NULL OR TRIM(p.echeance_id) = '')
+                    AND p.motif = fa.libelle
+                    AND UPPER(COALESCE(NULLIF(TRIM(p.devise), ''), 'CDF')) = UPPER(COALESCE(NULLIF(TRIM(fa.devise), ''), 'CDF'))
+                )
+            )
         GROUP BY fa.id
         ORDER BY fa.date_echeance
         "#
@@ -632,23 +656,39 @@ pub fn update_eleve(
             conn.execute(&sql, refs.as_slice())?;
         }
 
-       // Changement de classe (uniquement si la classe est différente de l'actuelle)
+       // Changement de classe (uniquement si la classe est différente de l'actuelle et existe)
         if let Some(new_classe) = &data.classe_id {
-            let already_in_class: bool = conn.query_row(
-                "SELECT COUNT(*) > 0 FROM EleveClasse WHERE eleve_id = ? AND classe_id = ? AND statut = 'ACTIF'",
-                params![id, new_classe],
-                |row| row.get(0),
-            )?;
+            if !new_classe.trim().is_empty() && new_classe != "undefined" && new_classe != "null" {
+                let classe_exists: bool = conn.query_row(
+                    "SELECT COUNT(*) > 0 FROM Classe WHERE id = ?",
+                    params![new_classe],
+                    |row| row.get(0),
+                ).unwrap_or(false);
 
-            if !already_in_class {
-                conn.execute(
-                    "UPDATE EleveClasse SET statut = 'TRANSFERE', date_sortie = ? WHERE eleve_id = ? AND statut = 'ACTIF'",
-                    params![now, id],
-                )?;
-                conn.execute(
-                    "INSERT INTO EleveClasse (eleve_id, classe_id, statut, date_inscription) VALUES (?1, ?2, 'ACTIF', ?3)",
-                    params![id, new_classe, now],
-                )?;
+                if classe_exists {
+                    // Mettre également à jour annee_scolaire_id sur la fiche élève d'après la classe
+                    if let Ok(new_annee_id) = conn.query_row("SELECT annee_scolaire_id FROM Classe WHERE id = ?", params![new_classe], |r| r.get::<_, String>(0)) {
+                        let _ = conn.execute("UPDATE Eleve SET annee_scolaire_id = ?, updated_at = ? WHERE id = ?", params![new_annee_id, now, id]);
+                    }
+
+                    let already_in_class: bool = conn.query_row(
+                        "SELECT COUNT(*) > 0 FROM EleveClasse WHERE eleve_id = ? AND classe_id = ? AND statut = 'ACTIF'",
+                        params![id, new_classe],
+                        |row| row.get(0),
+                    ).unwrap_or(false);
+
+                    if !already_in_class {
+                        conn.execute(
+                            "UPDATE EleveClasse SET statut = 'TRANSFERE', date_sortie = ? WHERE eleve_id = ? AND statut = 'ACTIF'",
+                            params![now, id],
+                        )?;
+                        conn.execute(
+                            "INSERT INTO EleveClasse (eleve_id, classe_id, statut, date_inscription, date_sortie) VALUES (?1, ?2, 'ACTIF', ?3, NULL) \
+                             ON CONFLICT(eleve_id, classe_id) DO UPDATE SET statut = 'ACTIF', date_inscription = ?3, date_sortie = NULL",
+                            params![id, new_classe, now],
+                        )?;
+                    }
+                }
             }
         }
 

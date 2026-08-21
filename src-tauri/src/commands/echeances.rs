@@ -522,9 +522,9 @@ fn load_lignes(
         }
     }
 
-    // ── 2. Paiements ciblés : (eleve, echeance_id | motif) -> montant ─────
+    // ── 2. Paiements ciblés : (eleve, echeance_id | motif, devise) -> montant ─────
     let mut par_echeance: HashMap<String, f64> = HashMap::new();
-    let mut par_motif: HashMap<(String, String), f64> = HashMap::new();
+    let mut par_motif: HashMap<(String, String, String), f64> = HashMap::new();
     if caps.paiement {
         let annule = if caps.paiement_annule {
             "AND COALESCE(p.annule, 0) = 0"
@@ -536,8 +536,9 @@ fn load_lignes(
         } else {
             "NULL"
         };
+        let col_dev = if caps.paiement_devise { "p.devise" } else { "'CDF'" };
         let sql = format!(
-            "SELECT p.eleve_id, {col_ech}, p.motif, p.montant FROM Paiement p \
+            "SELECT p.eleve_id, {col_ech}, p.motif, COALESCE(p.montant_affecte, p.montant), {col_dev} FROM Paiement p \
              WHERE p.eleve_id IN ({placeholders}) {annule}"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -547,10 +548,12 @@ fn load_lignes(
             let ech: Option<String> = row.get(1)?;
             let motif: Option<String> = row.get(2)?;
             let montant: f64 = row.get::<_, Option<f64>>(3)?.unwrap_or(0.0);
+            let dev = norm_devise(row.get::<_, Option<String>>(4)?);
+
             if let Some(id) = ech.filter(|v| !v.trim().is_empty()) {
                 *par_echeance.entry(id).or_insert(0.0) += montant;
             } else if let Some(m) = motif.filter(|v| !v.trim().is_empty()) {
-                let key = (eleve, norm_libelle(&m));
+                let key = (eleve, norm_libelle(&m), dev);
                 *par_motif.entry(key).or_insert(0.0) += montant;
             }
         }
@@ -576,14 +579,15 @@ fn load_lignes(
             let ech_id: String = row.get(0)?;
             let eleve_id: String = row.get(1)?;
             let libelle: String = row.get(2)?;
+            let fee_devise = norm_devise(row.get::<_, Option<String>>(6)?);
             avec_echeance.insert(eleve_id.clone());
 
-            // Paiement rattaché : par echeance_id, sinon par motif
+            // Paiement rattaché : par echeance_id, sinon par motif (stritement dans la même devise)
             let mut direct = par_echeance.get(&ech_id).copied().unwrap_or(0.0);
             if direct == 0.0 {
                 let nl = norm_libelle(&libelle);
-                for ((el, nm), montant) in par_motif.iter() {
-                    if el == &eleve_id && (nm == &nl || nm.contains(&nl) || nl.contains(nm)) {
+                for ((el, nm, dev), montant) in par_motif.iter() {
+                    if el == &eleve_id && dev == &fee_devise && (nm == &nl || nm.contains(&nl) || nl.contains(nm)) {
                         direct += montant;
                     }
                 }
@@ -592,7 +596,7 @@ fn load_lignes(
             brutes.push(RawLigne {
                 eleve_id,
                 libelle,
-                devise: norm_devise(row.get::<_, Option<String>>(6)?),
+                devise: fee_devise,
                 montant_du: row.get::<_, Option<f64>>(3)?.unwrap_or(0.0),
                 deja_paye: row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
                 date_echeance: row
@@ -631,17 +635,18 @@ fn load_lignes(
         while let Some(row) = rows.next()? {
             let eleve_id: String = row.get(0)?;
             let libelle: String = row.get(1)?;
+            let fee_devise = norm_devise(row.get::<_, Option<String>>(4)?);
             let nl = norm_libelle(&libelle);
             let mut direct = 0.0;
-            for ((el, nm), montant) in par_motif.iter() {
-                if el == &eleve_id && (nm == &nl || nm.contains(&nl) || nl.contains(&nm[..])) {
+            for ((el, nm, dev), montant) in par_motif.iter() {
+                if el == &eleve_id && dev == &fee_devise && (nm == &nl || nm.contains(&nl) || nl.contains(&nm[..])) {
                     direct += montant;
                 }
             }
             brutes.push(RawLigne {
                 eleve_id,
                 libelle,
-                devise: norm_devise(row.get::<_, Option<String>>(4)?),
+                devise: fee_devise,
                 montant_du: row.get::<_, Option<f64>>(2)?.unwrap_or(0.0),
                 deja_paye: 0.0,
                 date_echeance: row
@@ -670,7 +675,7 @@ fn load_lignes(
 
         let mut out: Vec<LigneFrais> = Vec::new();
 
-        for (devise, mut grp) in par_devise {
+        for (_devise, mut grp) in par_devise {
             grp.sort_by(|a, b| {
                 let da = a.date_echeance.as_deref().unwrap_or("9999");
                 let db = b.date_echeance.as_deref().unwrap_or("9999");
@@ -684,36 +689,22 @@ fn load_lignes(
             let mut total_sur_lignes = 0.0;
 
             for l in &grp {
-                let reste_brut = (l.montant_du - l.deja_paye).max(0.0);
-                let pris = l.direct.min(reste_brut);
-                total_affecte += pris;
-                total_sur_lignes += l.deja_paye;
-                payes.push(l.deja_paye + pris);
-                restes.push(reste_brut - pris);
-            }
-
-            // b) Reliquat non affecté DE CETTE DEVISE, imputé en FIFO
-            let encaisse_dev = encaisse
-                .get(&(eleve_id.clone(), devise.clone()))
-                .copied()
-                .unwrap_or(0.0);
-            let mut libre = (encaisse_dev - total_sur_lignes - total_affecte).max(0.0);
-
-            for i in 0..grp.len() {
-                if libre <= 0.0 {
-                    break;
-                }
-                let pris = libre.min(restes[i]);
-                payes[i] += pris;
-                restes[i] -= pris;
-                libre -= pris;
+                let deja = l.deja_paye.max(l.direct);
+                let paye_reel = deja.min(l.montant_du);
+                let reste_reel = (l.montant_du - paye_reel).max(0.0);
+                total_affecte += paye_reel;
+                total_sur_lignes += paye_reel;
+                payes.push(paye_reel);
+                restes.push(reste_reel);
             }
 
             for (i, l) in grp.into_iter().enumerate() {
+                let reste = restes[i];
+                let paye = payes[i];
                 // Tolérance d'un centime : évite un « Dû 0 » dû aux flottants
-                let etat = if restes[i] <= 0.009 {
+                let etat = if reste <= 0.009 {
                     "PAYE"
-                } else if payes[i] > 0.009 {
+                } else if paye > 0.009 {
                     "PARTIEL"
                 } else {
                     "DU"
@@ -722,8 +713,8 @@ fn load_lignes(
                     libelle: l.libelle,
                     devise: l.devise,
                     montant_du: l.montant_du,
-                    montant_paye: payes[i],
-                    reste: restes[i],
+                    montant_paye: paye,
+                    reste,
                     date_echeance: l.date_echeance,
                     etat: etat.to_string(),
                 });
@@ -761,6 +752,13 @@ pub fn list_echeances(
     page_size: Option<i64>,
 ) -> Result<serde_json::Value, AppError> {
     let conn = db.lock()?;
+
+    // Recalculer automatiquement les montants payés d'échéance à partir des paiements réels valides
+    let _ = conn.execute(
+        "UPDATE Echeance SET montant_paye = COALESCE((SELECT SUM(COALESCE(p.montant_affecte, p.montant)) FROM Paiement p WHERE p.echeance_id = Echeance.id AND COALESCE(p.annule, 0) = 0), 0) WHERE EXISTS (SELECT 1 FROM Paiement p WHERE p.echeance_id = Echeance.id)",
+        [],
+    );
+
     // Le schéma réel peut diverger du DDL de référence : on l'inspecte.
     let caps = SchemaCaps::detect(&conn);
 
