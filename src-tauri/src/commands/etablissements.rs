@@ -65,7 +65,7 @@ pub fn list_etablissements(
     let query = if let Some(ref _eid) = id {
         format!(
             "SELECT e.id, e.nom, e.\"type\", e.adresse, e.telephone, e.email, e.logo_url, e.couleur_principale, e.rccm, e.id_nat, e.devise, e.actif, e.created_at, e.updated_at,
-                    (SELECT COUNT(*) FROM Eleve el WHERE el.etablissement_id = e.id AND el.statut IN ('ACTIF', 'INSCRIT') AND EXISTS (SELECT 1 FROM EleveClasse ec JOIN Classe c ON c.id = ec.classe_id WHERE ec.eleve_id = el.id AND ec.statut = 'ACTIF' AND c.actif = 1 AND c.etablissement_id = e.id AND c.annee_scolaire_id = el.annee_scolaire_id)) as nb_eleves,
+                    (SELECT COUNT(*) FROM Eleve el WHERE el.etablissement_id = e.id AND el.statut IN ('ACTIF', 'INSCRIT')) as nb_eleves,
                     (SELECT COUNT(*) FROM Classe c WHERE c.etablissement_id = e.id AND c.actif = 1) as nb_classes,
                     (SELECT COUNT(*) FROM FraisScolaire WHERE etablissement_id = e.id) as nb_frais
              FROM Etablissement e
@@ -73,7 +73,7 @@ pub fn list_etablissements(
         )
     } else {
         "SELECT e.id, e.nom, e.\"type\", e.adresse, e.telephone, e.email, e.logo_url, e.couleur_principale, e.rccm, e.id_nat, e.devise, e.actif, e.created_at, e.updated_at,
-                (SELECT COUNT(*) FROM Eleve el WHERE el.etablissement_id = e.id AND el.statut IN ('ACTIF', 'INSCRIT') AND EXISTS (SELECT 1 FROM EleveClasse ec JOIN Classe c ON c.id = ec.classe_id WHERE ec.eleve_id = el.id AND ec.statut = 'ACTIF' AND c.actif = 1 AND c.etablissement_id = e.id AND c.annee_scolaire_id = el.annee_scolaire_id)) as nb_eleves,
+                (SELECT COUNT(*) FROM Eleve el WHERE el.etablissement_id = e.id AND el.statut IN ('ACTIF', 'INSCRIT')) as nb_eleves,
                 (SELECT COUNT(*) FROM Classe c WHERE c.etablissement_id = e.id AND c.actif = 1) as nb_classes,
                 (SELECT COUNT(*) FROM FraisScolaire WHERE etablissement_id = e.id) as nb_frais
          FROM Etablissement e

@@ -267,6 +267,10 @@ export async function getEleveStats(etablissementId?: string, anneeScolaireId?: 
   })
 }
 
+export async function pullStudentsByMatricules(matricules: string[]) {
+  return cmd('pull_students_by_matricules', { matricules })
+}
+
 // ── Frais Scolaires ─────────────────────────────────────────
 
 export async function listFrais(etablissementId?: string, anneeScolaireId?: string, actif?: boolean) {

@@ -227,12 +227,12 @@ pub fn create_paiement(
     };
 
     let peut_payer: bool = conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM Eleve el JOIN Etablissement et ON et.id = el.etablissement_id WHERE el.id = ?1 AND el.statut IN ('ACTIF', 'INSCRIT') AND el.etablissement_id = ?2 AND et.actif = 1 AND EXISTS (SELECT 1 FROM EleveClasse ec JOIN Classe c ON c.id = ec.classe_id WHERE ec.eleve_id = el.id AND ec.statut = 'ACTIF' AND c.actif = 1 AND c.etablissement_id = ?2 AND c.annee_scolaire_id = ?3))",
-        params![eleve_id, etab_id, final_annee_id],
+        "SELECT EXISTS (SELECT 1 FROM Eleve el JOIN Etablissement et ON et.id = el.etablissement_id WHERE el.id = ?1 AND el.statut IN ('ACTIF', 'INSCRIT') AND el.etablissement_id = ?2 AND et.actif = 1)",
+        params![eleve_id, etab_id],
         |r| r.get(0),
     ).unwrap_or(false);
     if !peut_payer {
-        return Err(AppError::Validation("Paiement impossible : l'élève doit être actif, rattaché à une classe active et dépendre d'un établissement actif.".into()));
+        return Err(AppError::Validation("Paiement impossible : l'élève doit être actif et dépendre d'un établissement actif.".into()));
     }
 
     let valid_user_id = if !user_id.trim().is_empty() && user_id != "undefined" && user_id != "null" && conn.query_row("SELECT COUNT(*) > 0 FROM User WHERE id = ?", params![user_id], |r| r.get::<_, bool>(0)).unwrap_or(false) {

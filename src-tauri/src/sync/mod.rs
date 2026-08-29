@@ -155,12 +155,17 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
     let _ = conn.execute_batch("PRAGMA foreign_keys=OFF;");
 
-    let _ = conn.execute(
+    let audit_fix = conn.execute(
         "UPDATE \"AuditLog\" SET user_id = NULL \
          WHERE user_id IS NOT NULL \
            AND user_id NOT IN (SELECT id FROM \"User\");",
         [],
     );
+    if let Ok(count) = audit_fix {
+        if count > 0 {
+            eprintln!("[SYNC] Corrigé {} AuditLog avec user_id invalide", count);
+        }
+    }
 
     let supabase_url: String = match conn.query_row(
         "SELECT valeur FROM ConfigSysteme WHERE cle = 'SUPABASE_URL'",
@@ -296,7 +301,9 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         }
 
                         total_pulled += count;
-                        if count < page_size || status_code == 200 {
+                        // Continuer tant qu'on reçoit une page complète (count == page_size)
+                        // Arrêter si la page est incomplète (count < page_size) ou si status 416
+                        if count < page_size || status_code == 416 {
                             break;
                         }
                         offset += page_size;
@@ -312,6 +319,16 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
         if let Some(stat) = stats.get_mut(t.name) {
             stat.pulled = total_pulled;
+        }
+        // Log spécifique pour TuteurEleve, Eleve et EleveClasse
+        if t.name == "TuteurEleve" && total_pulled > 0 {
+            eprintln!("[SYNC] Récupéré {} relations TuteurEleve depuis le serveur", total_pulled);
+        }
+        if t.name == "Eleve" && total_pulled > 0 {
+            eprintln!("[SYNC] Récupéré {} élèves depuis le serveur", total_pulled);
+        }
+        if t.name == "EleveClasse" && total_pulled > 0 {
+            eprintln!("[SYNC] Récupéré {} inscriptions EleveClasse depuis le serveur", total_pulled);
         }
     }
 
@@ -873,6 +890,12 @@ fn filter_orphan_rows(
                         .and_then(|v| v.as_str())
                         .unwrap_or("?")
                         .to_string();
+                    let row_name = row.get("nom")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| row.get("matricule").and_then(|v| v.as_str()))
+                        .unwrap_or("?")
+                        .to_string();
+                    eprintln!("[SYNC] Élève rejeté: {} (ID: {}) - FK manquante: {}", row_name, row_id, fk);
                     removed.push((row_id, fk.to_string()));
                     false
                 }

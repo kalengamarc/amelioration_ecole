@@ -35,6 +35,7 @@ pub fn run() {
             commands::eleves::update_eleve,
             commands::eleves::delete_eleve,
             commands::eleves::get_eleve_stats,
+            commands::eleves::pull_students_by_matricules,
             // Annees scolaires
             commands::annees_scolaires::list_annees_scolaires,
             commands::annees_scolaires::create_annee_scolaire,

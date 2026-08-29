@@ -411,7 +411,7 @@ pub fn list_eleves(
     if statut.as_deref() != Some("TRANSFERE") {
         conditions.push("e.statut IN ('ACTIF', 'INSCRIT')".into());
         conditions.push("EXISTS (SELECT 1 FROM Etablissement ea WHERE ea.id = e.etablissement_id AND ea.actif = 1)".into());
-        conditions.push("EXISTS (SELECT 1 FROM EleveClasse eca JOIN Classe cca ON cca.id = eca.classe_id WHERE eca.eleve_id = e.id AND eca.statut = 'ACTIF' AND cca.actif = 1 AND cca.etablissement_id = e.etablissement_id AND cca.annee_scolaire_id = e.annee_scolaire_id)".into());
+        // Suppression de la condition exigeant une classe active pour afficher tous les élèves
     }
 
     if let Some(ref v) = etablissement_id {
@@ -801,5 +801,93 @@ pub fn get_eleve_stats(
         "actifs": actifs,
         "retard": 0,
         "nouveaux": nouveaux,
+    }))
+}
+
+#[tauri::command]
+pub fn pull_students_by_matricules(
+    db: State<'_, DbConn>,
+    matricules: Vec<String>,
+) -> Result<serde_json::Value, AppError> {
+    let conn = db.lock()?;
+
+    // Charger la configuration Supabase
+    let supabase_url = std::env::var("SUPABASE_URL").map_err(|_| AppError::Internal("SUPABASE_URL non défini".into()))?;
+    let supabase_key = std::env::var("SUPABASE_KEY").map_err(|_| AppError::Internal("SUPABASE_KEY non défini".into()))?;
+
+    let client = reqwest::blocking::Client::new();
+    let mut pulled_count = 0;
+    let mut errors: Vec<String> = vec![];
+
+    // Récupérer les élèves par lots de 50 matricules
+    for chunk in matricules.chunks(50) {
+        let matricule_filter = chunk.iter()
+            .map(|m| format!("matricule.eq.{}", m))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let url = format!("{}/rest/v1/Eleve?{}", supabase_url, matricule_filter);
+
+        match client.get(&url)
+            .header("apikey", &supabase_key)
+            .header("Authorization", &format!("Bearer {}", supabase_key))
+            .send()
+        {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    if let Ok(students) = resp.json::<Vec<serde_json::Value>>() {
+                        for student in students {
+                            if let Some(obj) = student.as_object() {
+                                let id = obj.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                                let matricule = obj.get("matricule").and_then(|v| v.as_str()).unwrap_or("");
+                                let nom = obj.get("nom").and_then(|v| v.as_str()).unwrap_or("");
+                                let prenom = obj.get("prenom").and_then(|v| v.as_str()).unwrap_or("");
+                                let sexe = obj.get("sexe").and_then(|v| v.as_str()).unwrap_or("M");
+                                let date_naissance = obj.get("date_naissance").and_then(|v| v.as_str());
+                                let lieu_naissance = obj.get("lieu_naissance").and_then(|v| v.as_str());
+                                let statut = obj.get("statut").and_then(|v| v.as_str()).unwrap_or("INSCRIT");
+                                let etablissement_id = obj.get("etablissement_id").and_then(|v| v.as_str());
+                                let annee_scolaire_id = obj.get("annee_scolaire_id").and_then(|v| v.as_str());
+                                let created_at = obj.get("created_at").and_then(|v| v.as_str());
+                                let updated_at = obj.get("updated_at").and_then(|v| v.as_str());
+
+                                // Vérifier si l'élève existe déjà
+                                let exists: bool = conn.query_row(
+                                    "SELECT COUNT(*) > 0 FROM Eleve WHERE matricule = ?",
+                                    params![matricule],
+                                    |r| r.get(0),
+                                ).unwrap_or(false);
+
+                                if !exists {
+                                    if let (Some(etab_id), Some(annee_id)) = (etablissement_id, annee_scolaire_id) {
+                                        match conn.execute(
+                                            "INSERT INTO Eleve (id, matricule, nom, prenom, sexe, date_naissance, lieu_naissance, statut, etablissement_id, annee_scolaire_id, created_at, updated_at)
+                                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                                            params![id, matricule, nom, prenom, sexe, date_naissance, lieu_naissance, statut, etab_id, annee_id, created_at, updated_at],
+                                        ) {
+                                            Ok(_) => pulled_count += 1,
+                                            Err(e) => errors.push(format!("{}: {}", matricule, e)),
+                                        }
+                                    } else {
+                                        errors.push(format!("{}: etablissement_id ou annee_scolaire_id manquant", matricule));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    errors.push(format!("Erreur HTTP: {}", resp.status()));
+                }
+            }
+            Err(e) => errors.push(format!("Erreur réseau: {}", e)),
+        }
+    }
+
+    drop(conn);
+
+    Ok(serde_json::json!({
+        "success": true,
+        "pulled": pulled_count,
+        "errors": errors
     }))
 }

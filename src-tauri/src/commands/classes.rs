@@ -106,8 +106,11 @@ pub fn list_eleves_sans_classe(
           WHERE NOT EXISTS (
                     SELECT 1
                       FROM EleveClasse ec
+                      JOIN Classe c ON c.id = ec.classe_id
                      WHERE ec.eleve_id = e.id
                        AND ec.statut = 'ACTIF'
+                       AND c.actif = 1
+                       AND c.annee_scolaire_id = e.annee_scolaire_id
                 )
             AND {}
           ORDER BY e.nom, e.prenom, e.matricule"#,
@@ -132,6 +135,7 @@ pub fn list_eleves_sans_classe(
             "statut": row.get::<_, String>(6)?,
         }))
     })?;
+
     let eleves: Vec<serde_json::Value> = rows.collect::<Result<Vec<_>, _>>()?;
     let count = eleves.len();
 

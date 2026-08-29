@@ -101,7 +101,7 @@ fn column_exists(conn: &rusqlite::Connection, table: &str, column: &str) -> bool
 
 /// `Eleve.statut` est accentué dans le schéma ; un import a pu produire
 /// l'autre graphie. On exclut les deux.
-const EXCLURE_TRANSFERES: &str = "e.statut IN ('ACTIF', 'INSCRIT') AND EXISTS (SELECT 1 FROM Etablissement ea WHERE ea.id = e.etablissement_id AND ea.actif = 1) AND EXISTS (SELECT 1 FROM EleveClasse eca JOIN Classe cca ON cca.id = eca.classe_id WHERE eca.eleve_id = e.id AND eca.statut = 'ACTIF' AND cca.actif = 1 AND cca.etablissement_id = e.etablissement_id AND cca.annee_scolaire_id = e.annee_scolaire_id)";
+const EXCLURE_TRANSFERES: &str = "e.statut IN ('ACTIF', 'INSCRIT') AND EXISTS (SELECT 1 FROM Etablissement ea WHERE ea.id = e.etablissement_id AND ea.actif = 1)";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Rapport financier

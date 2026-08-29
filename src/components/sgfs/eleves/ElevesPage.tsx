@@ -54,6 +54,7 @@ export default function ElevesPage() {
   const [year, setYear] = useState('')
   const [classe, setClasse] = useState('')
   const [search, setSearch] = useState('')
+  const [filterNoClass, setFilterNoClass] = useState(false)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -110,12 +111,27 @@ export default function ElevesPage() {
         page,
         pageSize: 15,
       })
-      setStudents(res?.data ?? [])
-      setTotal(res?.pagination?.total ?? 0)
-      setTotalPages(res?.pagination?.totalPages ?? 1)
+      let students = res?.data ?? []
+      // Filtrer les élèves sans classe active si demandé
+      if (filterNoClass) {
+        students = students.filter(s => {
+          const inscriptions = s.inscriptions || s.classes || []
+          // Vérifier s'il y a une inscription avec statut ACTIF et une classe valide
+          const hasActiveClass = inscriptions.some((x: any) => {
+            const isActive = x.statut === 'ACTIF'
+            const hasClasseId = x.classe_id && x.classe_id.length > 0
+            const hasClasseObject = x.classe && x.classe.id && x.classe.id.length > 0
+            return isActive && (hasClasseId || hasClasseObject)
+          })
+          return !hasActiveClass
+        })
+      }
+      setStudents(students)
+      setTotal(filterNoClass ? students.length : (res?.pagination?.total ?? 0))
+      setTotalPages(filterNoClass ? Math.ceil(students.length / 15) : (res?.pagination?.totalPages ?? 1))
     } catch (e: any) { toast.error(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
-  }, [user, role, userEtabId, school, year, classe, search, page])
+  }, [user, role, userEtabId, school, year, classe, search, page, filterNoClass])
 
   useEffect(() => { if (user) fetchSchools() }, [user, fetchSchools])
   useEffect(() => { fetchYears() }, [fetchYears])
@@ -248,7 +264,7 @@ export default function ElevesPage() {
 
       {/* ── BARRE DE RECHERCHE ET FILTRES ── */}
       <Card className="rounded-2xl border-stone-200/80 shadow-sm">
-        <CardContent className="grid gap-3 p-4 md:grid-cols-4">
+        <CardContent className="grid gap-3 p-4 md:grid-cols-5">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
             <Input className="pl-9 rounded-xl border-stone-200 font-medium" placeholder="Rechercher nom, prénom, matricule..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
@@ -265,6 +281,13 @@ export default function ElevesPage() {
             <SelectTrigger className="rounded-xl border-stone-200 font-medium"><SelectValue placeholder="Classe" /></SelectTrigger>
             <SelectContent className="rounded-xl"><SelectItem value="all">Toutes les classes</SelectItem>{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
           </Select>
+          <Button
+            variant={filterNoClass ? "default" : "outline"}
+            onClick={() => { setFilterNoClass(!filterNoClass); setPage(1) }}
+            className={filterNoClass ? "bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold" : "rounded-xl border-stone-200 font-medium"}
+          >
+            {filterNoClass ? "✓ Sans classe" : "Sans classe"}
+          </Button>
         </CardContent>
       </Card>
 
@@ -273,6 +296,7 @@ export default function ElevesPage() {
         <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
           <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
             <Users className="h-5 w-5 text-amber-600" /> Total : {total} élève(s) inscrit(s)
+            {filterNoClass && <Badge className="bg-rose-600 text-white ml-2">Sans classe active</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -518,7 +542,7 @@ export default function ElevesPage() {
       <Dialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
         <DialogContent className="rounded-3xl border border-stone-200 p-6 shadow-2xl max-w-md">
           <DialogHeader><DialogTitle className="text-lg font-bold text-[#0c241f]">Archiver la fiche élève ?</DialogTitle></DialogHeader>
-          <p className="text-sm text-stone-600 font-medium mt-1">Voulez-vous archiver la fiche de <b className="text-stone-900">{deleteTarget?.nom} {deleteTarget?.prenom}</b> ? L’historique financier et les reçus seront conservés.</p>
+          <p className="text-sm text-stone-600 font-medium mt-1">Voulez-vous archiver la fiche de <b className="text-stone-900">{deleteTarget?.nom} {deleteTarget?.prenom}</b> ? L'historique financier et les reçus seront conservés.</p>
           <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDeleteTarget(null)}>Annuler</Button><Button variant="destructive" className="rounded-xl font-bold" disabled={busy} onClick={handleDelete}>{busy ? 'Traitement...' : 'Archiver'}</Button></div>
         </DialogContent>
       </Dialog>
