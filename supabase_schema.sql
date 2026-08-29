@@ -161,6 +161,9 @@ CREATE TABLE IF NOT EXISTS "EleveClasse" (
     PRIMARY KEY (eleve_id, classe_id)
 );
 CREATE INDEX IF NOT EXISTS idx_eleve_classe_classe_statut ON "EleveClasse"(classe_id, statut);
+-- Un élève ne peut avoir qu'une seule inscription active à la fois.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_eleve_classe_one_active_per_eleve
+    ON "EleveClasse"(eleve_id) WHERE statut = 'ACTIF';
 
 -- ============= FRAIS SCOLAIRES =============
 CREATE TABLE IF NOT EXISTS "FraisScolaire" (

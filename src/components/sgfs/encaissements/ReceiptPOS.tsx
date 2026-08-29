@@ -4,7 +4,6 @@ import filigram from '@/assets/gramme.png'
 import { Printer, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
-import Barcode from 'react-barcode'
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Types
@@ -49,7 +48,7 @@ export interface PosReceiptData {
    * Devise des montants de situation ci-dessus.
    *
    * ⚠️ Distincte de `devise`, qui est celle du VERSEMENT. Un parent peut
-   * payer 80 USD sur un compte dont la dette est en CDF : étiqueter
+   * payer 80 USD sur un compte dont la dette est en CDF : étiquetter
    * « 20 000 » avec la devise du paiement affiche « 20 000 USD ».
    */
   deviseSituation?: string | null
@@ -282,41 +281,64 @@ function printPosReceipt(
 <head>
   <meta charset="utf-8" />
   <title>Reçu ${escapeHtml(receipt.numeroRecu)}</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
   <style>
     @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; }
     html, body {
-      width: 80mm; margin: 0; padding: 0; background: #fff;
-      background-image: url(${filigram.src}); background-size: 60%;
-      background-repeat: no-repeat; background-position: center; color: #000;
+      width: 100%; margin: 0; padding: 0; background: #fff; color: #000;
     }
-    body { font-family: "Courier New", monospace; font-size: 11px; line-height: 1.35; }
-    .ticket { width: 80mm; padding: 4mm; overflow: hidden; background: #ffffffa1; }
+    body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1; }
+    .ticket { 
+      width: 70mm; 
+      padding: 4mm 4mm 2mm 4mm;  /* ← padding gauche = droite = 4mm */
+      overflow: hidden; 
+      background: #fff;
+      position: relative;
+      margin: 0 auto;  /* ← centrage horizontal sur la page */
+    }
+    .ticket::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: url('${filigram.src}');
+      background-size: 50mm auto;
+      background-position: center;
+      background-repeat: no-repeat;
+      opacity: 0.12;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .ticket > * {
+      position: relative;
+      justify-content : center;
+      z-index: 1;
+    }
     .center { text-align: center; }
-    h1 { font-size: 12px; line-height: 1.15; margin: 0; text-transform: uppercase; }
-    p { margin: 1mm 0; }
+    h1 { font-size: 10px; line-height: 1; margin: 0; text-transform: uppercase; font-weight: bold; }
+    p { margin: 0.8mm 0; }
     hr { border: 0; border-top: 1px dashed #000; margin: 1mm 0; }
-    .line { display: flex; justify-content: space-between; gap: 2mm; margin: 1mm 0; }
-    .line b { max-width: 46mm; text-align: right; overflow-wrap: anywhere; }
-    .student { font-weight: bold; text-transform: uppercase; }
+    .line { display: flex; justify-content: space-between; gap: 1mm; margin: 0.8mm 0; }
+    .line b { max-width: 40mm; text-align: right; overflow-wrap: anywhere; }
+    .student { font-weight: bold; text-transform: uppercase; font-size: 12px; }
     .amount { display: flex; justify-content: space-between; align-items: flex-end;
-              font-size: 12px; font-weight: bold; }
-    .amount strong { font-size: 12px; }
-    .section-title { font-size: 10px; font-weight: bold; letter-spacing: .5px;
-                     text-align: center; margin-bottom: 1.2mm; }
-    /* Encadré du solde : lisible même sur papier thermique */
+              font-size: 8px; font-weight: bold; }
+    .amount strong { font-size: 8px; }
+    .section-title { font-size: 8px; font-weight: bold; letter-spacing: .5px;
+                     text-align: center; margin-bottom: 1mm; }
     .solde { display: flex; justify-content: space-between; align-items: center;
-             border: 1.5px solid #000; padding: 1.2mm 1.2mm; margin: 1.5mm 0 1mm;
-             font-weight: bold; font-size: 11px; }
-    .solde strong { font-size: 12px; }
+             border: 1px solid #000; padding: 1mm; margin: 1mm 0;
+             font-weight: bold; font-size: 8px; }
+    .solde strong { font-size: 8px; }
     .solde-ok { border-style: dashed; }
-    .detail { font-size: 10px; text-align: center; margin: 1mm 0;
+    .detail { font-size: 8px; text-align: center; margin: 0.8mm 0;
               padding: 1mm; border: 1px dotted #000; overflow-wrap: anywhere; }
-    .cancelled { display: inline-block; border: 2px solid #000; padding: 1mm 2mm;
-                 margin-top: 2mm; font-weight: bold; }
-    .footer { text-align: center; font-size: 10px; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    .cancelled { display: inline-block; border: 2px solid #000; padding: 1mm 1mm;
+                 margin-top: 1.5mm; font-weight: bold; }
+    .footer { text-align: center; font-size: 8px; }
+    @media print { 
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { margin: 0; }
+    }
   </style>
 </head>
 <body>
@@ -325,18 +347,18 @@ function printPosReceipt(
     <h1>${escapeHtml(school?.nom || 'SGFS-ME')}</h1>
     <p>${escapeHtml(school?.siteWeb || ETAB_SITE_WEB)}</p>
     ${school?.adresse ? `<p>${escapeHtml(school.adresse)}</p>` : ''}
-    ${school?.telephone ? `<p>Tél. : ${escapeHtml(school.telephone)}</p>` : ''}
+    ${school?.telephone ? `<p>Tél: ${escapeHtml(school.telephone)}</p>` : ''}
   </header>
   <hr />
   <div class="center">
-    <b>REÇU DE PAIEMENT</b>
+    <b>REÇU PAIEMENT</b>
     ${annule ? '<div class="cancelled">ANNULÉ</div>' : ''}
   </div>
   ${anneeLbl ? `<div class="center">${escapeHtml(anneeLbl)}</div>` : ''}
   <hr />
-  <div class="line"><span>N° reçu</span><b>${escapeHtml(receipt.numeroRecu)}</b></div>
+  <div class="line"><span>N°</span><b>${escapeHtml(receipt.numeroRecu)}</b></div>
   <div class="line"><span>Date</span><b>${escapeHtml(dateTime(receipt.dateEncaissement))}</b></div>
-  <div class="line"><span>Caissier</span><b>${escapeHtml(receipt.caissierNom || 'Système')}</b></div>
+  <div class="line"><span>Caissier</span><b>${escapeHtml(receipt.caissierNom || 'Sys')}</b></div>
   <hr />
   <p>ÉLÈVE</p><p class="student">${escapeHtml(receipt.eleveNom)}</p>
   <div class="line"><span>Classe</span><b>${escapeHtml(receipt.eleveClasse)}</b></div>
@@ -345,31 +367,22 @@ function printPosReceipt(
   <div class="line"><span>Mode</span><b>${escapeHtml(paymentLabel(receipt.modePaiement))}</b></div>
   ${reference}${taux}
   <hr />
-  <div class="amount"><span>MONTANT REÇU</span><strong>${escapeHtml(money(receipt.montant, devise))}</strong></div>
+  <div class="amount"><span>REÇU</span><strong>${escapeHtml(money(receipt.montant, devise))}</strong></div>
   ${situation}
+  ${receipt.detailReste ? `<div class="detail">Reste: ${escapeHtml(receipt.detailReste)}</div>` : ''}
+  ${receipt.prochaineEcheance ? `<div class="line"><span>Prochaine échéance</span><b>${escapeHtml(dateOnly(receipt.prochaineEcheance))}</b></div>` : ''}
   <hr />
   <footer class="footer">
-    ${etabParams?.mentionsLegales ? `<p style="font-size:9px;margin-bottom:1mm;">${escapeHtml(etabParams.mentionsLegales)}</p>` : ''}
-    <p style="font-size:9px;margin-bottom:1mm;font-weight:bold;">NB: L'argent payé n'est pas remboursable.</p>
-    <p><b>Merci pour votre paiement.</b></p>
-    <p>Conservez ce reçu comme preuve de paiement.</p>
-    <p>${escapeHtml(etabParams?.piedPageRecu || 'Document généré électroniquement')}</p>
+    ${etabParams?.mentionsLegales ? `<p style="font-size:9px;margin-bottom:0.5mm;">${escapeHtml(etabParams.mentionsLegales)}</p>` : ''}
+    <p style="font-size:9px;margin-bottom:0.5mm;font-weight:bold;">NB: L'argent payé n'est pas remboursable.</p>
+    <p style="font-size:9px;margin-bottom:0.5mm;">Merci pour votre paiement.</p>
+    <p style="font-size:9px;margin-bottom:0.5mm;">Conservez ce reçu comme preuve de paiement.</p>
+    <p style="font-size:9px;">${escapeHtml(etabParams?.piedPageRecu || 'Document généré électroniquement')}</p>
   </footer>
-  <div class="center" style="margin-top: 2mm;">
-    <svg id="barcode"></svg>
-  </div>
 </main>
 <script>
   window.onload = function () {
-    JsBarcode("#barcode", "${escapeHtml(receipt.numeroRecu)}|${escapeHtml(receipt.eleveNom || '')}|${escapeHtml(receipt.eleveClasse || '')}|${escapeHtml(String(receipt.montant || ''))}|${escapeHtml(receipt.devise || '')}", {
-      format: "CODE128",
-      width: 1,
-      height: 40,
-      displayValue: true,
-      fontSize: 8,
-      margin: 0
-    });
-    setTimeout(function () { window.print(); }, 200);
+    setTimeout(function () { window.print(); }, 1000);
   };
   window.onafterprint = function () { window.parent.postMessage('close-iframe', '*'); };
 <\/script>
@@ -605,20 +618,6 @@ export function ReceiptPOS({
           <p className="mt-2">{etabParams?.piedPageRecu || 'Document généré électroniquement'}</p>
         </footer>
 
-        {/* Barcode scannable avec informations de l'élève */}
-        <div className="mt-1 flex justify-center">
-          <Barcode
-            value={`${receipt.numeroRecu}|${receipt.eleveNom || ''}|${receipt.eleveClasse || ''}|${receipt.montant || ''}|${receipt.devise || ''}`}
-            width={1}
-            height={40}
-            fontSize={8}
-            margin={0}
-            displayValue={true}
-            textPosition="bottom"
-            textMargin={2}
-          />
-        </div>
-
         <div className="no-print mt-1 flex justify-center gap-2 border-t pt-3">
           <Button variant="outline" size="sm" onClick={onClose}>
             <X className="mr-1 h-4 w-4" /> Fermer
@@ -628,7 +627,6 @@ export function ReceiptPOS({
             onClick={() => printPosReceipt(receipt, school, etabParams)}
             className="bg-[#0f0e50f1] text-white"
           >
-            <Printer className="mr-1 h-4 w-4" />
             Imprimer
           </Button>
         </div>

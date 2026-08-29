@@ -1,0 +1,1 @@
+Get-CimInstance Win32_Process -Filter "name = 'node.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress | Set-Content -Encoding utf8 "C:\Users\kayem\Downloads\essai_app\node_processes_full.json"

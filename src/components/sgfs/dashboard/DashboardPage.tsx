@@ -361,29 +361,34 @@ export default function DashboardPage() {
       }
 
       const result = await tc.getDashboardStats(etabId, anneeId)
-      const d = result?.data
+      // Gérer différents formats de réponse Tauri
+      const d = result?.data ?? result ?? null
       if (!d) {
         setError('Aucune donnée disponible')
         return
       }
 
       const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+      
+      // Helper pour extraire des données en gérant snake_case et camelCase
+      const get = (obj: any, camel: string, snake: string) => obj?.[camel] ?? obj?.[snake]
+      
       const clean: DashboardData = {
-        encaissementsParDevise: arr<DeviseMontant>(d.encaissementsParDevise),
-        depensesParDevise: arr<DeviseMontant>(d.depensesParDevise),
-        beneficeParDevise: arr<DeviseMontant>(d.beneficeParDevise),
-        detteParDevise: arr<DetteDevise>(d.detteParDevise),
-        encaissementsParMois: arr<MoisDeviseMontant>(d.encaissementsParMois),
-        repartitionParMotif: arr<MotifDeviseMontant>(d.repartitionParMotif),
-        repartitionParMode: arr<ModeDeviseMontant>(d.repartitionParMode),
-        comparaisonEcoles: arr<EcoleDeviseMontant>(d.comparaisonEcoles),
-        nombreEleves: d.nombreEleves ?? { total: 0, parEcole: [] },
-        elevesEnOrdre: Number(d.elevesEnOrdre ?? 0),
-        elevesEnRetard: Number(d.elevesEnRetard ?? 0),
-        margeRetardMoyenne: Number(d.margeRetardMoyenne ?? 0),
-        topElevesEnRetard: arr<EleveRetard>(d.topElevesEnRetard),
-        bonsPayeurs: arr<any>(d.bonsPayeurs),
-        devises: arr<string>(d.devises),
+        encaissementsParDevise: arr<DeviseMontant>(get(d, 'encaissementsParDevise', 'encaissements_par_devise')),
+        depensesParDevise: arr<DeviseMontant>(get(d, 'depensesParDevise', 'depenses_par_devise')),
+        beneficeParDevise: arr<DeviseMontant>(get(d, 'beneficeParDevise', 'benefice_par_devise')),
+        detteParDevise: arr<DetteDevise>(get(d, 'detteParDevise', 'dette_par_devise')),
+        encaissementsParMois: arr<MoisDeviseMontant>(get(d, 'encaissementsParMois', 'encaissements_par_mois')),
+        repartitionParMotif: arr<MotifDeviseMontant>(get(d, 'repartitionParMotif', 'repartition_par_motif')),
+        repartitionParMode: arr<ModeDeviseMontant>(get(d, 'repartitionParMode', 'repartition_par_mode')),
+        comparaisonEcoles: arr<EcoleDeviseMontant>(get(d, 'comparaisonEcoles', 'comparaison_ecoles')),
+        nombreEleves: get(d, 'nombreEleves', 'nombre_eleves') ?? { total: 0, parEcole: [] },
+        elevesEnOrdre: Number(get(d, 'elevesEnOrdre', 'eleves_en_ordre') ?? 0),
+        elevesEnRetard: Number(get(d, 'elevesEnRetard', 'eleves_en_retard') ?? 0),
+        margeRetardMoyenne: Number(get(d, 'margeRetardMoyenne', 'marge_retard_moyenne') ?? 0),
+        topElevesEnRetard: arr<EleveRetard>(get(d, 'topElevesEnRetard', 'top_eleves_en_retard')),
+        bonsPayeurs: arr<any>(get(d, 'bonsPayeurs', 'bons_payeurs')),
+        devises: arr<string>(get(d, 'devises', 'devises')),
       }
       setData(clean)
       setDeviseActive((cur) => (cur && clean.devises.includes(cur) ? cur : clean.devises[0] ?? ''))

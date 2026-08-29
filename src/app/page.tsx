@@ -25,6 +25,7 @@ export default function Home() {
   const { isAuthenticated, currentPage, sidebarOpen, user, currentEtablissement, setCurrentEtablissement, setEtabParams } = useAppStore()
   const [loading, setLoading] = useState(true)
   const [etablissements, setEtablissements] = useState<any[]>([])
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'success' | 'offline'>('idle')
   
   // --- ÉTAT POUR GÉRER ACCUEIL / LOGIN ---
   const [showLogin, setShowLogin] = useState(false)
@@ -107,32 +108,56 @@ export default function Home() {
       .catch(() => {})
   }, [isAuthenticated, user, etablissements])
 
-  // --- SYNCHRONISATION AUTOMATIQUE EN ARRIÈRE-PLAN (TOUTES LES 5 MINUTES) ---
+  // --- SYNCHRONISATION AUTOMATIQUE EN ARRIÈRE-PLAN ---
   useEffect(() => {
     if (!isAuthenticated) return
 
+    let syncInFlight = false
+    let changeTimer: ReturnType<typeof setTimeout> | undefined
+
     const runAutoSync = async () => {
+      if (syncInFlight) return
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setSyncState('offline')
+        return
+      }
+      syncInFlight = true
+      setSyncState('syncing')
       try {
         const statusRes = await tc.syncStatus()
         const status = statusRes?.data ?? statusRes ?? {}
         if (status.configured) {
-          console.log('[Auto-Sync] Synchronisation automatique en cours...')
           await tc.syncPush()
-          console.log('[Auto-Sync] Synchronisation automatique réussie.')
+          setSyncState('success')
+          window.dispatchEvent(new Event('sync-completed'))
+        } else {
+          setSyncState('idle')
         }
-      } catch (err) {
-        console.warn('[Auto-Sync] Erreur en arrière-plan :', err)
+      } catch {
+        setSyncState('offline')
+        // Une coupure réseau conserve les données locales ; le prochain essai reprend.
+      } finally {
+        syncInFlight = false
       }
     }
 
-    // Premier déclenchement après 30 secondes
+    const scheduleAfterChange = () => {
+      if (changeTimer) clearTimeout(changeTimer)
+      // Regrouper plusieurs écritures successives en une seule synchronisation.
+      changeTimer = setTimeout(runAutoSync, 5000)
+    }
+
     const initialTimer = setTimeout(runAutoSync, 30000)
-    // Boucle toutes les 10 minutes en arrière-plan
-    const interval = setInterval(runAutoSync, 1 * 60 * 1000)
+    const interval = setInterval(runAutoSync, 5 * 60 * 1000)
+    window.addEventListener('local-data-changed', scheduleAfterChange)
+    window.addEventListener('online', runAutoSync)
 
     return () => {
       clearTimeout(initialTimer)
       clearInterval(interval)
+      if (changeTimer) clearTimeout(changeTimer)
+      window.removeEventListener('local-data-changed', scheduleAfterChange)
+      window.removeEventListener('online', runAutoSync)
     }
   }, [isAuthenticated])
 
@@ -201,6 +226,17 @@ export default function Home() {
         <div className="p-6 max-w-[1600px] mx-auto">
           {renderPage()}
         </div>
+        {syncState !== 'idle' && (
+          <div className={`fixed bottom-4 right-4 z-50 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm ${
+            syncState === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : syncState === 'syncing'
+                ? 'border-sky-200 bg-sky-50 text-sky-800'
+                : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}>
+            {syncState === 'success' ? 'Synchronisation réussie' : syncState === 'syncing' ? 'Synchronisation...' : 'Hors ligne — données en attente'}
+          </div>
+        )}
       </main>
       <Toaster position="top-right" richColors />
     </div>

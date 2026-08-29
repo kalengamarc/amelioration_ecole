@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SGFS-ME - CS. Le Bon Berger",
-  description: "Système de Gestion Financière et Scolaire - Complexe Scolaire Le Bon Berger",
+  title: "SGFS-ME ",
+  description: "Système de Gestion Financière et Scolaire",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

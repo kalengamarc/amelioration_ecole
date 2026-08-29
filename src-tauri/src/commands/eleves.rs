@@ -240,6 +240,7 @@ fn fetch_tuteurs(conn: &rusqlite::Connection, eleve_id: &str) -> Result<Vec<Tute
             },
         })
     })?.collect::<Result<Vec<_>, _>>()?;
+    eprintln!("DEBUG: Tuteurs for eleve_id {}: {:?}", eleve_id, rows);
     Ok(rows)
 }
 
@@ -405,6 +406,13 @@ pub fn list_eleves(
 
     let mut conditions = vec!["1=1".to_string()];
     let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    // Population opérationnelle : seuls les élèves pouvant actuellement payer
+    // sont affichés par défaut. Le statut TRANSFERE reste consultable explicitement.
+    if statut.as_deref() != Some("TRANSFERE") {
+        conditions.push("e.statut IN ('ACTIF', 'INSCRIT')".into());
+        conditions.push("EXISTS (SELECT 1 FROM Etablissement ea WHERE ea.id = e.etablissement_id AND ea.actif = 1)".into());
+        conditions.push("EXISTS (SELECT 1 FROM EleveClasse eca JOIN Classe cca ON cca.id = eca.classe_id WHERE eca.eleve_id = e.id AND eca.statut = 'ACTIF' AND cca.actif = 1 AND cca.etablissement_id = e.etablissement_id AND cca.annee_scolaire_id = e.annee_scolaire_id)".into());
+    }
 
     if let Some(ref v) = etablissement_id {
         conditions.push("e.etablissement_id = ?".into());
@@ -578,7 +586,9 @@ pub fn create_eleve(
             params![id, data.classe_id, now],
         )?;
 
+        eprintln!("DEBUG: Tuteurs reçus dans create_eleve: {:?}", data.tuteurs);
         if let Some(tuteurs) = &data.tuteurs {
+            eprintln!("DEBUG: Nombre de tuteurs: {}", tuteurs.len());
             for t in tuteurs {
                 let tid = generate_id();
                 conn.execute(
@@ -592,6 +602,8 @@ pub fn create_eleve(
                     params![id, tid, t.is_principal.unwrap_or(false) as i32, now],
                 )?;
             }
+        } else {
+            eprintln!("DEBUG: data.tuteurs est None");
         }
     }
 
@@ -692,7 +704,16 @@ pub fn update_eleve(
             }
         }
 
+        eprintln!("DEBUG: Tuteurs reçus dans update_eleve: {:?}", data.tuteurs);
         if let Some(tuteurs) = &data.tuteurs {
+            eprintln!("DEBUG: Nombre de tuteurs dans update: {}", tuteurs.len());
+            // Supprimer les anciens tuteurs de cet élève
+            conn.execute(
+                "DELETE FROM TuteurEleve WHERE eleve_id = ?",
+                params![id],
+            )?;
+            // Note: On ne supprime pas les tuteurs de la table Tuteur car ils pourraient être utilisés par d'autres élèves
+
             for t in tuteurs {
                 let tid = generate_id();
                 conn.execute(
@@ -706,6 +727,8 @@ pub fn update_eleve(
                     params![id, tid, t.is_principal.unwrap_or(false) as i32, now],
                 )?;
             }
+        } else {
+            eprintln!("DEBUG: data.tuteurs est None dans update");
         }
 
         let new_nom = data.nom.unwrap_or(nom_old);
@@ -739,6 +762,7 @@ pub fn delete_eleve(db: State<'_, DbConn>, id: String) -> Result<serde_json::Val
 pub fn get_eleve_stats(
     db: State<'_, DbConn>,
     etablissement_id: Option<String>,
+    annee_scolaire_id: Option<String>,
 ) -> Result<serde_json::Value, AppError> {
     let conn = db.lock()?;
     let mut base_cond = "statut != 'TRANSFERE'".to_string();
@@ -748,6 +772,10 @@ pub fn get_eleve_stats(
         base_cond.push_str(" AND etablissement_id = ?");
         params.push(Box::new(v.clone()));
     }
+    if let Some(ref v) = annee_scolaire_id {
+        base_cond.push_str(" AND annee_scolaire_id = ?");
+        params.push(Box::new(v.clone()));
+    }
 
     let refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let total: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM Eleve WHERE {}", base_cond), refs.as_slice(), |r| r.get(0))?;
@@ -755,6 +783,9 @@ pub fn get_eleve_stats(
 
     let mut new_params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![];
     if let Some(ref v) = etablissement_id {
+        new_params.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = annee_scolaire_id {
         new_params.push(Box::new(v.clone()));
     }
     let debut = chrono::Local::now().format("%Y-%m-01").to_string();

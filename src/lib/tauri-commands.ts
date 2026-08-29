@@ -10,9 +10,18 @@ function unwrap<T>(res: any): T {
   return res as T
 }
 
-/** Invoke a Tauri command without any key conversion */
+/** Invoke a Tauri command without any key conversion. */
 async function cmd<T = any>(command: string, params: Record<string, any> = {}): Promise<T> {
-  return unwrap<T>(await invoke(command, params))
+  const result = unwrap<T>(await invoke(command, params))
+  // Every successful local write requests a debounced background sync.
+  // Read commands and sync commands are intentionally excluded.
+  const isLocalWrite = /^(create|update|delete|save|activer|annuler|clean)_/.test(command)
+    && !command.startsWith('sync_')
+    && command !== 'save_sync_config'
+  if (isLocalWrite && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('local-data-changed'))
+  }
+  return result
 }
 
 // ── Auth ───────────────────────────────────────────────────
@@ -143,6 +152,20 @@ export async function updateClasse(id: string, data: Record<string, any>) {
 }
 export async function deleteClasse(id: string) {
   return cmd('delete_classe', { id })
+}
+export async function cleanEleveClasseDuplicates() {
+  return cmd('clean_eleve_classe_duplicates', {})
+}
+
+export async function listElevesSansClasse(etablissementId?: string, anneeScolaireId?: string) {
+  const etabId = etablissementId || null
+  const anneeId = anneeScolaireId || null
+  return cmd('list_eleves_sans_classe', {
+    etablissementId: etabId,
+    etablissement_id: etabId,
+    anneeScolaireId: anneeId,
+    annee_scolaire_id: anneeId,
+  })
 }
 
 // ── Élèves ──────────────────────────────────────────────────
@@ -436,6 +459,8 @@ export async function listPaiements(params: {
   const annule = params.annule ?? null
   const dateFrom = params.dateFrom || null
   const dateTo = params.dateTo || null
+  const search = params.search?.trim() || null
+  const modePaiement = params.modePaiement || null
   const page = params.page || 1
   const pageSize = params.pageSize || 20
 
@@ -451,6 +476,9 @@ export async function listPaiements(params: {
     date_from: dateFrom,
     dateTo,
     date_to: dateTo,
+    search,
+    modePaiement,
+    mode_paiement: modePaiement,
     page,
     pageSize,
     page_size: pageSize,
@@ -504,6 +532,29 @@ export async function createPaiement(data: Record<string, any>) {
 
 export async function annulerPaiement(id: string, userId: string, motif: string) {
   return cmd('annuler_paiement', { id, userId, user_id: userId, motif })
+}
+
+export async function updatePaiement(id: string, data: Record<string, any>) {
+  const motif = data.motif
+  const montant = Number(data.montant)
+  const devise = data.devise || 'CDF'
+  const modePaiement = data.modePaiement || data.mode_paiement
+  const referencePaiement = data.referencePaiement || data.reference_paiement || null
+  const tauxChange = data.tauxChange ?? data.taux_change ?? null
+  const montantAffecte = data.montantAffecte ?? data.montant_affecte ?? null
+  const deviseEcheance = data.deviseEcheance || data.devise_echeance || null
+
+  return cmd('update_paiement', {
+    id,
+    motif,
+    montant,
+    devise,
+    modePaiement,
+    referencePaiement,
+    tauxChange,
+    montantAffecte,
+    deviseEcheance,
+  })
 }
 
 export async function getPaiement(id: string) {
@@ -622,6 +673,16 @@ export async function getRapportFinancier(etablissementId: string, anneeScolaire
 }
 export async function getRapportEleves(etablissementId: string, anneeScolaireId: string) {
   return cmd('get_rapport_eleves', { etablissementId, anneeScolaireId })
+}
+
+export async function getRapportJournalier(etablissementId: string, date: string, anneeScolaireId?: string) {
+  return cmd('get_rapport_journalier', {
+    etablissementId,
+    etablissement_id: etablissementId,
+    anneeScolaireId: anneeScolaireId || null,
+    annee_scolaire_id: anneeScolaireId || null,
+    date,
+  })
 }
 
 // ── Audit & Sync ────────────────────────────────────────────

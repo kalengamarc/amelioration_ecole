@@ -217,7 +217,7 @@ export default function FraisPage() {
       tranche: frais.tranche ? String(frais.tranche) : '',
       dateEcheance: frais.dateEcheance ? frais.dateEcheance.split('T')[0] : '',
     })
-    setSelectedClasseIds(frais.classesIds || [])
+    setSelectedClasseIds(frais.classesIds || (frais as any).classes_ids || (frais as any).classe_ids || [])
     if (frais.etablissementId) {
       fetchClasses(frais.etablissementId)
     }
@@ -247,7 +247,7 @@ export default function FraisPage() {
         etablissementId: form.etablissementId,
         tranche: form.tranche ? Number(form.tranche) : undefined,
         dateEcheance: form.dateEcheance || undefined,
-        classeIds: selectedClasseIds.length > 0 ? selectedClasseIds : undefined,
+        classeIds: selectedClasseIds,
       }
 
       if (editingId) {

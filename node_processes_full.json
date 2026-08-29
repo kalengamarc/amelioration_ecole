@@ -1,0 +1,1 @@
+﻿[{"ProcessId":11872,"ParentProcessId":10860,"CommandLine":"\"C:\\Program Files\\nodejs\\node.exe\" \"C:\\Program Files\\nodejs/node_modules/npm/bin/npm-cli.js\" run tauri build"},{"ProcessId":17108,"ParentProcessId":4900,"CommandLine":"\"node\"   \"C:\\Users\\kayem\\Downloads\\essai_app\\node_modules\\.bin\\\\..\\@tauri-apps\\cli\\tauri.js\" build"}]

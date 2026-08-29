@@ -101,7 +101,7 @@ fn column_exists(conn: &rusqlite::Connection, table: &str, column: &str) -> bool
 
 /// `Eleve.statut` est accentué dans le schéma ; un import a pu produire
 /// l'autre graphie. On exclut les deux.
-const EXCLURE_TRANSFERES: &str = "e.statut NOT IN ('TRANSFÉRÉ', 'TRANSFERE')";
+const EXCLURE_TRANSFERES: &str = "e.statut IN ('ACTIF', 'INSCRIT') AND EXISTS (SELECT 1 FROM Etablissement ea WHERE ea.id = e.etablissement_id AND ea.actif = 1) AND EXISTS (SELECT 1 FROM EleveClasse eca JOIN Classe cca ON cca.id = eca.classe_id WHERE eca.eleve_id = e.id AND eca.statut = 'ACTIF' AND cca.actif = 1 AND cca.etablissement_id = e.etablissement_id AND cca.annee_scolaire_id = e.annee_scolaire_id)";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Rapport financier
@@ -134,7 +134,9 @@ pub fn get_rapport_financier(
             "SELECT strftime('%Y-%m', p.created_at) AS mois, {d_pai} AS devise, \
                     COALESCE(SUM(p.montant), 0) \
              FROM Paiement p \
-             WHERE p.etablissement_id = ?1 AND p.annee_scolaire_id = ?2 \
+             LEFT JOIN AnneeScolaire ans ON ans.id = p.annee_scolaire_id \
+             WHERE (?1 = 'ALL' OR p.etablissement_id = ?1) \
+               AND (p.annee_scolaire_id = ?2 OR ans.libelle = ?2) \
                AND COALESCE(p.annule, 0) = 0 \
              GROUP BY mois, devise ORDER BY mois, devise"
         ))?;
@@ -157,7 +159,9 @@ pub fn get_rapport_financier(
             "SELECT strftime('%Y-%m', {col_date_dep}) AS mois, {d_dep} AS devise, \
                     COALESCE(SUM(d.montant), 0) \
              FROM Depense d \
-             WHERE d.etablissement_id = ?1 AND d.annee_scolaire_id = ?2 \
+             LEFT JOIN AnneeScolaire ans ON ans.id = d.annee_scolaire_id \
+             WHERE (?1 = 'ALL' OR d.etablissement_id = ?1) \
+               AND (d.annee_scolaire_id = ?2 OR ans.libelle = ?2) \
              GROUP BY mois, devise ORDER BY mois, devise"
         ))?;
         let rows = stmt.query_map(params![etablissement_id, annee_scolaire_id], |r| {
@@ -215,12 +219,14 @@ pub fn get_rapport_eleves(
     let conn = db.lock()?;
 
     let par_statut = {
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT COALESCE(NULLIF(TRIM(e.statut), ''), '—') AS s, COUNT(*) \
              FROM Eleve e \
-             WHERE e.etablissement_id = ?1 AND e.annee_scolaire_id = ?2 \
-             GROUP BY s ORDER BY 2 DESC",
-        )?;
+             LEFT JOIN AnneeScolaire ans ON ans.id = e.annee_scolaire_id \
+             WHERE (?1 = 'ALL' OR e.etablissement_id = ?1) AND (e.annee_scolaire_id = ?2 OR ans.libelle = ?2) \
+               AND {EXCLURE_TRANSFERES} \
+             GROUP BY s ORDER BY 2 DESC"
+        ))?;
         let rows = stmt.query_map(params![etablissement_id, annee_scolaire_id], |r| {
             Ok(StatutCount {
                 statut: r.get(0)?,
@@ -234,7 +240,8 @@ pub fn get_rapport_eleves(
         let mut stmt = conn.prepare(&format!(
             "SELECT COALESCE(NULLIF(TRIM(e.sexe), ''), '—') AS s, COUNT(*) \
              FROM Eleve e \
-             WHERE e.etablissement_id = ?1 AND e.annee_scolaire_id = ?2 \
+             LEFT JOIN AnneeScolaire ans ON ans.id = e.annee_scolaire_id \
+             WHERE (?1 = 'ALL' OR e.etablissement_id = ?1) AND (e.annee_scolaire_id = ?2 OR ans.libelle = ?2) \
                AND {EXCLURE_TRANSFERES} \
              GROUP BY s ORDER BY 2 DESC"
         ))?;
@@ -253,7 +260,8 @@ pub fn get_rapport_eleves(
              FROM Eleve e \
              LEFT JOIN EleveClasse ecl ON ecl.eleve_id = e.id AND ecl.statut = 'ACTIF' \
              LEFT JOIN Classe c ON c.id = ecl.classe_id \
-             WHERE e.etablissement_id = ?1 AND e.annee_scolaire_id = ?2 \
+             LEFT JOIN AnneeScolaire ans ON ans.id = e.annee_scolaire_id \
+             WHERE (?1 = 'ALL' OR e.etablissement_id = ?1) AND (e.annee_scolaire_id = ?2 OR ans.libelle = ?2) \
                AND {EXCLURE_TRANSFERES} \
              GROUP BY cl ORDER BY cl"
         ))?;
@@ -269,7 +277,8 @@ pub fn get_rapport_eleves(
     let total: i64 = conn.query_row(
         &format!(
             "SELECT COUNT(*) FROM Eleve e \
-             WHERE e.etablissement_id = ?1 AND e.annee_scolaire_id = ?2 \
+             LEFT JOIN AnneeScolaire ans ON ans.id = e.annee_scolaire_id \
+             WHERE (?1 = 'ALL' OR e.etablissement_id = ?1) AND (e.annee_scolaire_id = ?2 OR ans.libelle = ?2) \
                AND {EXCLURE_TRANSFERES}"
         ),
         params![etablissement_id, annee_scolaire_id],
@@ -285,3 +294,89 @@ pub fn get_rapport_eleves(
 
     Ok(api_response(Ok(data)))
 }
+
+
+/// Rapport de caisse pour une journée, détaillé et prêt à être imprimé.
+#[tauri::command]
+pub fn get_rapport_journalier(
+    db: State<'_, DbConn>,
+    etablissement_id: String,
+    annee_scolaire_id: Option<String>,
+    date: String,
+) -> Result<serde_json::Value, AppError> {
+    use std::collections::BTreeMap;
+    let conn = db.lock()?;
+    let annee = annee_scolaire_id.clone();
+    let mut recus = Vec::new();
+    let mut totaux: BTreeMap<String, (f64, f64)> = BTreeMap::new();
+    let mut modes: BTreeMap<(String, String), (i64, f64)> = BTreeMap::new();
+
+    let sql = "SELECT p.numero_recu, p.created_at, TRIM(COALESCE(el.nom,'') || ' ' || COALESCE(el.prenom,'')), \
+                      COALESCE(el.matricule,''), COALESCE(c.nom,'—'), COALESCE(p.motif,''), p.montant, \
+                      UPPER(COALESCE(NULLIF(TRIM(p.devise),''),'CDF')), COALESCE(p.mode_paiement,''), p.reference_paiement, \
+                      CASE WHEN COALESCE(p.annule,0)=1 THEN 'ANNULE' ELSE 'PAYE' END, u.nom_complet, \
+                      COALESCE(et.nom, '—') \
+               FROM Paiement p \
+               LEFT JOIN Eleve el ON el.id=p.eleve_id \
+               LEFT JOIN (SELECT eleve_id, MIN(classe_id) AS classe_id FROM EleveClasse WHERE statut='ACTIF' GROUP BY eleve_id) ec ON ec.eleve_id=el.id \
+               LEFT JOIN Classe c ON c.id=ec.classe_id \
+               LEFT JOIN User u ON u.id=p.user_id \
+               LEFT JOIN Etablissement et ON et.id=p.etablissement_id \
+               LEFT JOIN AnneeScolaire ans ON ans.id=p.annee_scolaire_id \
+               WHERE (?1 = 'ALL' OR p.etablissement_id=?1) \
+                 AND substr(p.created_at,1,10)=?2 \
+                 AND (?3 IS NULL OR p.annee_scolaire_id=?3 OR ans.libelle=?3) \
+               ORDER BY p.created_at ASC, p.numero_recu ASC";
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(params![etablissement_id, date, annee], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?, r.get::<_, f64>(6)?, r.get::<_, String>(7)?, r.get::<_, String>(8)?, r.get::<_, Option<String>>(9)?, r.get::<_, String>(10)?, r.get::<_, Option<String>>(11)?, r.get::<_, String>(12)?))
+    })?;
+    for row in rows {
+        let (numero, created, eleve, matricule, classe, motif, montant, devise, mode, reference, statut, caissier, etab_nom) = row?;
+        let heure = created.get(11..19).unwrap_or("").to_string();
+        let entry = modes.entry((mode.clone(), devise.clone())).or_insert((0, 0.0));
+        entry.0 += 1;
+        if statut == "PAYE" { entry.1 += montant; totaux.entry(devise.clone()).or_insert((0.0, 0.0)).0 += montant; }
+        recus.push(serde_json::json!({ "numeroRecu": numero, "heure": heure, "eleve": eleve, "matricule": matricule, "classe": classe, "motif": motif, "montant": montant, "devise": devise, "modePaiement": mode, "reference": reference, "statut": statut, "caissier": caissier, "etablissementNom": etab_nom }));
+    }
+
+    let col_date = if column_exists(&conn, "Depense", "date_depense") { "d.date_depense" } else { "d.created_at" };
+    let expense_sql = format!(
+        "SELECT {col_date}, d.categorie, d.libelle, d.beneficiaire, d.montant, \
+                UPPER(COALESCE(NULLIF(TRIM(d.devise),''),'CDF')), d.reference_piece, d.statut, \
+                COALESCE(et.nom, '—') \
+         FROM Depense d \
+         LEFT JOIN Etablissement et ON et.id=d.etablissement_id \
+         LEFT JOIN AnneeScolaire ans ON ans.id=d.annee_scolaire_id \
+         WHERE (?1 = 'ALL' OR d.etablissement_id=?1) \
+           AND substr({col_date},1,10)=?2 \
+           AND (?3 IS NULL OR d.annee_scolaire_id=?3 OR ans.libelle=?3) \
+         ORDER BY {col_date} ASC"
+    );
+    let mut stmt = conn.prepare(&expense_sql)?;
+    let rows = stmt.query_map(params![etablissement_id, date, annee_scolaire_id], |r| {
+        Ok(serde_json::json!({ "heure": r.get::<_, String>(0)?.get(11..19).unwrap_or("").to_string(), "categorie": r.get::<_, String>(1)?, "libelle": r.get::<_, String>(2)?, "beneficiaire": r.get::<_, Option<String>>(3)?, "montant": r.get::<_, f64>(4)?, "devise": r.get::<_, String>(5)?, "reference": r.get::<_, Option<String>>(6)?, "statut": r.get::<_, String>(7)?, "etablissementNom": r.get::<_, String>(8)? }))
+    })?;
+    let mut depenses = Vec::new();
+    for row in rows {
+        let dep = row?;
+        if dep["statut"].as_str().unwrap_or("").to_uppercase() != "ANNULE" {
+            let devise = dep["devise"].as_str().unwrap_or("CDF").to_string();
+            let montant = dep["montant"].as_f64().unwrap_or(0.0);
+            totaux.entry(devise).or_insert((0.0, 0.0)).1 += montant;
+        }
+        depenses.push(dep);
+    }
+
+    let total_reçus = recus.len() as i64;
+    let total_annules = recus.iter().filter(|r| r["statut"] == "ANNULE").count() as i64;
+    let total_valides = total_reçus - total_annules;
+    let total_depenses = depenses.iter().filter(|d| d["statut"].as_str().unwrap_or("").to_uppercase() != "ANNULE").count() as i64;
+    let totaux_json: Vec<_> = totaux.into_iter().map(|(devise, (encaissements, depenses))| serde_json::json!({ "devise": devise, "encaissements": encaissements, "depenses": depenses, "solde": encaissements - depenses })).collect();
+    let modes_json: Vec<_> = modes.into_iter().map(|((mode, devise), (nombre, total))| serde_json::json!({ "mode": mode, "devise": devise, "nombre": nombre, "total": total })).collect();
+
+    Ok(api_response(Ok(serde_json::json!({ "date": date, "recus": recus, "depenses": depenses, "totaux": totaux_json, "parMode": modes_json, "totalRecus": total_reçus, "totalValides": total_valides, "totalAnnules": total_annules, "totalDepenses": total_depenses }))))
+}
+
+#[allow(dead_code)]
+fn _rapport_journalier_marker() {}

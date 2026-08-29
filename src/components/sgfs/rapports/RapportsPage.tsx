@@ -22,7 +22,8 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Printer, TrendingUp, TrendingDown, Banknote, FileText, Sparkles, BarChart3, Users } from 'lucide-react'
+import { Printer, TrendingUp, TrendingDown, Banknote, FileText, Sparkles, BarChart3, Users, FileSpreadsheet } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,19 @@ interface RapportEleves {
   parStatut: StatutCount[]
   parSexe: SexeCount[]
   parClasse: ClasseCount[]
+  total: number
+}
+
+interface RapportJournalier {
+  date: string
+  recus: any[]
+  depenses: any[]
+  totaux: { devise: string; encaissements: number; depenses: number; solde: number }[]
+  parMode: { mode: string; devise: string; nombre: number; total: number }[]
+  totalRecus: number
+  totalValides: number
+  totalAnnules: number
+  totalDepenses: number
 }
 
 // ─── Constantes & helpers ─────────────────────────────────────────────────────
@@ -91,6 +105,11 @@ function formatMoney(montant: number | null | undefined, devise = 'CDF') {
     maximumFractionDigits: sansDec ? 0 : 2,
   }).format(v)
   return `${n} ${d}`
+}
+
+function dateLocaleISO() {
+  const now = new Date()
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 }
 
 function formatMois(mois: string) {
@@ -144,6 +163,13 @@ function normaliserFinancier(data: any): RapportFinancier {
   return { encaissements, depenses, soldes, devises }
 }
 
+function errorDetail(error: any) {
+  if (typeof error === 'string') return error
+  if (error?.message) return error.message
+  if (error?.error) return error.error
+  try { return JSON.stringify(error) } catch { return 'Erreur inconnue' }
+}
+
 function sexeLabel(s: string) {
   return s === 'M' ? 'Masculin' : s === 'F' ? 'Féminin' : s
 }
@@ -163,6 +189,7 @@ interface PrintContext {
   annee: string
   financier: RapportFinancier | null
   eleves: RapportEleves | null
+  journalier: RapportJournalier | null
   onglet: string
 }
 
@@ -270,14 +297,32 @@ function buildRapportHtml(ctx: PrintContext): string {
       .map((c) => `<tr><td>${escapeHtml(c.classeNom)}</td><td class="n">${c.count}</td></tr>`)
       .join('')
 
-    const sum = (arr: { count: number }[]) => arr.reduce((s, x) => s + x.count, 0)
+    const totalEleves = eleves.total
 
     blocEleves = `
     <div class="grid">
-      ${petiteTable('Par statut', 'Statut', rowsStatut, sum(eleves.parStatut))}
-      ${petiteTable('Par sexe', 'Sexe', rowsSexe, sum(eleves.parSexe))}
+      ${petiteTable('Par statut', 'Statut', rowsStatut, totalEleves)}
+      ${petiteTable('Par sexe', 'Sexe', rowsSexe, totalEleves)}
     </div>
-    ${petiteTable('Par classe', 'Classe', rowsClasse, sum(eleves.parClasse))}`
+    ${petiteTable('Par classe', 'Classe', rowsClasse, totalEleves)}`
+  }
+
+  let blocJournalier = ''
+  if (ctx.onglet === 'journalier' && ctx.journalier) {
+    const j = ctx.journalier
+    const showEtab = ctx.etablissement === 'Tous les établissements'
+    const totalCards = `
+      <div class="cards">
+        <div class="card"><span>Reçus enregistrés</span><b>${j.totalRecus}</b></div>
+        <div class="card"><span>Reçus valides</span><b class="pos">${j.totalValides}</b></div>
+        <div class="card"><span>Reçus annulés</span><b class="neg">${j.totalAnnules}</b></div>
+        <div class="card"><span>Dépenses</span><b>${j.totalDepenses}</b></div>
+      </div>`
+    const totalTables = j.totaux.map((t) => `<div class="card"><span>${escapeHtml(t.devise)} — Encaissements</span><b class="pos">${escapeHtml(formatMoney(t.encaissements, t.devise))}</b><span style="margin-top:4px">Dépenses</span><b class="neg">${escapeHtml(formatMoney(t.depenses, t.devise))}</b><span style="margin-top:4px">Solde net</span><b class="${t.solde >= 0 ? 'pos' : 'neg'}">${escapeHtml(formatMoney(t.solde, t.devise))}</b></div>`).join('')
+    const modeRows = j.parMode.map((m) => `<tr><td>${escapeHtml(m.mode || '—')}</td><td>${escapeHtml(m.devise)}</td><td class="n">${m.nombre}</td><td class="n">${escapeHtml(formatMoney(m.total, m.devise))}</td></tr>`).join('')
+    const receiptRows = j.recus.map((r) => `<tr><td>${escapeHtml(r.heure)}</td><td>${escapeHtml(r.numeroRecu)}</td>${showEtab ? `<td>${escapeHtml(r.etablissementNom || '—')}</td>` : ''}<td>${escapeHtml(r.eleve)}<br><small>${escapeHtml(r.matricule)} — ${escapeHtml(r.classe)}</small></td><td>${escapeHtml(r.motif)}</td><td>${escapeHtml(r.modePaiement)}</td><td class="n">${escapeHtml(formatMoney(r.montant, r.devise))}</td><td>${escapeHtml(r.statut)}</td></tr>`).join('')
+    const expenseRows = j.depenses.map((d) => `<tr><td>${escapeHtml(d.heure)}</td>${showEtab ? `<td>${escapeHtml(d.etablissementNom || '—')}</td>` : ''}<td>${escapeHtml(d.categorie)}</td><td>${escapeHtml(d.libelle)}</td><td>${escapeHtml(d.beneficiaire)}</td><td class="n">${escapeHtml(formatMoney(d.montant, d.devise))}</td><td>${escapeHtml(d.statut)}</td></tr>`).join('')
+    blocJournalier = `<h2>Résumé de la journée</h2>${totalCards}<div class="cards">${totalTables || '<p class="vide">Aucune opération financière.</p>'}</div><h2>Répartition des encaissements par mode</h2><table><thead><tr><th>Mode</th><th>Devise</th><th class="n">Nombre</th><th class="n">Total</th></tr></thead><tbody>${modeRows || '<tr><td colspan="4" class="vide">Aucun encaissement</td></tr>'}</tbody></table><h2>Détail des reçus</h2><table><thead><tr><th>Heure</th><th>N° reçu</th>${showEtab ? '<th>Établissement</th>' : ''}<th>Élève</th><th>Motif</th><th>Mode</th><th class="n">Montant</th><th>Statut</th></tr></thead><tbody>${receiptRows || `<tr><td colspan="${showEtab ? '8' : '7'}" class="vide">Aucun reçu</td></tr>`}</tbody></table><h2>Détail des dépenses</h2><table><thead><tr><th>Heure</th>${showEtab ? '<th>Établissement</th>' : ''}<th>Catégorie</th><th>Libellé</th><th>Bénéficiaire</th><th class="n">Montant</th><th>Statut</th></tr></thead><tbody>${expenseRows || `<tr><td colspan="${showEtab ? '7' : '6'}" class="vide">Aucune dépense</td></tr>`}</tbody></table>`
   }
 
   return `<!doctype html>
@@ -323,6 +368,7 @@ function buildRapportHtml(ctx: PrintContext): string {
     .neg { color: #b91c1c; }
     .vide { text-align: center; color: #9ca3af; font-style: italic; padding: 14px; }
     .grid { display: flex; gap: 12px; }
+    small { color: #6b7280; font-size: 9px; }
     .col { flex: 1; }
     footer {
       margin-top: 20px; border-top: 1px solid #e5e7eb; padding-top: 8px;
@@ -347,13 +393,47 @@ function buildRapportHtml(ctx: PrintContext): string {
     </div>
   </header>
 
-  ${blocFinancier}${blocEleves}
+  ${blocFinancier}${blocEleves}${blocJournalier}
 
   <footer>
     Document généré automatiquement le ${escapeHtml(new Date().toLocaleString('fr-FR'))}
   </footer>
 </body>
 </html>`
+}
+
+function exportRapportExcel(rapport: RapportJournalier, etablissement: string, annee: string) {
+  const wb = XLSX.utils.book_new()
+  const resume = [
+    ['RAPPORT JOURNALIER DE CAISSE'],
+    ['Établissement', etablissement],
+    ['Année scolaire', annee],
+    ['Date', rapport.date],
+    [],
+    ['Indicateur', 'Valeur'],
+    ['Reçus enregistrés', rapport.totalRecus],
+    ['Reçus valides', rapport.totalValides],
+    ['Reçus annulés', rapport.totalAnnules],
+    ['Dépenses', rapport.totalDepenses],
+    [],
+    ['Devise', 'Encaissements', 'Dépenses', 'Solde net'],
+    ...rapport.totaux.map((t) => [t.devise, t.encaissements, t.depenses, t.solde]),
+  ]
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resume), 'Résumé')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rapport.recus.map((r) => ({
+    Heure: r.heure, 'N° reçu': r.numeroRecu, ...(etablissement === 'Tous les établissements' ? { Établissement: r.etablissementNom || '—' } : {}), Élève: r.eleve, Matricule: r.matricule, Classe: r.classe,
+    Motif: r.motif, Montant: r.montant, Devise: r.devise, 'Mode paiement': r.modePaiement,
+    Référence: r.reference || '', Statut: r.statut, Caissier: r.caissier || '',
+  }))), 'Reçus')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rapport.depenses.map((d) => ({
+    Heure: d.heure, ...(etablissement === 'Tous les établissements' ? { Établissement: d.etablissementNom || '—' } : {}), Catégorie: d.categorie, Libellé: d.libelle, Bénéficiaire: d.beneficiaire || '',
+    Montant: d.montant, Devise: d.devise, Référence: d.reference || '', Statut: d.statut,
+  }))), 'Dépenses')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rapport.parMode.map((m) => ({
+    Mode: m.mode, Devise: m.devise, Nombre: m.nombre, Total: m.total,
+  }))), 'Modes paiement')
+  const safeDate = rapport.date.replace(/[^0-9-]/g, '') || 'date'
+  XLSX.writeFile(wb, `rapport-journalier-${safeDate}.xlsx`)
 }
 
 function printRapport(ctx: PrintContext) {
@@ -414,6 +494,8 @@ export default function RapportsPage() {
   const [loading, setLoading] = useState(false)
   const [rapportFinancier, setRapportFinancier] = useState<RapportFinancier | null>(null)
   const [rapportEleves, setRapportEleves] = useState<RapportEleves | null>(null)
+  const [rapportJournalier, setRapportJournalier] = useState<RapportJournalier | null>(null)
+  const [dateJournalier, setDateJournalier] = useState(dateLocaleISO)
   const [activeTab, setActiveTab] = useState('financier')
 
   useEffect(() => {
@@ -437,14 +519,33 @@ export default function RapportsPage() {
     }
     ;(async () => {
       try {
-        const res = await tc.listAnneesScolaires(school)
+        const res = await tc.listAnneesScolaires(school === 'ALL' ? undefined : school)
         const data: any[] = res?.annees_scolaires ?? []
-        setYears(data)
-        if (data.length > 0) {
-          const active = data.find((y) => y.active)
-          setYear(active?.id ?? data[0].id)
+        if (school === 'ALL') {
+          // Deduplicate by libelle
+          const seen = new Set()
+          const unique: any[] = []
+          for (const y of data) {
+            if (!seen.has(y.libelle)) {
+              seen.add(y.libelle)
+              unique.push(y)
+            }
+          }
+          setYears(unique)
+          if (unique.length > 0) {
+            const active = unique.find((y) => y.active)
+            setYear(active?.libelle ?? unique[0].libelle)
+          } else {
+            setYear('')
+          }
         } else {
-          setYear('')
+          setYears(data)
+          if (data.length > 0) {
+            const active = data.find((y) => y.active)
+            setYear(active?.id ?? data[0].id)
+          } else {
+            setYear('')
+          }
         }
       } catch {
         setYears([])
@@ -464,24 +565,40 @@ export default function RapportsPage() {
         const res = await tc.getRapportFinancier(school, year)
         const data = res?.data ?? res
         setRapportFinancier(normaliserFinancier(data))
-      } else {
+      } else if (activeTab === 'eleves') {
         const res = await tc.getRapportEleves(school, year)
         const data = res?.data ?? res
         setRapportEleves({
           parStatut: Array.isArray(data?.parStatut) ? data.parStatut : [],
           parSexe: Array.isArray(data?.parSexe) ? data.parSexe : [],
           parClasse: Array.isArray(data?.parClasse) ? data.parClasse : [],
+          total: Number.isFinite(Number(data?.total)) ? Number(data.total) : 0,
+        })
+      } else {
+        const res = await tc.getRapportJournalier(school, dateJournalier, year)
+        const data = res?.data ?? res
+        setRapportJournalier({
+          date: dateJournalier,
+          recus: Array.isArray(data?.recus) ? data.recus : [],
+          depenses: Array.isArray(data?.depenses) ? data.depenses : [],
+          totaux: Array.isArray(data?.totaux) ? data.totaux : [],
+          parMode: Array.isArray(data?.parMode) ? data.parMode : [],
+          totalRecus: Number(data?.totalRecus ?? 0),
+          totalValides: Number(data?.totalValides ?? 0),
+          totalAnnules: Number(data?.totalAnnules ?? 0),
+          totalDepenses: Number(data?.totalDepenses ?? 0),
         })
       }
       toast.success('Rapport généré avec succès')
     } catch (e: any) {
-      toast.error(e?.message || 'Erreur lors de la génération du rapport')
+      const nomRapport = activeTab === 'financier' ? 'financier' : activeTab === 'eleves' ? 'élèves' : 'journalier'
+      toast.error(`Erreur du rapport ${nomRapport} : ${errorDetail(e)}`)
     } finally {
       setLoading(false)
     }
   }
 
-  const rapportCourant = activeTab === 'financier' ? rapportFinancier : rapportEleves
+  const rapportCourant = activeTab === 'financier' ? rapportFinancier : activeTab === 'eleves' ? rapportEleves : rapportJournalier
   const peutImprimer = !!rapportCourant
 
   const devises = useMemo(() => {
@@ -518,17 +635,35 @@ export default function RapportsPage() {
     return liste?.find((x) => x.mois === mois && x.devise === devise)?.total ?? 0
   }
 
+  function handleExportExcel() {
+    if (!rapportJournalier) {
+      toast.error('Générez d’abord le rapport journalier.')
+      return
+    }
+    const etabNom = school === 'ALL' ? 'Tous les établissements' : (schools.find((s) => s.id === school)?.nom ?? '—')
+    const anneeLib = school === 'ALL' ? year : (years.find((y) => y.id === year)?.libelle ?? '—')
+    exportRapportExcel(
+      rapportJournalier,
+      etabNom,
+      anneeLib,
+    )
+    toast.success('Fichier Excel exporté avec succès')
+  }
+
   function handlePrint() {
     if (!peutImprimer) {
       toast.error('Générez d’abord un rapport avant d’imprimer.')
       return
     }
+    const etabNom = school === 'ALL' ? 'Tous les établissements' : (schools.find((s) => s.id === school)?.nom ?? '—')
+    const anneeLib = school === 'ALL' ? year : (years.find((y) => y.id === year)?.libelle ?? '—')
     printRapport({
-      titre: activeTab === 'financier' ? 'Rapport financier' : 'Rapport des élèves',
-      etablissement: schools.find((s) => s.id === school)?.nom ?? '—',
-      annee: years.find((y) => y.id === year)?.libelle ?? '—',
+      titre: activeTab === 'financier' ? 'Rapport financier' : activeTab === 'eleves' ? 'Rapport des élèves' : 'Rapport journalier de caisse',
+      etablissement: etabNom,
+      annee: anneeLib,
       financier: rapportFinancier,
       eleves: rapportEleves,
+      journalier: rapportJournalier,
       onglet: activeTab,
     })
   }
@@ -544,14 +679,27 @@ export default function RapportsPage() {
           <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Rapports & Synthèses</h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-1">Consultez et imprimez les rapports financiers et statistiques d&apos;effectifs.</p>
         </div>
-        <Button
-          className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
-          onClick={handlePrint}
-          disabled={!peutImprimer}
-          title={peutImprimer ? 'Imprimer le rapport' : 'Générez un rapport pour l’imprimer'}
-        >
-          <Printer className="h-4 w-4 text-amber-400" /> Imprimer le Rapport
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
+            onClick={handlePrint}
+            disabled={!peutImprimer}
+            title={peutImprimer ? 'Imprimer ou enregistrer en PDF' : 'Générez un rapport pour l’imprimer'}
+          >
+            <Printer className="h-4 w-4 text-amber-400" /> {activeTab === 'journalier' ? 'Exporter PDF' : 'Imprimer le Rapport'}
+          </Button>
+          {activeTab === 'journalier' && (
+            <Button
+              variant="outline"
+              className="rounded-xl border-emerald-200 bg-emerald-50 px-5 font-bold text-emerald-800 shadow-sm hover:bg-emerald-100"
+              onClick={handleExportExcel}
+              disabled={!rapportJournalier}
+              title="Télécharger le rapport Excel"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Exporter Excel
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filtres */}
@@ -566,6 +714,7 @@ export default function RapportsPage() {
                 setYear('')
                 setRapportFinancier(null)
                 setRapportEleves(null)
+                setRapportJournalier(null)
               }}
               disabled={locked}
             >
@@ -573,6 +722,11 @@ export default function RapportsPage() {
                 <SelectValue placeholder="Sélectionner un établissement" />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
+                {!locked && (
+                  <SelectItem value="ALL">
+                    🏢 Tous les établissements
+                  </SelectItem>
+                )}
                 {schools.map((s: any) => (
                   <SelectItem key={s.id} value={s.id}>
                     {`${getTypeIcon(s.type || '')} ${s.nom}`}
@@ -594,7 +748,7 @@ export default function RapportsPage() {
               </SelectTrigger>
               <SelectContent className="rounded-xl">
                 {years.map((y: any) => (
-                  <SelectItem key={y.id} value={y.id}>
+                  <SelectItem key={y.id} value={school === 'ALL' ? y.libelle : y.id}>
                     {y.libelle}
                     {y.active ? ' ★' : ''}
                   </SelectItem>
@@ -603,8 +757,14 @@ export default function RapportsPage() {
             </Select>
           </div>
 
+          {activeTab === 'journalier' && (
+            <div>
+              <label className="text-xs font-semibold text-stone-600">Date du rapport *</label>
+              <input type="date" value={dateJournalier} onChange={(e) => { setDateJournalier(e.target.value); setRapportJournalier(null) }} className="mt-1 h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-700 outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+          )}
           <div className="flex items-end">
-            <Button onClick={generate} disabled={loading || !school || !year} className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-10 shadow-md">
+            <Button onClick={generate} disabled={loading || !school || !year || (activeTab === 'journalier' && !dateJournalier)} className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-10 shadow-md">
               {loading ? 'Génération...' : 'Générer le rapport'}
             </Button>
           </div>
@@ -615,6 +775,7 @@ export default function RapportsPage() {
         <TabsList className="bg-stone-100 p-1 rounded-xl border border-stone-200">
           <TabsTrigger value="financier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport financier</TabsTrigger>
           <TabsTrigger value="eleves" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport élèves</TabsTrigger>
+          <TabsTrigger value="journalier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport journalier</TabsTrigger>
         </TabsList>
 
         {/* ── Financier ─────────────────────────────────────────────── */}
@@ -772,7 +933,17 @@ export default function RapportsPage() {
         {/* ── Élèves ────────────────────────────────────────────────── */}
         <TabsContent value="eleves" className="mt-4 space-y-4">
           {rapportEleves ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <>
+              <Card className="rounded-2xl border-stone-200/80 shadow-sm">
+                <CardContent className="flex items-center gap-3 p-5">
+                  <Users className="h-6 w-6 text-amber-600" />
+                  <div>
+                    <p className="text-xs font-semibold text-stone-500">Total élèves comptés</p>
+                    <p className="text-2xl font-extrabold text-[#0c241f]">{rapportEleves.total}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
                   <CardTitle className="text-sm font-bold text-[#0c241f]">Par Statut</CardTitle>
@@ -844,7 +1015,8 @@ export default function RapportsPage() {
                   </Table>
                 </CardContent>
               </Card>
-            </div>
+              </div>
+            </>
           ) : (
             <Card className="rounded-2xl border-stone-200 shadow-sm">
               <CardContent className="p-12 text-center text-stone-400 font-medium">
@@ -852,6 +1024,31 @@ export default function RapportsPage() {
                 <p className="text-base font-bold text-stone-700">Générez un rapport pour voir les statistiques des élèves.</p>
               </CardContent>
             </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="journalier" className="mt-4 space-y-4">
+          {rapportJournalier ? (
+            <>
+              <Card className="rounded-2xl border-stone-200/80 bg-[#0c241f] text-white shadow-lg">
+                <CardContent className="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
+                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Reçus enregistrés</p><p className="mt-1 text-2xl font-extrabold">{rapportJournalier.totalRecus}</p></div>
+                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Reçus valides</p><p className="mt-1 text-2xl font-extrabold">{rapportJournalier.totalValides}</p></div>
+                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">Reçus annulés</p><p className="mt-1 text-2xl font-extrabold">{rapportJournalier.totalAnnules}</p></div>
+                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Dépenses</p><p className="mt-1 text-2xl font-extrabold">{rapportJournalier.totalDepenses}</p></div>
+                </CardContent>
+              </Card>
+              <div className="grid gap-4 md:grid-cols-2">
+                {rapportJournalier.totaux.map((t) => (
+                  <Card key={t.devise} className="rounded-2xl border-stone-200/80 shadow-sm"><CardContent className="grid grid-cols-3 gap-3 p-5"><div><p className="text-[10px] font-bold uppercase text-stone-500">Encaissements</p><p className="mt-1 text-sm font-extrabold text-emerald-700">{formatMoney(t.encaissements, t.devise)}</p></div><div><p className="text-[10px] font-bold uppercase text-stone-500">Dépenses</p><p className="mt-1 text-sm font-extrabold text-rose-600">{formatMoney(t.depenses, t.devise)}</p></div><div><p className="text-[10px] font-bold uppercase text-stone-500">Solde net</p><p className={`mt-1 text-sm font-extrabold ${t.solde >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{formatMoney(t.solde, t.devise)}</p></div></CardContent></Card>
+                ))}
+              </div>
+              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#0c241f]">Répartition par mode de paiement</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader className="bg-[#0c241f] text-white"><TableRow><TableHead className="text-amber-300">Mode</TableHead><TableHead>Devise</TableHead><TableHead className="text-right">Nombre</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.parMode.map((m, i) => <TableRow key={`${m.mode}-${m.devise}-${i}`}><TableCell className="text-xs font-semibold">{m.mode || '—'}</TableCell><TableCell className="text-xs">{m.devise}</TableCell><TableCell className="text-right text-xs font-bold">{m.nombre}</TableCell><TableCell className="text-right text-xs font-bold text-emerald-700">{formatMoney(m.total, m.devise)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#0c241f]">Détail des reçus — {dateJournalier}</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader className="bg-[#0c241f] text-white"><TableRow><TableHead className="text-amber-300">Heure</TableHead><TableHead>N° reçu</TableHead>{school === 'ALL' && <TableHead>Établissement</TableHead>}<TableHead>Élève</TableHead><TableHead>Motif</TableHead><TableHead>Mode</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.recus.map((r, i) => <TableRow key={`${r.numeroRecu}-${i}`} className={r.statut === 'ANNULE' ? 'bg-rose-50/50 opacity-60' : ''}><TableCell className="text-xs">{r.heure}</TableCell><TableCell className="font-mono text-xs font-bold">{r.numeroRecu}</TableCell>{school === 'ALL' && <TableCell className="text-xs font-semibold">{r.etablissementNom || '—'}</TableCell>}<TableCell className="text-xs font-semibold">{r.eleve}<br /><span className="text-[10px] text-stone-400">{r.matricule} — {r.classe}</span></TableCell><TableCell className="text-xs">{r.motif}</TableCell><TableCell className="text-xs">{r.modePaiement}</TableCell><TableCell className="text-right text-xs font-bold">{formatMoney(r.montant, r.devise)}</TableCell><TableCell className="text-xs font-bold">{r.statut === 'ANNULE' ? 'Annulé' : 'Valide'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#0c241f]">Détail des dépenses</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader className="bg-[#0c241f] text-white"><TableRow><TableHead className="text-amber-300">Heure</TableHead>{school === 'ALL' && <TableHead>Établissement</TableHead>}<TableHead>Catégorie</TableHead><TableHead>Libellé</TableHead><TableHead>Bénéficiaire</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.depenses.map((d, i) => <TableRow key={`${d.heure}-${d.libelle}-${i}`}><TableCell className="text-xs">{d.heure}</TableCell>{school === 'ALL' && <TableCell className="text-xs font-semibold">{d.etablissementNom || '—'}</TableCell>}<TableCell className="text-xs">{d.categorie}</TableCell><TableCell className="text-xs font-semibold">{d.libelle}</TableCell><TableCell className="text-xs">{d.beneficiaire || '—'}</TableCell><TableCell className="text-right text-xs font-bold">{formatMoney(d.montant, d.devise)}</TableCell><TableCell className="text-xs">{d.statut}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+            </>
+          ) : (
+            <Card className="rounded-2xl border-stone-200 shadow-sm"><CardContent className="p-12 text-center text-stone-400 font-medium"><FileText className="mx-auto mb-3 h-12 w-12 opacity-30" /><p className="text-base font-bold text-stone-700">Sélectionnez une date puis générez le rapport journalier.</p></CardContent></Card>
           )}
         </TabsContent>
       </Tabs>

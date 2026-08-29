@@ -26,6 +26,8 @@ pub fn run() {
             commands::classes::create_classe,
             commands::classes::update_classe,
             commands::classes::delete_classe,
+            commands::classes::clean_eleve_classe_duplicates,
+            commands::classes::list_eleves_sans_classe,
             // Eleves
             commands::eleves::list_eleves,
             commands::eleves::get_eleve,
@@ -50,6 +52,7 @@ pub fn run() {
             commands::encaissements::list_paiements,
             commands::encaissements::create_paiement,
             commands::encaissements::annuler_paiement,
+            commands::encaissements::update_paiement,
             commands::encaissements::get_paiement,
             // Depenses
             commands::depenses::list_depenses,
@@ -69,6 +72,7 @@ pub fn run() {
             // Rapports
             commands::rapports::get_rapport_financier,
             commands::rapports::get_rapport_eleves,
+            commands::rapports::get_rapport_journalier,
             // Audit
             commands::audit::list_audit_logs,
             // Sync

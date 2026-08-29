@@ -1,0 +1,14 @@
+DB=C:\Users\kayem\AppData\Roaming\SGFS-ME\data\sgfs.db
+ELEVE PRESENT
+ELEVE_KEYS {'id': '5c4d5bda-241e-452e-af95-8d8efb6fd6aa', 'etablissement_id': '623167cc-8f51-455a-982c-621023904712', 'annee_scolaire_id': '5543e41b-3044-4b97-839c-5bcb8e6dc6e2'}
+PAIEMENT PRESENT
+PAIEMENT_KEYS {'id': '7c9346bd-c5ef-465c-9dae-5042fe58d3ee', 'eleve_id': 'c5960893-0feb-4c51-80f9-a7c1f077942a', 'echeance_id': None, 'etablissement_id': '91754361-818d-43d8-a697-6452fa601aa2', 'annee_scolaire_id': '19a88090-827e-4b80-8d6c-eeaa4e2cf05a', 'user_id': 'b22a8ca3-7751-40d7-8b4a-f4403430c31e'}
+PAYMENT_FKS {'eleve_id': 'c5960893-0feb-4c51-80f9-a7c1f077942a', 'echeance_id': None, 'etablissement_id': '91754361-818d-43d8-a697-6452fa601aa2', 'annee_scolaire_id': '19a88090-827e-4b80-8d6c-eeaa4e2cf05a', 'user_id': 'b22a8ca3-7751-40d7-8b4a-f4403430c31e'}
+Etablissement(91754361-818d-43d8-a697-6452fa601aa2) PRESENT
+AnneeScolaire(19a88090-827e-4b80-8d6c-eeaa4e2cf05a) PRESENT
+User(b22a8ca3-7751-40d7-8b4a-f4403430c31e) PRESENT
+PAYMENTS_FOR_FAILING_STUDENT
+{'id': '5952ea06-52ed-4243-b1c6-ba912e92a8af', 'eleve_id': '5c4d5bda-241e-452e-af95-8d8efb6fd6aa'}
+{'id': 'ee2f46a8-0f50-48cf-9a9f-2d9d0a648df9', 'eleve_id': '5c4d5bda-241e-452e-af95-8d8efb6fd6aa'}
+CANCELLATIONS_FOR_FAILING_PAYMENT
+{'id': 'b9e05c18-5d0e-4c5d-8d21-5786cd28511d', 'paiement_id': '7c9346bd-c5ef-465c-9dae-5042fe58d3ee'}

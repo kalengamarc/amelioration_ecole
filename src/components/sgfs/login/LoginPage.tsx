@@ -136,7 +136,7 @@ export default function LoginPage() {
                 <div className="relative h-14 w-14 rounded-2xl bg-white border border-amber-500/30 p-1.5 shadow-md flex items-center justify-center">
                   <Image
                     src={logoSrc}
-                    alt="Logo Complexe Scolaire Le Bon Berger"
+                    alt="Logo Complexe Scolaire Le Bon Bergerz"
                     width={52}
                     height={72}
                     className="object-contain"

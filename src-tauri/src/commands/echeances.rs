@@ -769,8 +769,11 @@ pub fn list_echeances(
     // ── WHERE partagé par les 3 requêtes ──────────────────────────────────
     // NB : le statut élève est stocké accentué ('TRANSFÉRÉ') dans le schéma ;
     // on exclut les deux graphies par sécurité.
-    let mut conditions: Vec<String> =
-        vec!["e.statut NOT IN ('TRANSFÉRÉ', 'TRANSFERE')".to_string()];
+    let mut conditions: Vec<String> = vec![
+        "e.statut IN ('ACTIF', 'INSCRIT')".to_string(),
+        "EXISTS (SELECT 1 FROM Etablissement ea WHERE ea.id = e.etablissement_id AND ea.actif = 1)".to_string(),
+        "EXISTS (SELECT 1 FROM EleveClasse eca JOIN Classe cca ON cca.id = eca.classe_id WHERE eca.eleve_id = e.id AND eca.statut = 'ACTIF' AND cca.actif = 1 AND cca.etablissement_id = e.etablissement_id AND cca.annee_scolaire_id = e.annee_scolaire_id)".to_string(),
+    ];
     let mut where_params: Vec<Box<dyn ToSql>> = Vec::new();
 
     if let Some(v) = eleve_id.as_ref().filter(|s| !s.is_empty()) {

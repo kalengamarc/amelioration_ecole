@@ -13,8 +13,12 @@ pub fn log_audit(
 ) {
     let id = generate_id();
     let now = crate::db::now_iso();
-    let conn = conn.lock().unwrap();
-    let _ = conn.execute(
+    let conn = conn.lock().map_err(|e| {
+        eprintln!("Erreur mutex audit logger: {}", e);
+        e
+    }).ok();
+    if let Some(conn) = conn {
+        let _ = conn.execute(
         "INSERT INTO AuditLog (id, user_id, action, entite, entite_id, details, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![id, user_id, action, entite, entite_id, details, now],
     );
@@ -24,6 +28,7 @@ pub fn log_audit(
         "DELETE FROM AuditLog WHERE id NOT IN (SELECT id FROM AuditLog ORDER BY created_at DESC LIMIT 200)",
         [],
     );
+    }
 }
 
 /// Convenience overload: log_audit with entity+action+details (no user_id, no entite_id)

@@ -26,7 +26,6 @@ pub struct SyncSummary {
 
 struct TableConfig {
     name: &'static str,
-    has_updated_at: bool,
     pk_cols: Vec<&'static str>,
     unique_cols: Vec<&'static str>,
     /// (colonne FK locale, table parente référencée)
@@ -116,10 +115,12 @@ fn http_post_with_retry(
     auth: &str,
     body: &Value,
 ) -> Result<reqwest::blocking::Response, reqwest::Error> {
-    let max_attempts = 3;
+    const MAX_ATTEMPTS: usize = 4;
     let mut last_err = None;
-    for attempt in 0..max_attempts {
-        match client.post(url)
+
+    for attempt in 0..MAX_ATTEMPTS {
+        match client
+            .post(url)
             .header("apikey", apikey)
             .header("Authorization", auth)
             .header("Content-Type", "application/json")
@@ -127,22 +128,26 @@ fn http_post_with_retry(
             .json(body)
             .send()
         {
-            Ok(resp) => return Ok(resp),
+            Ok(resp) => {
+                let retryable = resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+                    || resp.status().is_server_error();
+                if !retryable || attempt + 1 == MAX_ATTEMPTS {
+                    return Ok(resp);
+                }
+                let wait_ms = 500_u64 * 2_u64.pow(attempt as u32);
+                thread::sleep(Duration::from_millis(wait_ms));
+            }
             Err(e) => {
                 last_err = Some(e);
-                let wait = Duration::from_millis(300 * (attempt as u64 + 1));
-                thread::sleep(wait);
+                if attempt + 1 < MAX_ATTEMPTS {
+                    let wait_ms = 500_u64 * 2_u64.pow(attempt as u32);
+                    thread::sleep(Duration::from_millis(wait_ms));
+                }
             }
         }
     }
-    client.post(url)
-        .header("apikey", apikey)
-        .header("Authorization", auth)
-        .header("Content-Type", "application/json")
-        .header("Prefer", "resolution=merge-duplicates")
-        .json(body)
-        .send()
-        .or_else(|e| last_err.map(Err).unwrap_or(Err(e)))
+
+    Err(last_err.expect("HTTP retry loop must record a network error"))
 }
 
 pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError> {
@@ -191,27 +196,28 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     ).unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
 
     let tables = vec![
-        TableConfig { name: "Etablissement", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
-        TableConfig { name: "User", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["username"], fk_deps: vec![] },
-        TableConfig { name: "AnneeScolaire", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["etablissement_id", "libelle"], fk_deps: vec![("etablissement_id", "Etablissement")] },
-        TableConfig { name: "Classe", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["nom", "etablissement_id", "annee_scolaire_id"], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
-        TableConfig { name: "Eleve", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["matricule"], fk_deps: vec![] },
-        TableConfig { name: "Tuteur", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
-        TableConfig { name: "TuteurEleve", has_updated_at: false, pk_cols: vec!["eleve_id", "tuteur_id"], unique_cols: vec![], fk_deps: vec![("eleve_id", "Eleve"), ("tuteur_id", "Tuteur")] },
-        TableConfig { name: "EleveClasse", has_updated_at: false, pk_cols: vec!["eleve_id", "classe_id"], unique_cols: vec![], fk_deps: vec![("eleve_id", "Eleve"), ("classe_id", "Classe")] },
-        TableConfig { name: "FraisScolaire", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
-        TableConfig { name: "FraisClasse", has_updated_at: false, pk_cols: vec!["frais_scolaire_id", "classe_id"], unique_cols: vec![], fk_deps: vec![("frais_scolaire_id", "FraisScolaire"), ("classe_id", "Classe")] },
-        TableConfig { name: "Echeance", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["eleve_id", "frais_scolaire_id"], fk_deps: vec![("eleve_id", "Eleve"), ("frais_scolaire_id", "FraisScolaire")] },
-        TableConfig { name: "Paiement", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["numero_recu"], fk_deps: vec![("eleve_id", "Eleve")] },
-        TableConfig { name: "AnnulationRecu", has_updated_at: false, pk_cols: vec!["id"], unique_cols: vec!["paiement_id"], fk_deps: vec![("paiement_id", "Paiement")] },
-        TableConfig { name: "Depense", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
-        TableConfig { name: "ParametreEtablissement", has_updated_at: true, pk_cols: vec!["id"], unique_cols: vec!["etablissement_id"], fk_deps: vec![("etablissement_id", "Etablissement")] },
-        TableConfig { name: "AuditLog", has_updated_at: false, pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "Etablissement", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "User", pk_cols: vec!["id"], unique_cols: vec!["username"], fk_deps: vec![("etablissement_id", "Etablissement")] },
+        TableConfig { name: "AnneeScolaire", pk_cols: vec!["id"], unique_cols: vec!["etablissement_id", "libelle"], fk_deps: vec![("etablissement_id", "Etablissement")] },
+        TableConfig { name: "Classe", pk_cols: vec!["id"], unique_cols: vec!["nom", "etablissement_id", "annee_scolaire_id"], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
+        TableConfig { name: "Eleve", pk_cols: vec!["id"], unique_cols: vec!["matricule"], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
+        TableConfig { name: "Tuteur", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![] },
+        TableConfig { name: "TuteurEleve", pk_cols: vec!["eleve_id", "tuteur_id"], unique_cols: vec![], fk_deps: vec![("eleve_id", "Eleve"), ("tuteur_id", "Tuteur")] },
+        TableConfig { name: "EleveClasse", pk_cols: vec!["eleve_id", "classe_id"], unique_cols: vec![], fk_deps: vec![("eleve_id", "Eleve"), ("classe_id", "Classe")] },
+        TableConfig { name: "FraisScolaire", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
+        TableConfig { name: "FraisClasse", pk_cols: vec!["frais_scolaire_id", "classe_id"], unique_cols: vec![], fk_deps: vec![("frais_scolaire_id", "FraisScolaire"), ("classe_id", "Classe")] },
+        TableConfig { name: "Echeance", pk_cols: vec!["id"], unique_cols: vec!["eleve_id", "frais_scolaire_id"], fk_deps: vec![("eleve_id", "Eleve"), ("frais_scolaire_id", "FraisScolaire"), ("annee_scolaire_id", "AnneeScolaire")] },
+        TableConfig { name: "Paiement", pk_cols: vec!["id"], unique_cols: vec!["numero_recu"], fk_deps: vec![("eleve_id", "Eleve"), ("echeance_id", "Echeance"), ("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("user_id", "User")] },
+        TableConfig { name: "AnnulationRecu", pk_cols: vec!["id"], unique_cols: vec!["paiement_id"], fk_deps: vec![("paiement_id", "Paiement")] },
+        TableConfig { name: "Depense", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("created_by", "User")] },
+        TableConfig { name: "ParametreEtablissement", pk_cols: vec!["id"], unique_cols: vec!["etablissement_id"], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
+        TableConfig { name: "AuditLog", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![("user_id", "User")] },
     ];
 
     let client = reqwest::blocking::Client::builder()
         .user_agent("SGFS-ME/1.0")
-        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| AppError::Internal(format!("Impossible d'initialiser le client HTTP : {}", e)))?;
 
@@ -232,8 +238,12 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
     // ==========================================
     // PHASE 1 : PULL (Remote -> Local)
+    // On rapatrie TOUTES les lignes, sans filtre temporel.
     // ==========================================
 
+    // Les suppressions distantes sont toujours traitées de manière incrémentale
+    // via l'AuditLog (on ne peut pas deviner quelles lignes ont été supprimées
+    // en faisant un simple SELECT * sur les données restantes).
     let url_del = format!("{}/rest/v1/AuditLog?action=eq.DELETE&created_at=gt.{}", supabase_url, encode_param(&last_sync));
     let res_del = http_get_with_retry(&client, &url_del, &supabase_key, &format!("Bearer {}", supabase_key), None);
 
@@ -255,31 +265,15 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     }
 
     for t in &tables {
-        let t_last_sync = get_table_last_sync(conn, t.name);
-        let t_pull_since = if t_last_sync == "1970-01-01T00:00:00Z" || t_last_sync.trim().is_empty() {
-            "1970-01-01T00:00:00Z".to_string()
-        } else if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&t_last_sync) {
-            (dt - chrono::Duration::hours(24)).format("%Y-%m-%dT%H:%M:%SZ").to_string()
-        } else {
-            "1970-01-01T00:00:00Z".to_string()
-        };
-
-        let timestamp_col = if t.has_updated_at {
-            "updated_at"
-        } else if t.name == "EleveClasse" {
-            "date_inscription"
-        } else {
-            "created_at"
-        };
-
+        // Aucun filtre temporel : on récupère l'intégralité de la table distante,
+        // par pages de 1000 lignes, tant qu'il y a des données.
         let mut offset = 0;
         let page_size = 1000;
         let mut total_pulled = 0;
-        let mut pull_success = true;
 
         loop {
             let range_header = format!("{}-{}", offset, offset + page_size - 1);
-            let url = format!("{}/rest/v1/{}?{}=gt.{}", supabase_url, t.name, timestamp_col, encode_param(&t_pull_since));
+            let url = format!("{}/rest/v1/{}", supabase_url, t.name);
             let res = http_get_with_retry(
                 &client,
                 &url,
@@ -307,19 +301,13 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         }
                         offset += page_size;
                     } else {
-                        pull_success = false;
                         break;
                     }
                 }
                 Err(_) => {
-                    pull_success = false;
                     break;
                 }
             }
-        }
-
-        if pull_success {
-            set_table_last_sync(conn, t.name, &start_time);
         }
 
         if let Some(stat) = stats.get_mut(t.name) {
@@ -329,6 +317,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
     // ==========================================
     // PHASE 2 : PUSH (Local -> Remote)
+    // On pousse TOUTES les lignes locales, sans filtre temporel.
     // ==========================================
 
     let mut stmt_del = conn.prepare(
@@ -373,7 +362,8 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             .send();
     }
 
-    let push_batch_size = 100;
+    // Lots plus petits pour éviter les timeouts et isoler les erreurs par groupe.
+    let push_batch_size = 25;
     for t in &tables {
         let blocked_parent = t.fk_deps.iter()
             .map(|(_, parent)| *parent)
@@ -388,13 +378,8 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             continue;
         }
 
-        let mut local_rows = match query_table_since(conn, t.name, &last_sync, t.has_updated_at) {
-            Ok(rows) => rows,
-            Err(_) => Vec::new(),
-        };
-        if local_rows.is_empty() {
-            local_rows = query_table_all(conn, t.name).unwrap_or_default();
-        }
+        // Push complet et idempotent : on envoie l'intégralité du contenu local.
+        let mut local_rows = query_table_all(conn, t.name).unwrap_or_default();
         if local_rows.is_empty() { continue; }
 
         sanitize_rows_for_push(conn, t.name, &mut local_rows);
@@ -443,8 +428,21 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         }
         if local_rows.is_empty() { continue; }
 
-        let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
         let mut table_had_error = false;
+        if t.name == "EleveClasse" {
+            if let Err(e) = clear_remote_active_enrollment_conflicts(
+                &client,
+                &supabase_url,
+                &supabase_key,
+                &local_rows,
+            ) {
+                push_errors.push(format!("EleveClasse: préparation des classes actives impossible : {}", e));
+                push_had_error = true;
+                table_had_error = true;
+            }
+        }
+
+        let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
 
         for batch in &batches {
             let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
@@ -576,9 +574,15 @@ fn query_local_rows_by_ids(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    
-    if ids.len() > 100 {
-        return Err(AppError::Internal(format!("Trop de parents manquants pour {} ({}), abandon de la réparation auto pour ce batch", table_name, ids.len())));
+
+    // SQLite et les URL Supabase ont des limites pratiques sur la taille des lots.
+    // Découper plutôt que d'abandonner lorsque beaucoup de parents sont requis.
+    if ids.len() > 500 {
+        let mut all_rows = Vec::new();
+        for chunk in ids.chunks(500) {
+            all_rows.extend(query_local_rows_by_ids(conn, table_name, &chunk.to_vec())?);
+        }
+        return Ok(all_rows);
     }
 
     let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
@@ -673,27 +677,165 @@ fn repair_missing_remote_parents(
             continue;
         }
 
-        let push_url = format!("{}/rest/v1/{}?on_conflict=id", supabase_url, parent_table);
-        let res = http_post_with_retry(
-            client,
-            &push_url,
-            supabase_key,
-            &format!("Bearer {}", supabase_key),
-            &Value::Array(local_missing_rows),
-        );
+        // L'utilisateur système admin est créé localement et existe déjà dans Supabase.
+        // Il ne doit pas être recréé avec un autre UUID local.
+        let local_missing_rows: Vec<Value> = if *parent_table == "User" {
+            local_missing_rows
+                .into_iter()
+                .filter(|row| row.get("username").and_then(|v| v.as_str()) != Some("admin"))
+                .collect()
+        } else {
+            local_missing_rows
+        };
+        if local_missing_rows.is_empty() {
+            continue;
+        }
 
-        match res {
-            Ok(resp) if resp.status().is_success() => {
+        // Réparer récursivement toute la chaîne avant de pousser le parent.
+        // Exemple : AnnulationRecu -> Paiement -> Eleve -> AnneeScolaire -> Etablissement.
+        let mut repairing: HashSet<String> = HashSet::new();
+        if !push_rows_with_dependencies(
+            conn,
+            client,
+            supabase_url,
+            supabase_key,
+            parent_table,
+            &local_missing_rows,
+            repair_log,
+            &mut repairing,
+        ) {
+            continue;
+        }
+    }
+}
+
+fn dependency_configs(table_name: &str) -> Vec<(&'static str, &'static str)> {
+    match table_name {
+        "User" => vec![("etablissement_id", "Etablissement")],
+        "AnneeScolaire" => vec![("etablissement_id", "Etablissement")],
+        "Classe" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")],
+        "Eleve" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")],
+        "TuteurEleve" => vec![("eleve_id", "Eleve"), ("tuteur_id", "Tuteur")],
+        "EleveClasse" => vec![("eleve_id", "Eleve"), ("classe_id", "Classe")],
+        "FraisScolaire" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")],
+        "FraisClasse" => vec![("frais_scolaire_id", "FraisScolaire"), ("classe_id", "Classe")],
+        "Echeance" => vec![("eleve_id", "Eleve"), ("frais_scolaire_id", "FraisScolaire"), ("annee_scolaire_id", "AnneeScolaire")],
+        "Paiement" => vec![("eleve_id", "Eleve"), ("echeance_id", "Echeance"), ("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("user_id", "User")],
+        "AnnulationRecu" => vec![("paiement_id", "Paiement"), ("user_id", "User")],
+        "Depense" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("created_by", "User")],
+        "ParametreEtablissement" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")],
+        "AuditLog" => vec![("user_id", "User")],
+        _ => Vec::new(),
+    }
+}
+
+fn push_rows_with_dependencies(
+    conn: &Connection,
+    client: &reqwest::blocking::Client,
+    supabase_url: &str,
+    supabase_key: &str,
+    table_name: &str,
+    rows: &[Value],
+    repair_log: &mut Vec<String>,
+    repairing: &mut HashSet<String>,
+) -> bool {
+    if rows.is_empty() {
+        return true;
+    }
+    if !repairing.insert(table_name.to_string()) {
+        repair_log.push(format!("Dépendance circulaire détectée vers '{}'", table_name));
+        return false;
+    }
+
+    let mut ok = true;
+    for (fk_col, parent_table) in dependency_configs(table_name) {
+        let ids: Vec<String> = rows.iter()
+            .filter_map(|row| row.get(fk_col).and_then(|v| v.as_str()))
+            .filter(|id| !id.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+        if ids.is_empty() {
+            continue;
+        }
+        let local_parent_rows = match query_local_rows_by_ids(conn, parent_table, &ids) {
+            Ok(parent_rows) => parent_rows,
+            Err(e) => {
+                repair_log.push(format!("Échec de la récupération locale des parents pour {} : {}", parent_table, e));
+                ok = false;
                 continue;
             }
+        };
+        if local_parent_rows.len() != ids.iter().collect::<HashSet<_>>().len() {
+            repair_log.push(format!("Parents référencés absents localement pour {}", parent_table));
+            ok = false;
+            continue;
+        }
+        if !push_rows_with_dependencies(conn, client, supabase_url, supabase_key, parent_table, &local_parent_rows, repair_log, repairing) {
+            ok = false;
+        }
+    }
+
+    if ok {
+        let push_url = format!("{}/rest/v1/{}?on_conflict=id", supabase_url, table_name);
+        match http_post_with_retry(client, &push_url, supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(rows.to_vec())) {
+            Ok(resp) if resp.status().is_success() => {}
             Ok(resp) => {
-                repair_log.push(format!("ÉCHEC du push vers '{}' : {}", parent_table, resp.text().unwrap_or_default()));
+                repair_log.push(format!("ÉCHEC du push vers '{}' : {}", table_name, resp.text().unwrap_or_default()));
+                ok = false;
             }
             Err(e) => {
-                repair_log.push(format!("Erreur réseau vers '{}' : {}", parent_table, e));
+                repair_log.push(format!("Erreur réseau vers '{}' : {}", table_name, e));
+                ok = false;
             }
         }
     }
+
+    repairing.remove(table_name);
+    ok
+}
+
+fn clear_remote_active_enrollment_conflicts(
+    client: &reqwest::blocking::Client,
+    supabase_url: &str,
+    supabase_key: &str,
+    rows: &[Value],
+) -> Result<(), String> {
+    let mut active_eleve_ids: HashSet<String> = HashSet::new();
+    for row in rows {
+        let is_active = row.get("statut").and_then(|v| v.as_str()) == Some("ACTIF");
+        if is_active {
+            if let Some(eleve_id) = row.get("eleve_id").and_then(|v| v.as_str()) {
+                if !eleve_id.is_empty() {
+                    active_eleve_ids.insert(eleve_id.to_string());
+                }
+            }
+        }
+    }
+
+    for eleve_id in active_eleve_ids {
+        let url = format!(
+            "{}/rest/v1/EleveClasse?eleve_id=eq.{}&statut=eq.ACTIF",
+            supabase_url,
+            encode_param(&eleve_id),
+        );
+        let response = client
+            .patch(&url)
+            .header("apikey", supabase_key)
+            .header("Authorization", format!("Bearer {}", supabase_key))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({"statut": "TRANSFERE"}))
+            .send()
+            .map_err(|e| format!("erreur réseau pour l'élève {} : {}", eleve_id, e))?;
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "échec de neutralisation de l'inscription active de l'élève {} : {}",
+                eleve_id,
+                response.text().unwrap_or_default()
+            ));
+        }
+    }
+    Ok(())
 }
 
 // =====================================================================
@@ -775,33 +917,6 @@ fn delete_composite_row(conn: &Connection, table_name: &str, entite_id: &str) ->
     Ok(())
 }
 
-fn get_table_last_sync(conn: &Connection, table_name: &str) -> String {
-    let key = format!("LAST_SYNC_{}", table_name);
-    let table_sync: Option<String> = conn
-        .query_row("SELECT valeur FROM ConfigSysteme WHERE cle = ?", params![key], |r| r.get(0))
-        .ok();
-
-    if let Some(ts) = table_sync {
-        if !ts.trim().is_empty() {
-            return ts;
-        }
-    }
-
-    conn.query_row("SELECT valeur FROM ConfigSysteme WHERE cle = 'LAST_SYNC'", [], |r| r.get(0))
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
-}
-
-fn set_table_last_sync(conn: &Connection, table_name: &str, sync_time: &str) {
-    let key = format!("LAST_SYNC_{}", table_name);
-    let uuid_str = uuid::Uuid::new_v4().to_string();
-    let _ = conn.execute(
-        "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?4) \
-         ON CONFLICT(cle) DO UPDATE SET valeur = ?3, updated_at = ?4",
-        params![uuid_str, key, sync_time, sync_time],
-    );
-}
-
 fn sanitize_rows_for_push(conn: &Connection, table_name: &str, rows: &mut Vec<Value>) {
     if table_name != "Paiement" && table_name != "AuditLog" && table_name != "AnnulationRecu" && table_name != "Depense" {
         return;
@@ -842,66 +957,6 @@ fn sanitize_rows_for_push(conn: &Connection, table_name: &str, rows: &mut Vec<Va
             }
         }
     }
-}
-
-fn query_table_since(
-    conn: &Connection,
-    table_name: &str,
-    last_sync: &str,
-    has_updated_at: bool,
-) -> Result<Vec<Value>, AppError> {
-    let time_col = if has_updated_at {
-        "updated_at"
-    } else if table_name == "EleveClasse" {
-        "date_inscription"
-    } else {
-        "created_at"
-    };
-
-    let query = format!(
-        "SELECT * FROM \"{}\" WHERE strftime('%Y-%m-%dT%H:%M:%SZ', COALESCE(\"{}\", '1970-01-01T00:00:00')) > strftime('%Y-%m-%dT%H:%M:%SZ', ?)",
-        table_name, time_col
-    );
-
-    let mut stmt = conn.prepare(&query)?;
-    let col_count = stmt.column_count();
-
-    let col_names: Vec<String> = (0..col_count)
-        .map(|i| stmt.column_name(i).unwrap_or_default().to_string())
-        .collect();
-
-    let mut rows = stmt.query(params![last_sync])?;
-    let mut results = Vec::new();
-
-    while let Some(row) = rows.next()? {
-        let mut map = serde_json::Map::new();
-        for i in 0..col_count {
-            let col_name = &col_names[i];
-            let val = match row.get_ref(i)? {
-                rusqlite::types::ValueRef::Null => Value::Null,
-                rusqlite::types::ValueRef::Integer(n) => Value::Number(n.into()),
-                rusqlite::types::ValueRef::Real(f) => {
-                    if let Some(num) = serde_json::Number::from_f64(f) {
-                        Value::Number(num)
-                    } else {
-                        Value::Null
-                    }
-                }
-                rusqlite::types::ValueRef::Text(t) => {
-                    let s = std::str::from_utf8(t).unwrap_or_default();
-                    Value::String(s.to_string())
-                }
-                rusqlite::types::ValueRef::Blob(b) => {
-                    let s = std::str::from_utf8(b).unwrap_or_default();
-                    Value::String(s.to_string())
-                }
-            };
-            map.insert(col_name.clone(), val);
-        }
-        results.push(Value::Object(map));
-    }
-
-    Ok(results)
 }
 
 fn query_table_all(

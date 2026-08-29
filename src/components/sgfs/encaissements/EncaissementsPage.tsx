@@ -26,7 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { AlertCircle, CheckCircle2, Receipt, Search, X, Sparkles, Banknote } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Receipt, Search, X, Sparkles, Banknote, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { ReceiptPOS } from './ReceiptPOS'
 
@@ -116,6 +116,7 @@ interface Encaissement {
   prochaineEcheance?: string | null
   totaux?: { devise: string; totalDu: number; totalPaye: number; reste: number }[]
   deviseSituation?: string | null
+  deviseEcheance?: string | null
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -138,6 +139,8 @@ export default function EncaissementsPage() {
   const [selectedStudent, setSelectedStudent] = useState<Eleve | null>(null)
   const [echeances, setEcheances] = useState<Echeance[]>([])
   const [selectedEcheance, setSelectedEcheance] = useState<Echeance | null>(null)
+  const [studentSuggestions, setStudentSuggestions] = useState<any[]>([])
+  const [searchingStudents, setSearchingStudents] = useState(false)
   const [loadingEcheances, setLoadingEcheances] = useState(false)
 
   const [motif, setMotif] = useState('')
@@ -163,6 +166,14 @@ export default function EncaissementsPage() {
   const [annulationTarget, setAnnulationTarget] = useState<Encaissement | null>(null)
   const [annulationMotif, setAnnulationMotif] = useState('')
   const [annulling, setAnnulling] = useState(false)
+
+  const [modificationTarget, setModificationTarget] = useState<Encaissement | null>(null)
+  const [modMotif, setModMotif] = useState('')
+  const [modMontant, setModMontant] = useState('')
+  const [modDevise, setModDevise] = useState('CDF')
+  const [modModePaiement, setModModePaiement] = useState('')
+  const [modReferencePaiement, setModReferencePaiement] = useState('')
+  const [modifying, setModifying] = useState(false)
 
   const fetchEtablissements = useCallback(async () => {
     try {
@@ -200,7 +211,7 @@ export default function EncaissementsPage() {
   const fetchStudents = useCallback(async () => {
     try {
       const etabId = schoolFilter || undefined
-      const res = await tc.listEleves({ etablissementId: etabId, pageSize: 100 })
+      const res = await tc.listEleves({ etablissementId: etabId, pageSize: 1000 })
       const list = res?.data ?? []
       setStudents(
         (Array.isArray(list) ? list : []).map((eleve: any) => ({
@@ -218,6 +229,33 @@ export default function EncaissementsPage() {
     }
   }, [schoolFilter])
 
+  const searchStudentsServer = useCallback(async (query: string) => {
+    if (!query.trim() || selectedStudent) {
+      setStudentSuggestions([])
+      return
+    }
+    setSearchingStudents(true)
+    try {
+      const etabId = schoolFilter || undefined
+      const res = await tc.listEleves({ etablissementId: etabId, search: query.trim(), pageSize: 20 })
+      const list = res?.data ?? []
+      const suggestions = (Array.isArray(list) ? list : []).map((eleve: any) => ({
+        id: eleve.id,
+        nom: eleve.nom,
+        prenom: eleve.prenom,
+        matricule: eleve.matricule,
+        classe: eleve.inscriptions?.[0]?.classe?.nom ?? '—',
+        etablissementId: eleve.etablissementId,
+        etablissementNom: eleve.etablissement?.nom ?? '',
+      }))
+      setStudentSuggestions(suggestions)
+    } catch {
+      setStudentSuggestions([])
+    } finally {
+      setSearchingStudents(false)
+    }
+  }, [schoolFilter, selectedStudent])
+
   useEffect(() => {
     if (!user) return
     fetchEtablissements()
@@ -225,6 +263,18 @@ export default function EncaissementsPage() {
     fetchAnnee()
     fetchStudents()
   }, [user, fetchEtablissements, fetchTaux, fetchAnnee, fetchStudents])
+
+  // Debounced search for students
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (studentSearch.trim()) {
+        searchStudentsServer(studentSearch)
+      } else {
+        setStudentSuggestions([])
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [studentSearch, searchStudentsServer])
 
   const fetchHistory = useCallback(
     async (requestedPage = page) => {
@@ -235,28 +285,19 @@ export default function EncaissementsPage() {
           etablissementId: etabId,
           dateFrom: histDateDebut || undefined,
           dateTo: histDateFin || undefined,
+          search: histSearch || undefined,
+          modePaiement: histMode || undefined,
           page: requestedPage,
           pageSize,
         })
         const all = res?.paiements ?? res?.data ?? []
-        let filtered = Array.isArray(all) ? all : []
+        const rows = Array.isArray(all) ? all : []
+        const total = Number(res?.total ?? rows.length)
 
-        if (histSearch.trim()) {
-          const q = histSearch.toLowerCase()
-          filtered = filtered.filter((p: any) =>
-            `${p.eleveNom ?? ''} ${p.eleveMatricule ?? ''} ${p.motif ?? ''}`
-              .toLowerCase()
-              .includes(q),
-          )
-        }
-        if (histMode) {
-          filtered = filtered.filter((p: any) => p.modePaiement === histMode)
-        }
-
-        const total = Math.max(1, Math.ceil(filtered.length / pageSize))
-        const start = (requestedPage - 1) * pageSize
-        setEncaissements(filtered.slice(start, start + pageSize))
-        setTotalPages(total)
+        // Le backend a déjà filtré et paginé. Ne pas filtrer ni découper
+        // une seconde fois ici, sinon des reçus des pages suivantes disparaissent.
+        setEncaissements(rows)
+        setTotalPages(Math.max(1, Math.ceil(total / pageSize)))
       } catch (e: any) {
         toast.error(e?.message || 'Erreur historique')
       } finally {
@@ -503,15 +544,64 @@ export default function EncaissementsPage() {
     }
   }
 
+  const modMontantImpute = useMemo(() => {
+    if (!modificationTarget || !modMontant) return null
+    const value = Number(modMontant)
+    if (!Number.isFinite(value)) return null
+    const echeanceDevise = modificationTarget.deviseEcheance || modificationTarget.devise
+    if (modDevise === echeanceDevise) return value
+    return modDevise === 'USD' ? value * tauxChange : value / tauxChange
+  }, [modMontant, modDevise, modificationTarget, tauxChange])
+
+  function debuterModification(e: Encaissement) {
+    setModificationTarget(e)
+    setModMotif(e.motif)
+    setModMontant(String(e.montant))
+    setModDevise(e.devise)
+    setModModePaiement(e.modePaiement)
+    setModReferencePaiement(e.referencePaiement || '')
+  }
+
+  async function confirmModification() {
+    if (!user) return toast.error('Utilisateur non connecté')
+    if (!modificationTarget) return
+    const value = Number(modMontant)
+    if (!Number.isFinite(value) || value <= 0) return toast.error('Montant invalide')
+    const impute = modMontantImpute == null ? value : Number(modMontantImpute)
+    if (!Number.isFinite(impute) || impute <= 0) return toast.error('Le montant imputé doit être supérieur à zéro')
+    if (!modMotif.trim()) return toast.error('Le motif du reçu est obligatoire')
+    if (!modDevise.trim()) return toast.error('La devise du reçu est obligatoire')
+    if (!modModePaiement) return toast.error('Mode de paiement requis')
+    if ((modModePaiement === 'CHEQUE' || modModePaiement === 'VIREMENT') && !modReferencePaiement.trim()) {
+      return toast.error('La référence est obligatoire pour ce mode de paiement')
+    }
+
+    setModifying(true)
+    try {
+      await tc.updatePaiement(modificationTarget.id, {
+        motif: modMotif.trim(),
+        montant: value,
+        devise: modDevise.trim(),
+        modePaiement: modModePaiement,
+        referencePaiement: modReferencePaiement.trim() || null,
+        tauxChange: modificationTarget.deviseEcheance && modDevise !== modificationTarget.deviseEcheance ? tauxChange : null,
+        montantAffecte: impute,
+        deviseEcheance: modificationTarget.deviseEcheance || modDevise.trim(),
+      })
+      toast.success('Reçu modifié avec succès')
+      setModificationTarget(null)
+      fetchHistory()
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur de modification")
+    } finally {
+      setModifying(false)
+    }
+  }
+
   const suggestions = useMemo(() => {
-    const q = studentSearch.trim().toLowerCase()
-    if (!q || selectedStudent) return []
-    return students
-      .filter((s) =>
-        `${s.matricule} ${s.nom} ${s.prenom} ${s.classe}`.toLowerCase().includes(q),
-      )
-      .slice(0, 8)
-  }, [students, studentSearch, selectedStudent])
+    if (selectedStudent) return []
+    return studentSuggestions.slice(0, 8)
+  }, [studentSuggestions, selectedStudent])
 
   const etablissementRecu = etablissements.find((e) => e.id === receipt?.etablissementId)
   const besoinReference = modePaiement === 'CHEQUE' || modePaiement === 'VIREMENT'
@@ -558,7 +648,12 @@ export default function EncaissementsPage() {
                     className="pl-10 rounded-xl border-stone-200 font-medium"
                     placeholder="Tapez nom, prénom, matricule ou classe..."
                   />
-                  {suggestions.length > 0 && (
+                  {searchingStudents && (
+                    <div className="absolute z-20 mt-1 w-full rounded-2xl border border-stone-200 bg-white p-4 shadow-xl text-center text-xs text-stone-500">
+                      Recherche en cours...
+                    </div>
+                  )}
+                  {!searchingStudents && suggestions.length > 0 && (
                     <div className="absolute z-20 mt-1 w-full rounded-2xl border border-stone-200 bg-white p-2 shadow-xl max-h-60 overflow-y-auto">
                       {suggestions.map((s) => (
                         <button
@@ -894,18 +989,30 @@ export default function EncaissementsPage() {
                                   <Receipt className="h-4 w-4" />
                                 </Button>
                                 {e.statut !== 'ANNULE' && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-rose-600 hover:bg-rose-50"
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8 text-amber-700 hover:bg-amber-50"
+                                      title="Modifier le reçu"
+                                      aria-label={`Modifier le reçu ${e.numeroRecu}`}
+                                      onClick={() => debuterModification(e)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8 text-rose-600 hover:bg-rose-50"
                                     title="Annuler le reçu"
                                     onClick={() => {
                                       setAnnulationTarget(e)
                                       setAnnulationMotif('')
                                     }}
                                   >
-                                    <X className="h-4 w-4" />
-                                  </Button>
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             </TableCell>
@@ -1002,6 +1109,70 @@ export default function EncaissementsPage() {
               onClick={confirmAnnulation}
             >
               {annulling ? 'Traitement...' : 'Confirmer l\'annulation'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modification du reçu ── */}
+      <Dialog
+        open={!!modificationTarget}
+        onOpenChange={(open) => !open && !modifying && setModificationTarget(null)}
+      >
+        <DialogContent className="rounded-3xl border-stone-200 p-6 shadow-2xl max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-[#0c241f] font-extrabold text-lg flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-amber-600" />
+              Modifier le reçu
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs font-semibold text-stone-600 mt-1">
+            Reçu <b className="font-mono text-stone-900">{modificationTarget?.numeroRecu}</b>
+          </p>
+          <div className="space-y-4 pt-3">
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Motif *</Label>
+              <Input className="rounded-xl border-stone-200 mt-1" value={modMotif} onChange={(e) => setModMotif(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Montant *</Label>
+                <Input type="number" min="0" step="0.01" className="rounded-xl border-stone-200 mt-1" value={modMontant} onChange={(e) => setModMontant(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-stone-600">Devise *</Label>
+                <Select value={modDevise} onValueChange={setModDevise}>
+                  <SelectTrigger className="rounded-xl border-stone-200 mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="CDF">CDF</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="BIF">BIF</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Mode de paiement *</Label>
+              <Select value={modModePaiement} onValueChange={setModModePaiement}>
+                <SelectTrigger className="rounded-xl border-stone-200 mt-1"><SelectValue placeholder="Choisir un mode" /></SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="ESPECES">Espèces</SelectItem>
+                  <SelectItem value="CHEQUE">Chèque</SelectItem>
+                  <SelectItem value="VIREMENT">Virement bancaire</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-stone-600">Référence</Label>
+              <Input className="rounded-xl border-stone-200 mt-1" value={modReferencePaiement} onChange={(e) => setModReferencePaiement(e.target.value)} placeholder="Obligatoire pour chèque ou virement" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 mt-2 border-t border-stone-100">
+            <Button variant="outline" className="rounded-xl border-stone-200 font-semibold" disabled={modifying} onClick={() => setModificationTarget(null)}>
+              Fermer
+            </Button>
+            <Button className="rounded-xl bg-[#0c241f] hover:bg-[#071916] text-white font-bold" disabled={modifying} onClick={confirmModification}>
+              {modifying ? 'Enregistrement...' : 'Enregistrer les modifications'}
             </Button>
           </div>
         </DialogContent>

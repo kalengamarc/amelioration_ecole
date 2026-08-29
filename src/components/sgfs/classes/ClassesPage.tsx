@@ -26,7 +26,7 @@ import {
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import {
-  GraduationCap, Plus, Edit, Trash2, ShieldAlert, Users, Layers,
+  GraduationCap, Plus, Edit, Trash2, ShieldAlert, Users, UserX, Layers,
   BarChart3, AlertTriangle, ChevronLeft, ChevronRight, Search, Loader2,
 } from 'lucide-react'
 
@@ -54,6 +54,16 @@ interface ClasseItem {
   etablissement?: { nom: string }
   anneeScolaire?: { id: string; libelle: string }
   effectif: number
+}
+
+interface EleveSansClasse {
+  id: string
+  matricule: string
+  nom: string
+  prenom: string
+  etablissementId: string
+  anneeScolaireId?: string | null
+  statut: string
 }
 
 // ─── Constants & Helpers ─────────────────────────────────────────────────────
@@ -137,6 +147,10 @@ export default function ClassesPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<ClasseItem | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false)
+  const [checkingNoClass, setCheckingNoClass] = useState(false)
+  const [orphanDialogOpen, setOrphanDialogOpen] = useState(false)
+  const [orphanStudents, setOrphanStudents] = useState<EleveSansClasse[]>([])
 
   const role = user?.role ?? ''
   const etabIdUser = user?.etablissementId ?? null
@@ -337,35 +351,58 @@ export default function ClassesPage() {
     setDeleting(true)
     try {
       await tc.deleteClasse(deleteTarget.id)
-      const hasStudents = (deleteTarget.effectif ?? 0) > 0
-      toast.success(
-        hasStudents
-          ? 'Classe désactivée avec succès'
-          : 'Classe supprimée définitivement'
-      )
+      toast.success('Classe supprimée avec succès')
       setDeleteTarget(null)
       fetchClasses()
-    } catch (error: any) {
-      toast.error(error?.message || error?.error || 'Erreur lors de la suppression')
+    } catch (e: any) {
+      toast.error(e?.message || 'Erreur lors de la suppression')
     } finally {
       setDeleting(false)
     }
   }
 
-  if (user && !canManageClasses(user.role)) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex min-h-[60vh] flex-col items-center justify-center gap-4"
-      >
-        <ShieldAlert className="h-16 w-16 text-rose-500" />
-        <h2 className="text-2xl font-bold text-stone-800">Accès réservé</h2>
-        <p className="text-stone-500">
-          La gestion des classes est réservée au coordonnateur ou à l'administrateur.
-        </p>
-      </motion.div>
+
+const handleCleanDuplicates = async () => {
+  setCleaningDuplicates(true)
+  try {
+    const result = await tc.cleanEleveClasseDuplicates()
+    const data = result?.data
+    toast.success(
+      `Nettoyage terminé: ${data?.cleaned_students || 0} élèves concernés, ${data?.total_duplicates_cleaned || 0} doublons supprimés`
     )
+    fetchClasses()
+  } catch (e: any) {
+    toast.error(e?.message || 'Erreur lors du nettoyage')
+  } finally {
+    setCleaningDuplicates(false)
+  }
+}
+
+  async function handleCheckNoClass() {
+    setCheckingNoClass(true)
+    try {
+      const etablissementId = locked
+        ? schoolFilter ?? undefined
+        : filterEcole !== 'all'
+          ? filterEcole
+          : undefined
+      const result = await tc.listElevesSansClasse(etablissementId, filterAnnee || undefined)
+      const data = result?.data ?? result
+      const list = Array.isArray(data?.eleves) ? data.eleves : []
+      setOrphanStudents(list)
+      setOrphanDialogOpen(true)
+      if (list.length === 0) {
+        toast.success('Aucun élève sans classe active.')
+      }
+    } catch (e: any) {
+      const message = typeof e === 'string'
+        ? e
+        : e?.message || e?.error || 'Erreur lors de la vérification des élèves sans classe'
+      console.error('Vérification élèves sans classe:', e)
+      toast.error(message)
+    } finally {
+      setCheckingNoClass(false)
+    }
   }
 
   return (
@@ -395,13 +432,33 @@ export default function ClassesPage() {
             )}
           </p>
         </div>
-        <Button
-          onClick={openCreate}
-          className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
-        >
-          <Plus className="h-4 w-4 text-amber-400" />
-          Nouvelle classe
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            onClick={handleCheckNoClass}
+            disabled={checkingNoClass}
+            variant="outline"
+            className="border-amber-200 text-amber-800 hover:bg-amber-50 font-bold px-4 py-2.5 rounded-xl gap-2"
+          >
+            <UserX className="h-4 w-4" />
+            {checkingNoClass ? 'Vérification...' : 'Élèves sans classe'}
+          </Button>
+          <Button
+            onClick={handleCleanDuplicates}
+            disabled={cleaningDuplicates}
+            variant="outline"
+            className="border-rose-200 text-rose-700 hover:bg-rose-50 font-bold px-4 py-2.5 rounded-xl gap-2"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            {cleaningDuplicates ? 'Nettoyage...' : 'Nettoyer doublons'}
+          </Button>
+          <Button
+            onClick={openCreate}
+            className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
+          >
+            <Plus className="h-4 w-4 text-amber-400" />
+            Nouvelle classe
+          </Button>
+        </div>
       </motion.div>
 
       {/* Filters Row */}
@@ -864,7 +921,58 @@ export default function ClassesPage() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+            </AlertDialog>
+
+      {/* ─── Élèves sans classe active ─────────────────────────────────────── */}
+      <Dialog open={orphanDialogOpen} onOpenChange={setOrphanDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
+          <DialogHeader className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700">
+                <UserX className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
+                  Élèves sans classe active
+                </DialogTitle>
+                <p className="text-xs text-stone-500 font-medium">
+                  {orphanStudents.length} élève(s) trouvé(s) avec les filtres actuels.
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {orphanStudents.length === 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center text-sm font-semibold text-emerald-800">
+              Tous les élèves non transférés ont une classe active.
+            </div>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
+                Ces fiches ne sont pas supprimées. Ouvrez <b>Gestion des Élèves</b>, modifiez chaque fiche et attribuez-lui la classe correcte.
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-2xl border border-stone-200">
+                <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-stone-200 bg-stone-50 px-4 py-3 text-xs font-bold text-stone-600">
+                  <span>Élève</span>
+                  <span>Matricule</span>
+                </div>
+                {orphanStudents.map((student) => (
+                  <div key={student.id} className="grid grid-cols-[1fr_auto] gap-3 border-b border-stone-100 px-4 py-3 text-sm last:border-0">
+                    <span className="font-semibold text-stone-800">{student.nom} {student.prenom}</span>
+                    <span className="font-mono text-xs font-bold text-stone-500">{student.matricule}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-end border-t border-stone-100 pt-4">
+            <Button onClick={() => setOrphanDialogOpen(false)} className="rounded-xl bg-[#0c241f] px-6 font-bold text-white hover:bg-[#071916]">
+              Fermer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

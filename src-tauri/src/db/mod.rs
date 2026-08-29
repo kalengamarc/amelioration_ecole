@@ -342,6 +342,32 @@ fn dirs_home() -> Option<String> {
     std::env::var("USERPROFILE").ok()
 }
 
+fn normalize_active_enrollments(conn: &Connection) -> Result<(), AppError> {
+    let now = now_iso();
+    // Conserver l'inscription active la plus récente pour chaque élève.
+    // Les autres lignes restent dans l'historique avec le statut TRANSFERE.
+    conn.execute(
+        "UPDATE EleveClasse
+         SET statut = 'TRANSFERE', date_sortie = ?
+         WHERE statut = 'ACTIF'
+           AND EXISTS (
+               SELECT 1
+               FROM EleveClasse AS kept
+               WHERE kept.eleve_id = EleveClasse.eleve_id
+                 AND kept.statut = 'ACTIF'
+                 AND (
+                     kept.date_inscription > EleveClasse.date_inscription
+                     OR (
+                         kept.date_inscription = EleveClasse.date_inscription
+                         AND kept.classe_id > EleveClasse.classe_id
+                     )
+                 )
+           )",
+        rusqlite::params![now],
+    )?;
+    Ok(())
+}
+
 pub fn init_db() -> Result<DbConn, AppError> {
     let path = get_db_path();
     let conn = Connection::open(&path)?;
@@ -349,6 +375,11 @@ pub fn init_db() -> Result<DbConn, AppError> {
     conn.execute_batch("PRAGMA busy_timeout=5000;")?;
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
     conn.execute_batch(SCHEMA)?;
+    normalize_active_enrollments(&conn)?;
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_eleve_classe_one_active_per_eleve
+         ON EleveClasse(eleve_id) WHERE statut = 'ACTIF';",
+    )?;
     seed_default_admin(&conn)?;
     Ok(Mutex::new(conn))
 }

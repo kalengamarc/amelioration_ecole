@@ -15,6 +15,8 @@ pub fn list_paiements(
     annule: Option<bool>,
     date_from: Option<String>,
     date_to: Option<String>,
+    search: Option<String>,
+    mode_paiement: Option<String>,
     page: Option<i64>,
     page_size: Option<i64>,
 ) -> Result<serde_json::Value, AppError> {
@@ -48,14 +50,28 @@ pub fn list_paiements(
         param_values.push(Box::new(v.clone()));
     }
     if let Some(ref v) = date_to {
-        where_conditions.push("p.created_at <= ?".to_string());
+        // Inclure toute la journée sélectionnée dans le filtre de date de fin.
+        where_conditions.push("p.created_at < (? || 'T23:59:59.999Z')".to_string());
+        param_values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = search {
+        let value = format!("%{}%", v.trim().to_lowercase());
+        where_conditions.push(
+            "(LOWER(p.numero_recu) LIKE ? OR LOWER(COALESCE(el.nom, '') || ' ' || COALESCE(el.prenom, '')) LIKE ? OR LOWER(COALESCE(el.matricule, '')) LIKE ? OR LOWER(COALESCE(p.motif, '')) LIKE ? OR LOWER(COALESCE(p.reference_paiement, '')) LIKE ?)".to_string(),
+        );
+        for _ in 0..5 {
+            param_values.push(Box::new(value.clone()));
+        }
+    }
+    if let Some(ref v) = mode_paiement {
+        where_conditions.push("p.mode_paiement = ?".to_string());
         param_values.push(Box::new(v.clone()));
     }
 
     let where_clause = where_conditions.join(" AND ");
 
     let count_query = format!(
-        "SELECT COUNT(*) as total FROM Paiement p WHERE {}",
+        "SELECT COUNT(*) as total FROM Paiement p LEFT JOIN Eleve el ON p.eleve_id = el.id WHERE {}",
         where_clause
     );
     let params_refs_count: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
@@ -209,6 +225,15 @@ pub fn create_paiement(
             new_annee_id
         }
     };
+
+    let peut_payer: bool = conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM Eleve el JOIN Etablissement et ON et.id = el.etablissement_id WHERE el.id = ?1 AND el.statut IN ('ACTIF', 'INSCRIT') AND el.etablissement_id = ?2 AND et.actif = 1 AND EXISTS (SELECT 1 FROM EleveClasse ec JOIN Classe c ON c.id = ec.classe_id WHERE ec.eleve_id = el.id AND ec.statut = 'ACTIF' AND c.actif = 1 AND c.etablissement_id = ?2 AND c.annee_scolaire_id = ?3))",
+        params![eleve_id, etab_id, final_annee_id],
+        |r| r.get(0),
+    ).unwrap_or(false);
+    if !peut_payer {
+        return Err(AppError::Validation("Paiement impossible : l'élève doit être actif, rattaché à une classe active et dépendre d'un établissement actif.".into()));
+    }
 
     let valid_user_id = if !user_id.trim().is_empty() && user_id != "undefined" && user_id != "null" && conn.query_row("SELECT COUNT(*) > 0 FROM User WHERE id = ?", params![user_id], |r| r.get::<_, bool>(0)).unwrap_or(false) {
         user_id
@@ -418,6 +443,156 @@ pub fn get_paiement(
             }))
         },
     ).map_err(|_| AppError::NotFound(format!("Paiement {} introuvable", id)))?;
+
+    Ok(api_response(Ok(result)))
+}
+
+#[tauri::command]
+pub fn update_paiement(
+    db: State<'_, DbConn>,
+    id: String,
+    motif: String,
+    montant: f64,
+    devise: String,
+    mode_paiement: String,
+    reference_paiement: Option<String>,
+    taux_change: Option<f64>,
+    montant_affecte: Option<f64>,
+    devise_echeance: Option<String>,
+) -> Result<serde_json::Value, AppError> {
+    if !montant.is_finite() || montant <= 0.0 {
+        return Err(AppError::Validation("Le montant du reçu doit être supérieur à zéro.".into()));
+    }
+    if motif.trim().is_empty() {
+        return Err(AppError::Validation("Le motif du reçu est obligatoire.".into()));
+    }
+    if devise.trim().is_empty() {
+        return Err(AppError::Validation("La devise du reçu est obligatoire.".into()));
+    }
+    if mode_paiement.trim().is_empty() {
+        return Err(AppError::Validation("Le mode de paiement est obligatoire.".into()));
+    }
+    if (mode_paiement == "CHEQUE" || mode_paiement == "VIREMENT")
+        && reference_paiement.as_deref().map(str::trim).unwrap_or("").is_empty()
+    {
+        return Err(AppError::Validation("La référence est obligatoire pour un chèque ou un virement.".into()));
+    }
+    let new_montant_affecte = montant_affecte.unwrap_or(montant);
+    if !new_montant_affecte.is_finite() || new_montant_affecte <= 0.0 {
+        return Err(AppError::Validation("Le montant imputé doit être supérieur à zéro.".into()));
+    }
+    if let Some(taux) = taux_change {
+        if !taux.is_finite() || taux <= 0.0 {
+            return Err(AppError::Validation("Le taux de change doit être supérieur à zéro.".into()));
+        }
+    }
+
+    let mut conn = db.lock()?;
+    let tx = conn.transaction()?;
+
+    let (old_echeance_id, old_montant_affecte, old_montant, old_annule, old_numero_recu): (Option<String>, Option<f64>, f64, i32, String) = tx
+        .query_row(
+            "SELECT echeance_id, montant_affecte, montant, annule, numero_recu FROM Paiement WHERE id = ?",
+            params![id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .map_err(|_| AppError::NotFound("Paiement introuvable".into()))?;
+
+    if old_annule != 0 {
+        return Err(AppError::BadRequest("Impossible de modifier un paiement annulé".into()));
+    }
+
+    let now = now_iso();
+    let old_affecte_val = old_montant_affecte.unwrap_or(old_montant);
+
+    if let Some(ref ech_id) = old_echeance_id {
+        if !ech_id.trim().is_empty() {
+            let difference = new_montant_affecte - old_affecte_val;
+            if difference != 0.0 {
+                tx.execute(
+                    "UPDATE Echeance SET montant_paye = MAX(0, montant_paye + ?1), updated_at = ?2 WHERE id = ?3",
+                    params![difference, now, ech_id],
+                )?;
+            }
+        }
+    }
+
+    tx.execute(
+        "UPDATE Paiement SET motif = ?1, montant = ?2, devise = ?3, mode_paiement = ?4, reference_paiement = ?5, taux_change = ?6, montant_affecte = ?7, devise_echeance = ?8, updated_at = ?9 WHERE id = ?10",
+        params![
+            motif.trim(),
+            montant,
+            devise.trim(),
+            mode_paiement.trim(),
+            reference_paiement,
+            taux_change,
+            new_montant_affecte,
+            devise_echeance,
+            now,
+            id
+        ],
+    )?;
+
+    tx.commit()?;
+    drop(conn);
+
+    log_audit(&db, None, "UPDATE", "paiement", Some(&id), Some(&format!("Modification du paiement n° {}, nouveau montant={} {}", old_numero_recu, montant, devise)));
+
+    let conn = db.lock()?;
+    let result = conn.query_row(
+        "SELECT p.id, p.numero_recu, p.eleve_id, p.echeance_id, p.etablissement_id, p.annee_scolaire_id, \
+         p.user_id, p.motif, p.montant, p.devise, p.montant_affecte, p.devise_echeance, \
+         p.mode_paiement, p.reference_paiement, p.taux_change, p.montant_original, \
+         p.annule, p.date_annulation, p.created_at, p.updated_at, \
+         TRIM(el.nom || ' ' || el.prenom) as eleve_nom, \
+         el.matricule as eleve_matricule, \
+         COALESCE(c.nom, '—') as classe_nom, \
+         u.nom_complet as user_nom_complet \
+         FROM Paiement p \
+         LEFT JOIN Eleve el ON p.eleve_id = el.id \
+         LEFT JOIN EleveClasse ec ON ec.eleve_id = el.id AND ec.statut = 'ACTIF' \
+         LEFT JOIN Classe c ON c.id = ec.classe_id \
+         LEFT JOIN User u ON p.user_id = u.id \
+         WHERE p.id = ?",
+        params![id],
+        |row| {
+            let annule_val: i32 = row.get(16)?;
+            Ok(json!({
+                "id": row.get::<_, String>(0)?,
+                "numeroRecu": row.get::<_, String>(1)?,
+                "eleveId": row.get::<_, String>(2)?,
+                "echeanceId": row.get::<_, Option<String>>(3)?,
+                "etablissementId": row.get::<_, String>(4)?,
+                "anneeScolaireId": row.get::<_, String>(5)?,
+                "userId": row.get::<_, String>(6)?,
+                "motif": row.get::<_, String>(7)?,
+                "montant": row.get::<_, f64>(8)?,
+                "devise": row.get::<_, String>(9)?,
+                "montantAffecte": row.get::<_, Option<f64>>(10)?,
+                "deviseEcheance": row.get::<_, Option<String>>(11)?,
+                "modePaiement": row.get::<_, String>(12)?,
+                "referencePaiement": row.get::<_, Option<String>>(13)?,
+                "tauxChange": row.get::<_, Option<f64>>(14)?,
+                "montantOriginal": row.get::<_, Option<f64>>(15)?,
+                "annule": annule_val != 0,
+                "dateAnnulation": row.get::<_, Option<String>>(17)?,
+                "dateEncaissement": row.get::<_, String>(18)?,
+                "updatedAt": row.get::<_, String>(19)?,
+                "eleveNom": row.get::<_, Option<String>>(20)?,
+                "eleveMatricule": row.get::<_, Option<String>>(21)?,
+                "eleveClasse": row.get::<_, Option<String>>(22)?,
+                "caissierNom": row.get::<_, Option<String>>(23)?,
+            }))
+        },
+    ).map_err(|_| AppError::NotFound(format!("Paiement {} introuvable après mise à jour", id)))?;
 
     Ok(api_response(Ok(result)))
 }

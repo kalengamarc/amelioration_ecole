@@ -252,6 +252,30 @@ pub fn update_frais(
 
         if let Some(ref ids) = classe_ids {
             let now = now_iso();
+
+            // Récupérer les anciennes classes pour logger la suppression dans AuditLog
+            let mut old_classes: Vec<String> = Vec::new();
+            if let Ok(mut stmt) = conn.prepare("SELECT classe_id FROM FraisClasse WHERE frais_scolaire_id = ?") {
+                if let Ok(mut rows) = stmt.query(params![id]) {
+                    while let Ok(Some(row)) = rows.next() {
+                        if let Ok(cid) = row.get::<_, String>(0) {
+                            old_classes.push(cid);
+                        }
+                    }
+                }
+            }
+
+            for old_cid in &old_classes {
+                if !ids.contains(old_cid) {
+                    let del_key = format!("{},{}", id, old_cid);
+                    let log_id = generate_id();
+                    let _ = conn.execute(
+                        "INSERT INTO AuditLog (id, action, entite, entite_id, details, created_at) VALUES (?1, 'DELETE', 'FraisClasse', ?2, ?3, ?4)",
+                        params![log_id, del_key, format!("frais={}, classe={}", id, old_cid), now],
+                    );
+                }
+            }
+
             conn.execute("DELETE FROM FraisClasse WHERE frais_scolaire_id = ?", params![id])?;
             for cid in ids {
                 conn.execute(
@@ -259,6 +283,14 @@ pub fn update_frais(
                     params![id, cid, now],
                 )?;
             }
+
+            // Nettoyer automatiquement les échéances non payées des élèves dont la classe n'est plus concernée
+            let _ = conn.execute(
+                "DELETE FROM Echeance WHERE frais_scolaire_id = ? AND montant_paye = 0 AND eleve_id NOT IN (
+                     SELECT ec.eleve_id FROM EleveClasse ec WHERE ec.classe_id IN (SELECT classe_id FROM FraisClasse WHERE frais_scolaire_id = ?) AND ec.statut = 'ACTIF'
+                 )",
+                params![id, id],
+            );
         }
     }
 

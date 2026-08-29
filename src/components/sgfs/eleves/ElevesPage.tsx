@@ -65,6 +65,8 @@ export default function ElevesPage() {
   const [busy, setBusy] = useState(false)
   const [detail, setDetail] = useState<Student | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null)
+  const [classSearch, setClassSearch] = useState('')
+  const [showClassDropdown, setShowClassDropdown] = useState(false)
 
   const fetchSchools = useCallback(async () => {
     try {
@@ -132,11 +134,14 @@ export default function ElevesPage() {
   function openCreate() {
     setEditingId(null)
     setForm({ ...empty, etablissementId: school || (locked ? schoolFilter! : ''), anneeScolaireId: year })
+    setClassSearch('')
+    setShowClassDropdown(false)
     setFormOpen(true)
   }
 
   async function openEdit(s: Student) {
     const etabId = s.etablissementId ?? (s as any).etablissement_id ?? school ?? (schools?.[0]?.id) ?? ''
+    let listC: Classe[] = []
     if (etabId) {
       try {
         const resY = await tc.listAnneesScolaires(etabId)
@@ -144,13 +149,14 @@ export default function ElevesPage() {
         if (Array.isArray(listY) && listY.length > 0) setYears(listY)
 
         const resC = await tc.listClasses(etabId, undefined)
-        const listC = resC?.classes ?? resC?.data ?? []
+        listC = resC?.classes ?? resC?.data ?? []
         if (Array.isArray(listC) && listC.length > 0) setClasses(listC)
       } catch { /* silencieux */ }
     }
 
     const ins = (s.inscriptions || s.classes || []).find((x: any) => x.statut === 'ACTIF') ?? (s.inscriptions || s.classes || [])[0]
     const t = s.tuteurs?.find((x: any) => x.tuteur?.isPrincipal)?.tuteur ?? s.tuteurs?.[0]?.tuteur
+    const classeId = ins?.classeId ?? ins?.classe_id ?? ins?.classe?.id ?? ''
     setEditingId(s.id)
     setForm({
       ...empty,
@@ -159,11 +165,14 @@ export default function ElevesPage() {
       lieuNaissance: s.lieuNaissance ?? (s as any).lieu_naissance ?? '',
       etablissementId: etabId,
       anneeScolaireId: ins?.classe?.anneeScolaire?.id ?? ins?.classe?.annee_scolaire?.id ?? ins?.anneeScolaireId ?? ins?.annee_scolaire_id ?? (s as any).anneeScolaireId ?? (s as any).annee_scolaire_id ?? '',
-      classeId: ins?.classeId ?? ins?.classe_id ?? ins?.classe?.id ?? '',
+      classeId: classeId,
       tuteurNom: t?.nom ?? '', tuteurPrenom: t?.prenom ?? '',
       tuteurTelephone: t?.telephone ?? '', tuteurTelephone2: t?.telephone2 ?? '',
       tuteurRelation: t?.relation ?? 'Père', tuteurAdresse: t?.adresse ?? '', tuteurProfession: t?.profession ?? '',
     })
+    const classeObj = listC.find(c => c.id === classeId)
+    setClassSearch(classeObj?.nom ?? '')
+    setShowClassDropdown(false)
     setFormOpen(true)
   }
 
@@ -180,9 +189,9 @@ export default function ElevesPage() {
       etablissementId: form.etablissementId,
       anneeScolaireId: form.anneeScolaireId,
       classeId: form.classeId,
-      tuteurs: form.tuteurNom && form.tuteurPrenom && form.tuteurTelephone ? [{
-        nom: form.tuteurNom, prenom: form.tuteurPrenom,
-        telephone: form.tuteurTelephone, telephone2: form.tuteurTelephone2 || undefined,
+      tuteurs: form.tuteurNom.trim() && form.tuteurPrenom.trim() ? [{
+        nom: form.tuteurNom.trim(), prenom: form.tuteurPrenom.trim(),
+        telephone: form.tuteurTelephone.trim() || 'Non renseigné', telephone2: form.tuteurTelephone2?.trim() || undefined,
         relation: form.tuteurRelation, adresse: form.tuteurAdresse || undefined,
         profession: form.tuteurProfession || undefined, isPrincipal: true,
       }] : [],
@@ -396,12 +405,35 @@ export default function ElevesPage() {
                     <SelectContent className="rounded-xl">{years.map(y => <SelectItem key={y.id} value={y.id}>{y.libelle}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="relative">
                   <Label className="text-xs font-semibold text-stone-600">Classe *</Label>
-                  <Select value={form.classeId} onValueChange={v => setForm({ ...form, classeId: v })}>
-                    <SelectTrigger className="rounded-xl border-stone-200 bg-white font-medium mt-1"><SelectValue placeholder="Sélectionner la classe" /></SelectTrigger>
-                    <SelectContent className="rounded-xl">{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Input 
+                    className="rounded-xl border-stone-200 bg-white font-medium mt-1" 
+                    placeholder="Rechercher une classe..." 
+                    value={classSearch}
+                    onChange={e => { setClassSearch(e.target.value); setShowClassDropdown(true) }}
+                    onFocus={() => setShowClassDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowClassDropdown(false), 200)}
+                  />
+                  {showClassDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-stone-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                      {classes
+                        .filter(c => c.nom.toLowerCase().includes(classSearch.toLowerCase()))
+                        .map(c => (
+                          <div 
+                            key={c.id}
+                            className="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm"
+                            onClick={() => { setForm({ ...form, classeId: c.id }); setClassSearch(c.nom); setShowClassDropdown(false) }}
+                          >
+                            {c.nom}
+                          </div>
+                        ))
+                      }
+                      {classes.filter(c => c.nom.toLowerCase().includes(classSearch.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-stone-500 text-sm">Aucune classe trouvée</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
