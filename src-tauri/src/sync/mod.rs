@@ -150,7 +150,11 @@ fn http_get_with_retry(
     for attempt in 0..max_attempts {
         let mut req = client.get(url)
             .header("apikey", apikey)
-            .header("Authorization", auth);
+            .header("Authorization", auth)
+            // Les pages de données (élèves, paiements…) peuvent être volumineuses
+            // et lentes à générer : timeout allongé pour éviter les body tronqués
+            // (« réponse illisible ») sur connexion lente.
+            .timeout(Duration::from_secs(180));
         if let Some(range) = range_header {
             req = req.header("Range", range);
         }
@@ -181,7 +185,8 @@ fn http_get_with_retry(
 
     let mut req = client.get(url)
         .header("apikey", apikey)
-        .header("Authorization", auth);
+        .header("Authorization", auth)
+        .timeout(Duration::from_secs(180));
     if let Some(range) = range_header {
         req = req.header("Range", range);
     }
@@ -417,9 +422,10 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         }
 
         // Aucun filtre temporel : on récupère l'intégralité de la table distante,
-        // par pages de 1000 lignes, tant qu'il y a des données.
+        // par pages de 500 lignes (pages plus petites = réponses moins volumineuses,
+        // moins de risque de body tronqué / timeout).
         let mut offset = 0;
-        let page_size = 1000;
+        let page_size = 500;
         let mut total_pulled = 0;
 
         loop {
@@ -441,11 +447,54 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         break;
                     }
                     if status_code == 200 || status_code == 206 {
-                        match resp.json::<Vec<Value>>() {
-                            Ok(remote_rows) => {
-                                let count = remote_rows.len();
+                        // Métadonnées avant consommation du body (resp.json() consomme la réponse).
+                        let content_range = resp
+                            .headers()
+                            .get("content-range")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("?")
+                            .to_string();
 
-                                for row in &remote_rows {
+                        // Retry de décodage : un body tronqué par une coupure réseau peut
+                        // faire échouer serde_json. Le retry RE-TÉLÉCHARGE la page (une
+                        // réponse reqwest ne peut être décodée qu'une fois).
+                        let mut decode_error: Option<String> = None;
+                        let mut remote_rows: Option<Vec<Value>> = None;
+                        for attempt in 0..3 {
+                            let json_result: Result<Vec<Value>, String> = if attempt == 0 {
+                                resp.json::<Vec<Value>>().map_err(|e| format!("{}", e))
+                            } else {
+                                thread::sleep(Duration::from_millis(800 * (attempt as u64)));
+                                match http_get_with_retry(
+                                    &client,
+                                    &url,
+                                    &supabase_key,
+                                    &format!("Bearer {}", supabase_key),
+                                    Some(&range_header),
+                                ) {
+                                    Ok(r) if r.status().is_success() => {
+                                        r.json::<Vec<Value>>().map_err(|e| format!("{}", e))
+                                    }
+                                    Ok(r) => Err(format!("HTTP {}", r.status().as_u16())),
+                                    Err(e) => Err(format!("{}", e)),
+                                }
+                            };
+                            match json_result {
+                                Ok(rows) => {
+                                    remote_rows = Some(rows);
+                                    break;
+                                }
+                                Err(e) => {
+                                    decode_error = Some(e);
+                                }
+                            }
+                        }
+
+                        match remote_rows {
+                            Some(rows) => {
+                                let count = rows.len();
+
+                                for row in &rows {
                                     if let Some(row_obj) = row.as_object() {
                                         let mut row_map = row_obj.clone();
                                         // Écriture intelligente : résout les conflits de clé
@@ -476,13 +525,14 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                                 }
                                 offset += page_size;
                             }
-                            Err(e) => {
+                            None => {
                                 pull_had_error = true;
                                 pull_errors.push(format!(
-                                    "{} : réponse illisible (page {}) : {}",
+                                    "{} : réponse illisible (page {}, Content-Range: {}) : {}",
                                     t.name,
                                     offset / page_size + 1,
-                                    e
+                                    content_range,
+                                    decode_error.unwrap_or_default()
                                 ));
                                 break;
                             }
@@ -657,6 +707,59 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             stat.skipped_orphans = skipped_orphans;
         }
         if local_rows.is_empty() { continue; }
+
+        // --- COMPTE ADMIN SYSTÈME (table User) ---
+        // Chaque machine crée son admin avec un id aléatoire → le pousser par
+        // id (on_conflict=id) produit un 23505 sur username quand le cloud en a
+        // déjà un. L'admin étant le MÊME compte partout, on le fusionne par
+        // username (on_conflict=username) : créé s'il manque, mis à jour sinon.
+        // Les AUTRES utilisateurs restent protégés (pas de fusion par username).
+        if t.name == "User" {
+            let mut table_had_error = false;
+            let mut admins: Vec<Value> = Vec::new();
+            let mut others: Vec<Value> = Vec::new();
+            for row in local_rows {
+                if row.get("username").and_then(|v| v.as_str()) == Some("admin") {
+                    admins.push(row);
+                } else {
+                    others.push(row);
+                }
+            }
+            local_rows = others;
+            for admin_row in admins {
+                let url = format!("{}/rest/v1/User?on_conflict=username", supabase_url);
+                match http_post_with_retry(
+                    &client,
+                    &url,
+                    &supabase_key,
+                    &format!("Bearer {}", supabase_key),
+                    &Value::Array(vec![admin_row.clone()]),
+                ) {
+                    Ok(resp) if resp.status().is_success() => {
+                        if let Some(stat) = stats.get_mut("User") {
+                            stat.pushed += 1;
+                        }
+                    }
+                    Ok(resp) => {
+                        let err_text = resp.text().unwrap_or_default();
+                        push_errors.push(format!("User (admin) : {}", err_text));
+                        push_had_error = true;
+                        table_had_error = true;
+                    }
+                    Err(e) => {
+                        push_errors.push(format!("User (admin) : {}", e));
+                        push_had_error = true;
+                        table_had_error = true;
+                    }
+                }
+            }
+            if local_rows.is_empty() {
+                if table_had_error {
+                    failed_tables.insert("User");
+                }
+                continue;
+            }
+        }
 
         let mut table_had_error = false;
         if t.name == "EleveClasse" {
@@ -1569,9 +1672,12 @@ fn protect_eleve_statut(
 ///   prise par une AUTRE ligne locale, la ligne distante est renommée avec un
 ///   code DÉRIVÉ DE SON ID — déterministe, donc toutes les machines calculent
 ///   la même valeur et la synchro converge au lieu d'échouer.
-/// - `User` : un username en double est ignoré localement avec un avertissement
-///   (deux comptes avec le même login nécessitent une fusion manuelle dans
-///   Supabase) ; cela ne bloque pas le reste de la synchro.
+/// - `User` : le compte système `admin` (créé sur chaque machine avec un id
+///   aléatoire) est aligné sur l'id DISTANT reçu du cloud — ses références FK
+///   locales (paiements, dépenses, annulations, audit) sont réécrites, puis la
+///   ligne locale est renommée. Cela élimine le 23505 au push et débloque les
+///   tables enfants (Paiement, AnnulationRecu, Depense, AuditLog). Un username
+///   en double NON-admin est en revanche ignoré localement avec un avertissement.
 ///
 /// Protection supplémentaire : un élève local ACTIF/INSCRIT n'est JAMAIS rétrogradé
 /// en TRANSFERE par une ligne distante, sauf si la suppression est documentée dans
@@ -1631,16 +1737,78 @@ fn pull_insert_row(
                     Ok(())
                 }
                 "User" => {
-                    pull_warnings.push(format!(
-                        "User (id {}) : username en double ignoré localement — fusion manuelle requise dans Supabase",
-                        row_id
-                    ));
-                    Ok(())
+                    let username = row_map
+                        .get("username")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if username == "admin" {
+                        // Compte système : chaque machine en crée un avec un id
+                        // aléatoire → conflit d'username au push (23505). On aligne
+                        // l'admin local sur l'id DISTANT en réécrivant les références
+                        // (paiements, dépenses, annulations, audit) avant de renommer.
+                        merge_admin_into_local(conn, &row_id, pull_warnings)?;
+                        upsert_row(conn, "User", pk_cols, row_map)
+                    } else {
+                        pull_warnings.push(format!(
+                            "User (id {}) : username '{}' en double ignoré localement — fusion manuelle requise dans Supabase",
+                            row_id, username
+                        ));
+                        Ok(())
+                    }
                 }
                 _ => Err(e),
             }
         }
     }
+}
+
+/// Aligne l'admin local (id aléatoire propre à la machine) sur l'id distant
+/// reçu du cloud : réécrit les références FK locales, puis renomme la ligne.
+/// Rendu possible car la synchro désactive les contraintes FK (foreign_keys=OFF).
+fn merge_admin_into_local(
+    conn: &Connection,
+    remote_admin_id: &str,
+    pull_warnings: &mut Vec<String>,
+) -> Result<(), AppError> {
+    // Id de l'admin local (username='admin', id différent du distant)
+    let local_admin_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM \"User\" WHERE username = 'admin' AND id <> ?1 LIMIT 1",
+            [remote_admin_id],
+            |r| r.get(0),
+        )
+        .ok();
+    let Some(local_id) = local_admin_id else {
+        return Ok(());
+    };
+
+    // Réécrire toutes les références vers l'id distant
+    for (table, col) in [
+        ("Paiement", "user_id"),
+        ("Depense", "created_by_id"),
+        ("AnnulationRecu", "user_id"),
+        ("AuditLog", "user_id"),
+        ("ParametreEtablissement", "created_by"),
+    ] {
+        let sql = format!(
+            "UPDATE \"{}\" SET \"{}\" = ?1 WHERE \"{}\" = ?2",
+            table, col, col
+        );
+        let _ = conn.execute(&sql, params![remote_admin_id, local_id]);
+    }
+
+    let affected = conn.execute(
+        "UPDATE \"User\" SET id = ?1, updated_at = ?2 WHERE id = ?3",
+        params![remote_admin_id, now_iso(), local_id],
+    )?;
+    if affected > 0 {
+        pull_warnings.push(format!(
+            "User admin : id local {} aligné sur l'id distant {} (références mises à jour)",
+            local_id, remote_admin_id
+        ));
+    }
+    Ok(())
 }
 
 /// Pousse UNE ligne de `Eleve` / `Paiement` vers le cloud.

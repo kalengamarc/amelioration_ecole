@@ -2,6 +2,43 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 7
+Agent: main
+Task: Synchro propre — pages illisibles (Eleve) et conflit admin User (23505)
+
+Work Log:
+- Symptômes signalés après un run : `Eleve : réponse illisible (page 1) :
+  error decoding response body` (body tronqué / timeout) et `User: Key
+  (username)=(admin) already exists` (23505) qui bloquait en cascade les
+  push de Paiement, AnnulationRecu, Depense et AuditLog (« table parente
+  User a échoué »).
+- `src-tauri/src/sync/mod.rs` :
+  - `http_get_with_retry` : timeout allongé à 180 s (initial + requête
+    finale) pour les pages volumineuses.
+  - Pull : taille de page réduite 1000 → 500 lignes.
+  - Décode JSON d'une page : jusqu'à 3 tentatives ; les tentatives 2-3
+    RE-TÉLÉCHARGENT la page (resp.json() consomme le body). L'erreur
+    finale inclut l'en-tête Content-Range pour faciliter le diagnostic.
+  - Pull User : le compte système `admin` (créé sur chaque machine avec un
+    id aléatoire) est désormais aligné sur l'id DISTANT reçu du cloud —
+    nouvelle `merge_admin_into_local` réécrit les références FK locales
+    (Paiement.user_id, Depense.created_by_id, AnnulationRecu.user_id,
+    AuditLog.user_id, ParametreEtablissement.created_by) puis renomme la
+    ligne locale. Les usernames en double NON-admin restent ignorés avec
+    avertissement.
+  - Push User : la ligne `admin` est poussée par `on_conflict=username`
+    (créée si absente, mise à jour sinon) au lieu de `on_conflict=id` qui
+    produisait le 23505. Les autres users restent poussés par id. Du coup
+    la table User ne fait plus échouer le run, et les tables enfants ne
+    sont plus ignorées.
+
+Stage Summary:
+- Les trois avertissements de synchro sont traités : timeout long, pages
+  plus petites, décodage avec re-téléchargement, fusion automatique de
+  l'admin local ↔ distant (pull et push). Prochaine synchro attendue sans
+  ces erreurs.
+
+---
 Task ID: 6
 Agent: main
 Task: Élèves passés « Transféré » sans raison après synchro

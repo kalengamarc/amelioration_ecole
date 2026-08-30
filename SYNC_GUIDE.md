@@ -295,6 +295,28 @@ est idempotent et sans risque.
 - Si oui: tout va bien! ✓
 - Si non: Réinitialiser LAST_SYNC en base (avancé)
 
+### 🔴 "User: Key (username)=(admin) already exists" (23505) + tables enfants ignorées
+**Cause**: Chaque machine crée son compte `admin` avec un id aléatoire. Au push,
+l'insertion par id entre en collision sur la contrainte unique `username`, et les
+tables qui dépendent de `User` (Paiement, AnnulationRecu, Depense, AuditLog) sont
+alors ignorées en cascade (« la table parente User a échoué »).
+**Solution (corrigé automatiquement dans la version actuelle)**:
+- Au **pull**, l'admin distant est fusionné dans la base locale : l'id local est
+  remplacé par l'id distant et toutes ses références (paiements, dépenses,
+  annulations, audit) sont réécrites automatiquement.
+- Au **push**, l'admin est envoyé avec `on_conflict=username` (créé s'il
+  manque, mis à jour sinon) — plus de 23505, et les tables enfants repartent.
+- Les autres utilisateurs (non-admin) restent protégés : un username en double
+  est signalé sans fusion automatique.
+
+### 🔴 "Eleve : réponse illisible (page N) : error decoding response body"
+**Cause**: Réponse volumineuse tronquée (coupure réseau / timeout du client).
+**Solution (corrigé automatiquement dans la version actuelle)**:
+- Timeout HTTP allongé à 180 s ; pages de pull réduites à 500 lignes.
+- Si le décodage JSON échoue, la page est re-téléchargée (jusqu'à 3 tentatives)
+  avant de signaler l'erreur. Le message inclut l'en-tête `Content-Range` pour
+  localiser la page en cause.
+
 ---
 
 ## 📋 Checklist Finale
