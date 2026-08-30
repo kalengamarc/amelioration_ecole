@@ -2,6 +2,39 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 5
+Agent: main
+Task: Auto-réparation des matricules/numéros de reçu en double (données héritées)
+
+Work Log:
+- Problème : les matricules ELV-YYYY-#### créés AVANT le code machine pouvaient
+  être identiques entre machines → au pull, la contrainte UNIQUE locale rejetait
+  la 2e ligne ; au push, PostgREST rejetait le lot (23505) ; et le bouton manuel
+  était bloqué par validate_sync_ready (« matricules dupliqués »).
+- `src-tauri/src/sync/mod.rs` :
+  - Nouvelle `pull_insert_row` : en cas de UNIQUE constraint failed sur
+    Eleve/Paiement, renomme la ligne avec un code DÉRIVÉ DE SON ID
+    (`ELV-2026-3EF3D36C-0001`, `REC-20260830-3EF3D36C-0001`) → déterministe,
+    toutes les machines convergent. User en double : ignoré localement avec
+    avertissement (fusion manuelle requise), ne bloque plus la synchro.
+  - Helpers `id_prefix_code` (8 premiers caractères de l'UUID) et
+    `next_unique_sequence` (MAX + 1 par préfixe).
+  - Côté push : quand un lot Eleve/Paiement échoue, réessai ligne par ligne via
+    `push_row_with_unique_fallback` (renommage local persistant + repush).
+  - `pull_warnings` : renommages automatiques journalisés dans SyncLog
+    (direction PULL, table CONFLICTS) et mentionnés dans le résumé sans faire
+    échouer la synchro.
+  - Closure `record_push_error` : limite par table (5 détaillées + compte).
+- `src-tauri/src/commands/sync.rs` : validate_sync_ready — les matricules
+  dupliqués passent de `issues` (bloquant) à `warnings` (non bloquant, auto-réparé).
+- `src/components/sgfs/parametres/ParametresPage.tsx` : affichage des warnings
+  de validation sous la carte de validation.
+
+Stage Summary:
+- La synchro ne bloque plus sur les doublons hérités : renommages déterministes,
+  visibles dans SyncLog, sans perte de données.
+
+---
 Task ID: 4
 Agent: main
 Task: Suite — collisions d'identifiants, tuteurs, rafraîchissement UI, convergence échéances

@@ -162,6 +162,26 @@ La synchronisation inclut désormais les protections suivantes :
   complet). Les sauvegardes locales `.bak-*` permettent de restaurer un état
   antérieur si besoin.
 
+### 🔁 Matricules / numéros de reçu en double (données héritées)
+
+Les anciennes données peuvent contenir des matricules identiques
+(`ELV-2026-0001` créés avant le code machine) sur deux machines différentes.
+La synchro ne bloque plus à cause de cela :
+
+- **Au téléchargement** : une ligne distante dont le matricule / numéro de reçu
+  est déjà pris localement par une autre ligne est **renommée automatiquement**
+  avec un code dérivé de son id (`ELV-2026-3EF3D36C-0001`). Le code est
+  déterministe : toutes les machines calculent la même valeur, donc les données
+  convergent.
+- **À l'envoi** : si un lot échoue sur un conflit de clé unique, la synchro
+  réessaie ligne par ligne et renomme les lignes en conflit (persisté
+  localement, visible dans la console).
+- Le bouton « Synchroniser maintenant » n'est **plus bloqué** par les matricules
+  dupliqués : ils sont signalés comme avertissement et corrigés à la synchro.
+- **User en double** (même username) : non renommé automatiquement (c'est un
+  identifiant de connexion) — la ligne est ignorée localement avec un
+  avertissement et nécessite une fusion manuelle dans Supabase.
+
 ### 🔢 Numéros de reçu et matricules uniques par machine
 
 Depuis cette version :

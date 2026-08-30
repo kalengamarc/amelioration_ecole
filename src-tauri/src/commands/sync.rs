@@ -47,6 +47,8 @@ pub fn validate_sync_ready(db: State<'_, DbConn>) -> Result<serde_json::Value, A
 
     let mut stats: Vec<serde_json::Value> = Vec::new();
     let mut issues: Vec<String> = Vec::new();
+    // Avertissements NON bloquants : la synchro les auto-répare.
+    let mut warnings: Vec<String> = Vec::new();
     let mut total_rows = 0usize;
 
     for table in required_tables {
@@ -113,7 +115,12 @@ pub fn validate_sync_ready(db: State<'_, DbConn>) -> Result<serde_json::Value, A
             .unwrap_or(0);
 
         if duplicate_matricules > 0 {
-            issues.push("Des matricules d'élèves sont dupliqués.".to_string());
+            // NON bloquant : la synchro renomme automatiquement les doublons
+            // (code dérivé de l'id, déterministe) au lieu d'échouer.
+            warnings.push(format!(
+                "{} matricule(s) dupliqué(s) — seront renommés automatiquement à la synchro.",
+                duplicate_matricules
+            ));
         }
     }
 
@@ -133,6 +140,7 @@ pub fn validate_sync_ready(db: State<'_, DbConn>) -> Result<serde_json::Value, A
         "configured": configured,
         "totalRows": total_rows,
         "issues": issues,
+        "warnings": warnings,
         "stats": stats,
         "message": if ready { "La base locale est prête pour la synchronisation." } else { "La base locale n'est pas encore prête pour la synchronisation." }
     }))))

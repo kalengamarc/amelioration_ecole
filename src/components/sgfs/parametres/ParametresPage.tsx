@@ -655,6 +655,13 @@ export default function ParametresPage() {
                           ) : (
                             <p className="mt-2 opacity-90">Aucune anomalie détectée dans la structure et les données locales.</p>
                           )}
+                          {syncValidation.warnings?.length ? (
+                            <ul className="mt-2 list-disc list-inside space-y-1 opacity-90 text-amber-700">
+                              {syncValidation.warnings.slice(0, 4).map((w: string, idx: number) => (
+                                <li key={idx}>{w}</li>
+                              ))}
+                            </ul>
+                          ) : null}
                         </div>
                       )}
 

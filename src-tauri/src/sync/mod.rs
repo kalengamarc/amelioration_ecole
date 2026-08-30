@@ -331,6 +331,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     let mut push_had_error = false;
     let mut pull_errors: Vec<String> = Vec::new();
     let mut pull_had_error = false;
+    let mut pull_warnings: Vec<String> = Vec::new();
     let mut failed_tables: HashSet<&str> = HashSet::new();
     let mut orphan_log: Vec<String> = Vec::new();
 
@@ -429,16 +430,16 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
                                 for row in &remote_rows {
                                     if let Some(row_map) = row.as_object() {
-                                        // EleveClasse : l'index partiel local « un seul ACTIF par
-                                        // élève » peut rejeter une inscription distante ACTIF tant
-                                        // qu'une ancienne inscription ACTIF traîne en local. On
-                                        // résout le conflit avant insertion (l'état distant, déjà
-                                        // consolidé par la même contrainte côté serveur, fait foi).
-                                        let result = if t.name == "EleveClasse" {
-                                            upsert_eleve_classe_row(conn, row_map)
-                                        } else {
-                                            upsert_row(conn, t.name, &t.pk_cols, row_map)
-                                        };
+                                        // Écriture intelligente : résout les conflits de clé
+                                        // unique secondaire (matricule / numero_recu en double)
+                                        // au lieu d'échouer toute la synchro.
+                                        let result = pull_insert_row(
+                                            conn,
+                                            t.name,
+                                            &t.pk_cols,
+                                            row_map,
+                                            &mut pull_warnings,
+                                        );
                                         if let Err(e) = result {
                                             // Ne bloque pas le reste de la table, mais interdit
                                             // d'avancer LAST_SYNC : la table sera relue au prochain run.
@@ -667,6 +668,18 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
         let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
 
+        // Enregistre une erreur de push avec limitation par table (5 détaillées
+        // + compte global) pour ne pas noyer le résumé.
+        let mut record_push_error = |table: &str, msg: String| {
+            let count = push_error_counts.entry(table.to_string()).or_insert(0);
+            *count += 1;
+            if *count <= 5 {
+                push_errors.push(format!("{}: {}", table, msg));
+            } else if *count == 6 {
+                push_errors.push(format!("{}: … et d'autres erreurs ({} déjà comptées)", table, *count - 1));
+            }
+        };
+
         for batch in &batches {
             let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
             let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
@@ -697,17 +710,45 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                             }
                         }
 
-                        if t.name != "AuditLog" {
-                            let count = push_error_counts.entry(t.name.to_string()).or_insert(0);
-                            *count += 1;
-                            // Limiter le message de résumé : 5 erreurs détaillées
-                            // par table, puis un compte global (une table en échec
-                            // sur des centaines de lignes ne doit pas noyer l'écran).
-                            if *count <= 5 {
-                                push_errors.push(format!("{}: {}", t.name, err_text));
-                            } else if *count == 6 {
-                                push_errors.push(format!("{}: … et d'autres erreurs ({} déjà comptées)", t.name, *count - 1));
+                        // Eleve / Paiement : un conflit de clé unique secondaire
+                        // (matricule / numero_recu déjà pris par une AUTRE ligne
+                        // côté cloud) rejette TOUT le lot. On réessaie ligne par
+                        // ligne ; les lignes en conflit sont renommées localement
+                        // (code dérivé de l'id, déterministe) puis repoussées.
+                        if t.name == "Eleve" || t.name == "Paiement" {
+                            let mut pushed_in_batch = 0usize;
+                            let mut batch_failed = false;
+                            for row in batch {
+                                match push_row_with_unique_fallback(
+                                    conn,
+                                    &client,
+                                    &supabase_url,
+                                    &supabase_key,
+                                    t.name,
+                                    &t.pk_cols,
+                                    row,
+                                ) {
+                                    Ok(()) => pushed_in_batch += 1,
+                                    Err(msg) => {
+                                        batch_failed = true;
+                                        record_push_error(t.name, msg);
+                                    }
+                                }
                             }
+                            if pushed_in_batch > 0 {
+                                if let Some(stat) = stats.get_mut(t.name) {
+                                    stat.pushed += pushed_in_batch;
+                                }
+                            }
+                            if batch_failed {
+                                push_had_error = true;
+                                table_had_error = true;
+                            }
+                            continue;
+                        }
+
+                        if t.name != "AuditLog" {
+                            record_push_error(t.name, err_text);
                         } else {
                             println!("Note AuditLog (non critique) : {}", err_text);
                         }
@@ -717,13 +758,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                 }
                 Err(e) => {
                     if t.name != "AuditLog" {
-                        let count = push_error_counts.entry(t.name.to_string()).or_insert(0);
-                        *count += 1;
-                        if *count <= 5 {
-                            push_errors.push(format!("{}: {}", t.name, e));
-                        } else if *count == 6 {
-                            push_errors.push(format!("{}: … et d'autres erreurs réseau", t.name));
-                        }
+                        record_push_error(t.name, e.to_string());
                     }
                     push_had_error = true;
                     table_had_error = true;
@@ -790,6 +825,19 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         );
     }
 
+    // Renommages automatiques (matricules / numéros de reçu en double résolus)
+    // et comptes User en double ignorés : visibles dans le journal + le résumé,
+    // mais ne font PAS échouer la synchro.
+    if !pull_warnings.is_empty() {
+        let log_id = uuid::Uuid::new_v4().to_string();
+        let details = serde_json::json!({ "resolved": pull_warnings }).to_string();
+        let _ = conn.execute(
+            "INSERT INTO SyncLog (id, table_name, last_sync_at, direction, status, details, created_at) \
+             VALUES (?1, 'CONFLICTS', ?2, 'PULL', 'WARNING', ?3, ?2)",
+            params![log_id, end_time, details],
+        );
+    }
+
     // Nettoyage du journal d'audit : on ne supprime JAMAIS les entrées DELETE
     // plus récentes que la dernière synchro réussie — ce sont des suppressions
     // locales pas encore poussées vers le cloud. Les supprimer ferait perdre
@@ -810,9 +858,17 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     let mut all_warnings: Vec<String> = Vec::new();
     all_warnings.extend(pull_errors.iter().cloned());
     all_warnings.extend(push_errors.iter().cloned());
+    let resolved_count = pull_warnings.len();
 
     let message = if all_warnings.is_empty() {
-        "Synchronisation réussie avec succès !".to_string()
+        if resolved_count > 0 {
+            format!(
+                "Synchronisation réussie avec {} conflit(s) résolu(s) automatiquement (matricules / numéros de reçu renommés) — voir SyncLog.",
+                resolved_count
+            )
+        } else {
+            "Synchronisation réussie avec succès !".to_string()
+        }
     } else {
         format!("Synchronisation effectuée avec des avertissements : {}", all_warnings.join(" | "))
     };
@@ -1266,6 +1322,151 @@ fn query_table_all(
     }
 
     Ok(results)
+}
+
+/// Insère ou réconcilie une ligne distante dans la base locale.
+///
+/// Résout les conflits de clé unique secondaire qui, sinon, feraient échouer
+/// toute la synchro en boucle (cas des matricules / numéros de reçu en double
+/// hérités de l'ancien générateur sans code machine) :
+/// - `EleveClasse` : neutralise d'abord les inscriptions ACTIF concurrentes.
+/// - `Eleve` / `Paiement` : si la clé unique (matricule / numero_recu) est déjà
+///   prise par une AUTRE ligne locale, la ligne distante est renommée avec un
+///   code DÉRIVÉ DE SON ID — déterministe, donc toutes les machines calculent
+///   la même valeur et la synchro converge au lieu d'échouer.
+/// - `User` : un username en double est ignoré localement avec un avertissement
+///   (deux comptes avec le même login nécessitent une fusion manuelle dans
+///   Supabase) ; cela ne bloque pas le reste de la synchro.
+fn pull_insert_row(
+    conn: &Connection,
+    table_name: &str,
+    pk_cols: &[&str],
+    row_map: &serde_json::Map<String, Value>,
+    pull_warnings: &mut Vec<String>,
+) -> Result<(), AppError> {
+    if table_name == "EleveClasse" {
+        return upsert_eleve_classe_row(conn, row_map);
+    }
+
+    match upsert_row(conn, table_name, pk_cols, row_map) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let is_unique = e.to_string().contains("UNIQUE constraint failed");
+            if !is_unique {
+                return Err(e);
+            }
+            let row_id = row_map.get("id").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+            match table_name {
+                "Eleve" => {
+                    let mut new_row = row_map.clone();
+                    let code = id_prefix_code(&row_id);
+                    let prefix = format!("ELV-{}-{}-", chrono::Utc::now().format("%Y"), code);
+                    let seq = next_unique_sequence(conn, table_name, "matricule", &prefix);
+                    let new_mat = format!("{}{:04}", prefix, seq);
+                    new_row.insert("matricule".to_string(), Value::String(new_mat.clone()));
+                    upsert_row(conn, table_name, pk_cols, &new_row)?;
+                    pull_warnings.push(format!(
+                        "Eleve (id {}) : matricule en double renommé → {}",
+                        row_id, new_mat
+                    ));
+                    Ok(())
+                }
+                "Paiement" => {
+                    let mut new_row = row_map.clone();
+                    let code = id_prefix_code(&row_id);
+                    let prefix = format!("REC-{}-{}-", chrono::Utc::now().format("%Y%m%d"), code);
+                    let seq = next_unique_sequence(conn, table_name, "numero_recu", &prefix);
+                    let new_recu = format!("{}{:04}", prefix, seq);
+                    new_row.insert("numero_recu".to_string(), Value::String(new_recu.clone()));
+                    upsert_row(conn, table_name, pk_cols, &new_row)?;
+                    pull_warnings.push(format!(
+                        "Paiement (id {}) : numéro de reçu en double renommé → {}",
+                        row_id, new_recu
+                    ));
+                    Ok(())
+                }
+                "User" => {
+                    pull_warnings.push(format!(
+                        "User (id {}) : username en double ignoré localement — fusion manuelle requise dans Supabase",
+                        row_id
+                    ));
+                    Ok(())
+                }
+                _ => Err(e),
+            }
+        }
+    }
+}
+
+/// Pousse UNE ligne de `Eleve` / `Paiement` vers le cloud.
+///
+/// Si l'insertion échoue sur la clé unique secondaire (matricule / numero_recu
+/// déjà pris par une AUTRE ligne distante), la ligne est renommée localement
+/// avec un code dérivé de son id (déterministe → même valeur sur toutes les
+/// machines) puis repoussée. Le renommage est persistant localement et visible
+/// dans la console ; la synchro converge au lieu d'échouer en boucle.
+fn push_row_with_unique_fallback(
+    conn: &Connection,
+    client: &reqwest::blocking::Client,
+    supabase_url: &str,
+    supabase_key: &str,
+    table_name: &str,
+    pk_cols: &[&str],
+    row: &Value,
+) -> Result<(), String> {
+    let url = format!("{}/rest/v1/{}?on_conflict={}", supabase_url, table_name, pk_cols.join(","));
+    let push = |body: Value| -> Result<(), String> {
+        match http_post_with_retry(client, &url, supabase_key, &format!("Bearer {}", supabase_key), &body) {
+            Ok(resp) if resp.status().is_success() => Ok(()),
+            Ok(resp) => Err(resp.text().unwrap_or_default()),
+            Err(e) => Err(e.to_string()),
+        }
+    };
+
+    match push(Value::Array(vec![row.clone()])) {
+        Ok(()) => return Ok(()),
+        Err(e) if !(e.contains("23505") || e.contains("duplicate key")) => return Err(e),
+        Err(e) => {
+            // Conflit de clé unique : renommer puis repousser.
+            let Some(row_map) = row.as_object() else { return Err(e) };
+            let Some(row_id) = row_map.get("id").and_then(|v| v.as_str()) else { return Err(e) };
+
+            let (col, prefix) = if table_name == "Eleve" {
+                ("matricule", format!("ELV-{}-{}-", chrono::Utc::now().format("%Y"), id_prefix_code(row_id)))
+            } else {
+                ("numero_recu", format!("REC-{}-{}-", chrono::Utc::now().format("%Y%m%d"), id_prefix_code(row_id)))
+            };
+            let seq = next_unique_sequence(conn, table_name, col, &prefix);
+            let new_val = format!("{}{:04}", prefix, seq);
+
+            // Persister le renommage localement (la ligne garde le même id).
+            let sql = format!("UPDATE \"{}\" SET \"{}\" = ?1, updated_at = ?2 WHERE id = ?3", table_name, col);
+            conn.execute(&sql, params![new_val, now_iso(), row_id])
+                .map_err(|e| e.to_string())?;
+            eprintln!("[SYNC] {} {} : {} en double → renommé {}", table_name, row_id, col, new_val);
+
+            let mut new_row = row_map.clone();
+            new_row.insert(col.to_string(), Value::String(new_val));
+            push(Value::Array(vec![Value::Object(new_row)]))
+        }
+    }
+}
+
+/// Code court DÉTERMINISTE dérivé de l'id d'une ligne (8 premiers caractères
+/// de l'UUID). Pour une même ligne, toutes les machines calculent la même
+/// valeur : les renommages anti-doublons convergent au lieu de diverger.
+fn id_prefix_code(id: &str) -> String {
+    let clean: String = id.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    clean[..clean.len().min(8)].to_uppercase()
+}
+
+/// Prochain numéro de séquence libre pour un préfixe donné (ex. `ELV-2026-3EF3D36C-`).
+fn next_unique_sequence(conn: &Connection, table_name: &str, col: &str, prefix: &str) -> i64 {
+    let sql = format!(
+        "SELECT COALESCE(MAX(CAST(REPLACE(\"{col}\", ?1, '') AS INTEGER)), 0) \
+         FROM \"{table_name}\" WHERE \"{col}\" LIKE ?1 || '%'"
+    );
+    conn.query_row(&sql, [prefix], |r| r.get(0)).unwrap_or(0) + 1
 }
 
 /// Insertion distante EleveClasse avec résolution du conflit « un seul ACTIF par élève » :
