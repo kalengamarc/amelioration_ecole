@@ -48,6 +48,37 @@ Stage Summary:
   résumé (le détail complet reste dans SyncLog/ORPHANS).
 
 ---
+Task ID: 8
+Agent: main
+Task: Effectifs incomplets — élèves « sans classe », paiements sans classe
+
+Work Log:
+- Symptômes : les compteurs (classe, dashboard, détail élève) sont incomplets ;
+  des paiements affichent « — » comme classe ; des élèves ACTIF apparaissent
+  « sans appartenance ».
+- Cause probable : des élèves ACTIF/INSCRIT sans inscription EleveClasse ACTIVE
+  (héritage du bug « TRANSFERE fantôme » qui ne touchait que Eleve.statut, pas
+  EleveClasse). L'app n'a AUCUNE opération qui laisse légitimement un élève
+  ACTIF sans classe (création ⇒ ACTIF, changement de classe ⇒ ancienne
+  TRANSFERE + nouvelle ACTIF, archivage ⇒ Élève TRANSFERE).
+- `src-tauri/src/sync/mod.rs` : nouvelle `repair_missing_active_enrollments`,
+  appelée après le pull et avant le push — réactive l'inscription la plus
+  récente (date_inscription DESC, date_sortie NULL d'abord) d'un élève
+  ACTIF/INSCRIT sans inscription ACTIF ; le push propage au cloud. Idempotent,
+  une seule ACTIF par élève (règle applicative, déjà imposée par
+  upsert_eleve_classe_row à l'import).
+- `tools/diagnostic_sync.py` (nouveau, lecture seule) : rapport local complet —
+  élèves sans AUCUNE inscription, élèves dont toutes les inscriptions sont
+  TRANSFERE, inscriptions orphelines (élève/classe absents), classes sans
+  effectif, paiements sans classe affichable, matricules en double, multi-ACTIF,
+  année décalée — et comparaison cloud avec `--cloud` (URL/KEY lues dans
+  ConfigSysteme). Lancement : `python tools/diagnostic_sync.py [--cloud]`.
+
+Stage Summary:
+- Auto-réparation des élèves ACTIF sans classe active à chaque synchro +
+  outil de diagnostic local/cloud pour quantifier les incohérences restantes.
+
+---
 Task ID: 6
 Agent: main
 Task: Élèves passés « Transféré » sans raison après synchro

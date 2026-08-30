@@ -572,6 +572,16 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     // On pousse TOUTES les lignes locales, sans filtre temporel.
     // ==========================================
 
+    // Après le pull, un élève ACTIF/INSCRIT sans AUCUNE inscription ACTIF
+    // (bug « TRANSFERE fantôme » hérité) reste invisible des effectifs de
+    // classe, du dashboard et de la classe des paiements. On réactive son
+    // inscription la plus récente ; le push ci-dessous propage la correction
+    // au cloud. Une seule ACTIF par élève est garantie (règle applicative).
+    if let Err(e) = repair_missing_active_enrollments(conn, &mut pull_warnings) {
+        pull_errors.push(format!("réparation des inscriptions manquantes : {}", e));
+        pull_had_error = true;
+    }
+
     // Après le pull, les paiements reçus du cloud peuvent rendre obsolètes les
     // montant_paye locaux des échéances. On les recalcule depuis les paiements
     // valides réels AVANT de pousser, pour ne pas écraser le cloud avec des
@@ -1600,6 +1610,90 @@ fn repair_ghost_transferes(
         eprintln!("[SYNC] {}", msg);
         pull_warnings.push(msg);
     }
+}
+
+/// Répare les élèves ACTIF/INSCRIT qui n'ont AUCUNE inscription ACTIF dans
+/// EleveClasse (hérité du bug « TRANSFERE fantôme ») : ils sont invisibles des
+/// effectifs de classe, du dashboard et de la classe affichée sur les paiements.
+///
+/// L'application ne connaît AUCUNE opération légitime qui laisse un élève
+/// ACTIF/INSCRIT sans inscription ACTIF (création ⇒ ACTIF, changement de
+/// classe ⇒ ancienne TRANSFERE + nouvelle ACTIF, archivage ⇒ Élève TRANSFERE) :
+/// on réactive donc l'inscription la plus récente de l'élève. Le push suivant
+/// propage la correction au cloud (upsert sur (eleve_id, classe_id)).
+fn repair_missing_active_enrollments(
+    conn: &Connection,
+    pull_warnings: &mut Vec<String>,
+) -> Result<(), AppError> {
+    // Élèves ACTIF/INSCRIT sans aucune inscription ACTIF
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT DISTINCT e.id FROM \"Eleve\" e \
+         WHERE e.statut IN ('ACTIF','INSCRIT') \
+           AND NOT EXISTS (SELECT 1 FROM \"EleveClasse\" ec \
+                           WHERE ec.eleve_id = e.id AND ec.statut = 'ACTIF')",
+    ) {
+        if let Ok(mut rows) = stmt.query([]) {
+            while let Ok(Some(row)) = rows.next() {
+                if let Ok(id) = row.get::<_, String>(0) {
+                    candidates.push(id);
+                }
+            }
+        }
+    }
+    if candidates.is_empty() {
+        return Ok(());
+    }
+
+    let mut restored = 0usize;
+    for eleve_id in candidates {
+        // Inscription la plus récente (date_sortie NULL = toujours en cours)
+        let best: Option<String> = conn
+            .query_row(
+                "SELECT classe_id FROM \"EleveClasse\" \
+                 WHERE eleve_id = ?1 AND statut != 'ACTIF' \
+                 ORDER BY date_inscription DESC, date_sortie IS NULL DESC, classe_id \
+                 LIMIT 1",
+                [&eleve_id],
+                |r| r.get(0),
+            )
+            .ok();
+        if let Some(classe_id) = best {
+            let affected = conn.execute(
+                "UPDATE \"EleveClasse\" SET statut = 'ACTIF', date_sortie = NULL \
+                 WHERE eleve_id = ?1 AND classe_id = ?2",
+                params![eleve_id, classe_id],
+            )?;
+            if affected > 0 {
+                restored += 1;
+                if let Ok((nom, prenom, matricule, classe_nom)) = conn.query_row(
+                    "SELECT e.nom, e.prenom, e.matricule, COALESCE(c.nom, '?') \
+                     FROM \"Eleve\" e LEFT JOIN \"Classe\" c ON c.id = ?2 \
+                     WHERE e.id = ?1",
+                    params![eleve_id, classe_id],
+                    |r| Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                    )),
+                ) {
+                    pull_warnings.push(format!(
+                        "Élève {} {} ({}) : aucune classe active — inscription en {} réactivée (ACTIF)",
+                        nom, prenom, matricule, classe_nom
+                    ));
+                }
+            }
+        }
+    }
+    if restored > 0 {
+        let msg = format!(
+            "{} élève(s) ACTIF/INSCRIT sans classe active — inscription la plus récente réactivée",
+            restored
+        );
+        eprintln!("[SYNC] {}", msg);
+    }
+    Ok(())
 }
 
 /// Applique une suppression distante (issue de l'AuditLog) à la base locale.

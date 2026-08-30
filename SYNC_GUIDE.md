@@ -317,6 +317,23 @@ alors ignorées en cascade (« la table parente User a échoué »).
   avant de signaler l'erreur. Le message inclut l'en-tête `Content-Range` pour
   localiser la page en cause.
 
+### 🔴 Élèves « sans classe » / effectifs incomplets / paiements sans classe
+**Cause**: des élèves ACTIF/INSCRIT n'ont aucune inscription `EleveClasse`
+ACTIVE (héritage du bug « TRANSFERE fantôme » ou de données orphelines). Ils
+disparaissent des effectifs de classe, du dashboard, de la classe affichée sur
+les paiements et du détail élève.
+**Solution**:
+- Auto-réparation à chaque synchro : `repair_missing_active_enrollments`
+  réactive l'inscription la plus récente d'un élève ACTIF/INSCRIT sans classe
+  active (l'app ne connaît aucune opération qui laisse légitimement un élève
+  ACTIF sans classe). Le push suivant propage la correction au cloud.
+- Diagnostic complet (local + cloud) :
+  ```bash
+  python tools/diagnostic_sync.py            # local uniquement
+  python tools/diagnostic_sync.py --cloud    # + comparaison Supabase
+  ```
+  (fermez SGFS-ME avant ; lecture seule, rien n'est modifié).
+
 ---
 
 ## 📋 Checklist Finale
