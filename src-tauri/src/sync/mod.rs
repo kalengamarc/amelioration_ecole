@@ -194,25 +194,27 @@ fn http_post_with_retry(
     apikey: &str,
     auth: &str,
     body: &Value,
-    merge_duplicates: bool,
 ) -> Result<reqwest::blocking::Response, reqwest::Error> {
     const MAX_ATTEMPTS: usize = 4;
     let mut last_err = None;
 
     for attempt in 0..MAX_ATTEMPTS {
-        let mut req = client
+        // NOTE IMPORTANTE (PostgREST) : `on_conflict=<pk>` dans l'URL ne prend
+        // effet QUE si l'en-tête `Prefer: resolution=...` est présent. Sans lui,
+        // PostgREST fait un simple INSERT et toute ligne déjà existante échoue
+        // en 23505 (c'est ce qui s'est produit sur User/Eleve/Paiement).
+        //
+        // La sécurité contre l'écrasement ne vient PAS de l'absence de cet
+        // en-tête, mais du paramètre `on_conflict=<pk>` toujours présent dans
+        // l'URL : la cible de conflit est explicitement la clé primaire, donc
+        // les autres contraintes uniques (username, matricule, numero_recu)
+        // ne déclenchent pas de fusion — elles remontent en erreur.
+        let req = client
             .post(url)
             .header("apikey", apikey)
             .header("Authorization", auth)
-            .header("Content-Type", "application/json");
-        // `resolution=merge-duplicates` fait fusionner par PostgREST TOUTE
-        // violation de contrainte unique — y compris sur des clés que nous ne
-        // voulons pas fusionner (Paiement.numero_recu, Eleve.matricule,
-        // User.username) car cela ÉCRASERAIT une donnée existante. On ne
-        // l'active donc que pour les tables où la fusion est sûre.
-        if merge_duplicates {
-            req = req.header("Prefer", "resolution=merge-duplicates");
-        }
+            .header("Content-Type", "application/json")
+            .header("Prefer", "resolution=merge-duplicates");
         match req.json(body).send()
         {
             Ok(resp) => {
@@ -325,6 +327,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
 
     let mut stats = HashMap::new();
     let mut push_errors: Vec<String> = Vec::new();
+    let mut push_error_counts: HashMap<String, usize> = HashMap::new();
     let mut push_had_error = false;
     let mut pull_errors: Vec<String> = Vec::new();
     let mut pull_had_error = false;
@@ -661,17 +664,13 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             "ParametreEtablissement",
         ];
         let can_merge_on_unique = !t.unique_cols.is_empty() && SAFE_UNIQUE_MERGE.contains(&t.name);
-        // Tables sans clé unique secondaire : seule la PK peut entrer en conflit,
-        // déjà gérée par on_conflict=id. La fusion est donc sans risque.
-        // Tables à clé unique sensible (Eleve, User, Paiement) : pas de merge.
-        let merge_duplicates = can_merge_on_unique || t.unique_cols.is_empty();
 
         let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
 
         for batch in &batches {
             let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
             let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
-            let res = http_post_with_retry(&client, &url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()), merge_duplicates);
+            let res = http_post_with_retry(&client, &url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
 
             match res {
                 Ok(resp) => {
@@ -686,7 +685,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         if can_merge_on_unique {
                             let alt_on_conflict = format!("on_conflict={}", t.unique_cols.join(","));
                             let alt_url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, alt_on_conflict);
-                            let alt_res = http_post_with_retry(&client, &alt_url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()), true);
+                            let alt_res = http_post_with_retry(&client, &alt_url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
 
                             if let Ok(alt_resp) = alt_res {
                                 if alt_resp.status().is_success() {
@@ -699,7 +698,16 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         }
 
                         if t.name != "AuditLog" {
-                            push_errors.push(format!("{}: {}", t.name, err_text));
+                            let count = push_error_counts.entry(t.name.to_string()).or_insert(0);
+                            *count += 1;
+                            // Limiter le message de résumé : 5 erreurs détaillées
+                            // par table, puis un compte global (une table en échec
+                            // sur des centaines de lignes ne doit pas noyer l'écran).
+                            if *count <= 5 {
+                                push_errors.push(format!("{}: {}", t.name, err_text));
+                            } else if *count == 6 {
+                                push_errors.push(format!("{}: … et d'autres erreurs ({} déjà comptées)", t.name, *count - 1));
+                            }
                         } else {
                             println!("Note AuditLog (non critique) : {}", err_text);
                         }
@@ -709,7 +717,13 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                 }
                 Err(e) => {
                     if t.name != "AuditLog" {
-                        push_errors.push(format!("{}: {}", t.name, e));
+                        let count = push_error_counts.entry(t.name.to_string()).or_insert(0);
+                        *count += 1;
+                        if *count <= 5 {
+                            push_errors.push(format!("{}: {}", t.name, e));
+                        } else if *count == 6 {
+                            push_errors.push(format!("{}: … et d'autres erreurs réseau", t.name));
+                        }
                     }
                     push_had_error = true;
                     table_had_error = true;
@@ -1030,7 +1044,7 @@ fn push_rows_with_dependencies(
         // Merge volontairement désactivé : l'auto-réparation pousse des parents
         // par leur id. En cas de conflit de clé unique secondaire, on préfère
         // échouer (et logguer) plutôt que d'écraser une autre ligne.
-        match http_post_with_retry(client, &push_url, supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(rows.to_vec()), false) {
+        match http_post_with_retry(client, &push_url, supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(rows.to_vec())) {
             Ok(resp) if resp.status().is_success() => {}
             Ok(resp) => {
                 repair_log.push(format!("ÉCHEC du push vers '{}' : {}", table_name, resp.text().unwrap_or_default()));
