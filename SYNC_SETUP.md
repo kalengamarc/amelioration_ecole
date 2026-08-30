@@ -55,6 +55,19 @@ Service Role Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ✓ Les tables sont maintenant créées!
 
+### Étape 3bis: (BASE EXISTANTE) Installer les triggers de suppression
+
+Si votre projet Supabase existe déjà (tables déjà créées), exécutez en plus, **une seule fois** :
+
+```
+Supabase → SQL Editor → coller le contenu de supabase_triggers_deletes.sql → Run
+```
+
+⚠️ **Ne relancez PAS `supabase_schema.sql` complet** sur une base existante : il
+DROPT toutes les tables (perte des données cloud). Le fichier
+`supabase_triggers_deletes.sql` est idempotent et sans risque — il propage aux
+autres machines les suppressions faites directement dans Supabase.
+
 ### Étape 4: Vérifier les tables
 
 1. Cliquer **Table Editor** (à gauche)

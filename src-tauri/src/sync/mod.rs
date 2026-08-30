@@ -2,10 +2,16 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use crate::error::AppError;
 use crate::db::now_iso;
+
+/// Verrou global anti-concurrence : empêche deux synchronisations de s'exécuter
+/// en parallèle (synchro auto toutes les 5 min + clic manuel) et de s'interférer
+/// (double push, LAST_SYNC écrasé, pull partiel appliqué deux fois).
+static SYNC_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableSyncStats {
@@ -34,6 +40,80 @@ struct TableConfig {
 
 fn encode_param(s: &str) -> String {
     s.replace('+', "%2B").replace(' ', "%20")
+}
+
+/// Normalise un horodatage distant (TIMESTAMPTZ PostgREST, ex. `2026-08-30T16:00:00+00:00`)
+/// au format UTC local (`2026-08-30T16:00:00Z`) afin que les comparaisons lexicographiques
+/// SQLite (`created_at > ?`) restent correctes. Les chaînes non datées sont laissées intactes.
+fn normalize_remote_timestamp(s: &str) -> String {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        dt.with_timezone(&chrono::Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+/// Décode un identifiant composite stocké dans le journal d'audit.
+/// Accepte les deux formats : `"X,Y"` et `"eleve_id=X,tuteur_id=Y"`.
+/// Retourne la liste des valeurs (sans les noms de colonnes).
+fn parse_composite_entite_id(entite_id: &str) -> Vec<String> {
+    if entite_id.contains('=') {
+        entite_id.split(',').map(|p| {
+            let mut kv = p.splitn(2, '=');
+            let _col = kv.next().unwrap_or("");
+            kv.next().unwrap_or("").trim().to_string()
+        }).collect()
+    } else {
+        entite_id.split(',').map(|v| v.trim().to_string()).collect()
+    }
+}
+
+/// Sauvegarde de sécurité de la base locale avant toute opération destructive
+/// de la synchronisation (applications de suppressions distantes, upserts de masse).
+/// Non bloquant : si la sauvegarde échoue, la synchro continue (on loggue).
+fn backup_local_db() {
+    let path = crate::db::get_db_path();
+    let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let backup_path = format!("{}.bak-{}", path, ts);
+
+    // VACUUM INTO produit un instantané cohérent (y compris données WAL),
+    // sans interrompre l'application.
+    let result = (|| -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&path)?;
+        conn.busy_timeout(Duration::from_secs(5))?;
+        conn.execute_batch(&format!("VACUUM INTO '{}';", backup_path.replace('\'', "''")))?;
+        Ok(())
+    })();
+
+    if let Err(e) = result {
+        eprintln!("[SYNC] Sauvegarde locale impossible (non bloquant) : {}", e);
+        return;
+    }
+
+    // Ne conserver que les 3 sauvegardes les plus récentes.
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        if let Ok(entries) = std::fs::read_dir(parent) {
+            let mut backups: Vec<(std::time::SystemTime, std::path::PathBuf)> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| {
+                    let mtime = e.metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .unwrap_or(std::time::UNIX_EPOCH);
+                    (mtime, e.path())
+                })
+                .filter(|(_, p)| {
+                    p.file_name()
+                        .map(|n| n.to_string_lossy().contains(".bak-"))
+                        .unwrap_or(false)
+                })
+                .collect();
+            backups.sort_by(|a, b| b.0.cmp(&a.0));
+            for (_, p) in backups.into_iter().skip(3) {
+                let _ = std::fs::remove_file(p);
+            }
+        }
+    }
 }
 
 fn map_entity_to_table(entity: &str) -> Option<&'static str> {
@@ -153,6 +233,16 @@ fn http_post_with_retry(
 pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError> {
     let start_time = now_iso();
 
+    // 1) Verrou global : sérialise les synchronisations.
+    let _sync_guard = match SYNC_LOCK.lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    // 2) Sauvegarde locale de sécurité avant toute opération destructive
+    //    (applications de suppressions distantes, upserts de masse).
+    backup_local_db();
+
     let _ = conn.execute_batch("PRAGMA foreign_keys=OFF;");
 
     let audit_fix = conn.execute(
@@ -214,7 +304,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         TableConfig { name: "Echeance", pk_cols: vec!["id"], unique_cols: vec!["eleve_id", "frais_scolaire_id"], fk_deps: vec![("eleve_id", "Eleve"), ("frais_scolaire_id", "FraisScolaire"), ("annee_scolaire_id", "AnneeScolaire")] },
         TableConfig { name: "Paiement", pk_cols: vec!["id"], unique_cols: vec!["numero_recu"], fk_deps: vec![("eleve_id", "Eleve"), ("echeance_id", "Echeance"), ("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("user_id", "User")] },
         TableConfig { name: "AnnulationRecu", pk_cols: vec!["id"], unique_cols: vec!["paiement_id"], fk_deps: vec![("paiement_id", "Paiement")] },
-        TableConfig { name: "Depense", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("created_by", "User")] },
+        TableConfig { name: "Depense", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("created_by_id", "User")] },
         TableConfig { name: "ParametreEtablissement", pk_cols: vec!["id"], unique_cols: vec!["etablissement_id"], fk_deps: vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")] },
         TableConfig { name: "AuditLog", pk_cols: vec!["id"], unique_cols: vec![], fk_deps: vec![("user_id", "User")] },
     ];
@@ -229,6 +319,8 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     let mut stats = HashMap::new();
     let mut push_errors: Vec<String> = Vec::new();
     let mut push_had_error = false;
+    let mut pull_errors: Vec<String> = Vec::new();
+    let mut pull_had_error = false;
     let mut failed_tables: HashSet<&str> = HashSet::new();
     let mut orphan_log: Vec<String> = Vec::new();
 
@@ -250,26 +342,52 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     // via l'AuditLog (on ne peut pas deviner quelles lignes ont été supprimées
     // en faisant un simple SELECT * sur les données restantes).
     let url_del = format!("{}/rest/v1/AuditLog?action=eq.DELETE&created_at=gt.{}", supabase_url, encode_param(&last_sync));
-    let res_del = http_get_with_retry(&client, &url_del, &supabase_key, &format!("Bearer {}", supabase_key), None);
-
-    if let Ok(resp) = res_del {
-        if resp.status().is_success() {
-            if let Ok(remote_deletes) = resp.json::<Vec<Value>>() {
-                for del in remote_deletes {
-                    if let (Some(entite), Some(entite_id)) = (
-                        del.get("entite").and_then(|v| v.as_str()),
-                        del.get("entite_id").and_then(|v| v.as_str())
-                    ) {
-                        if let Some(table_name) = map_entity_to_table(entite) {
-                            let _ = delete_composite_row(conn, table_name, entite_id);
+    match http_get_with_retry(&client, &url_del, &supabase_key, &format!("Bearer {}", supabase_key), None) {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                match resp.json::<Vec<Value>>() {
+                    Ok(remote_deletes) => {
+                        for del in remote_deletes {
+                            if let (Some(entite), Some(entite_id)) = (
+                                del.get("entite").and_then(|v| v.as_str()),
+                                del.get("entite_id").and_then(|v| v.as_str())
+                            ) {
+                                if let Some(table_name) = map_entity_to_table(entite) {
+                                    if let Err(e) = delete_composite_row(conn, table_name, entite_id) {
+                                        eprintln!("[SYNC] Échec suppression locale {} {} : {}", table_name, entite_id, e);
+                                    }
+                                }
+                            }
                         }
                     }
+                    Err(e) => {
+                        // Une lecture illisible du journal des suppressions ne doit PAS
+                        // être considérée comme une réussite : sans elle, les suppressions
+                        // distantes ne sont jamais appliquées localement.
+                        pull_had_error = true;
+                        pull_errors.push(format!("AuditLog (suppressions) : réponse illisible : {}", e));
+                    }
                 }
+            } else {
+                pull_had_error = true;
+                pull_errors.push(format!("AuditLog (suppressions) : HTTP {}", resp.status().as_u16()));
             }
+        }
+        Err(e) => {
+            pull_had_error = true;
+            pull_errors.push(format!("AuditLog (suppressions) : {}", e));
         }
     }
 
     for t in &tables {
+        // AuditLog : on ne rapatrie PAS le journal distant dans la table locale.
+        // Les suppressions distantes sont déjà traitées par la requête incrémentale
+        // dédiée ci-dessus ; copier tout le journal mélangerait l'audit local avec
+        // celui des autres machines et ferait grossir la table à chaque run.
+        if t.name == "AuditLog" {
+            continue;
+        }
+
         // Aucun filtre temporel : on récupère l'intégralité de la table distante,
         // par pages de 1000 lignes, tant qu'il y a des données.
         let mut offset = 0;
@@ -290,28 +408,65 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             match res {
                 Ok(resp) => {
                     let status_code = resp.status().as_u16();
-                    if status_code == 416 || status_code == 200 || status_code == 206 {
-                        let remote_rows: Vec<Value> = resp.json().unwrap_or_default();
-                        let count = remote_rows.len();
+                    if status_code == 416 {
+                        // Fin normale de la table : plus aucune ligne à distance.
+                        break;
+                    }
+                    if status_code == 200 || status_code == 206 {
+                        match resp.json::<Vec<Value>>() {
+                            Ok(remote_rows) => {
+                                let count = remote_rows.len();
 
-                        for row in &remote_rows {
-                            if let Some(row_map) = row.as_object() {
-                                let _ = upsert_row(conn, t.name, &t.pk_cols, row_map);
+                                for row in &remote_rows {
+                                    if let Some(row_map) = row.as_object() {
+                                        // EleveClasse : l'index partiel local « un seul ACTIF par
+                                        // élève » peut rejeter une inscription distante ACTIF tant
+                                        // qu'une ancienne inscription ACTIF traîne en local. On
+                                        // résout le conflit avant insertion (l'état distant, déjà
+                                        // consolidé par la même contrainte côté serveur, fait foi).
+                                        let result = if t.name == "EleveClasse" {
+                                            upsert_eleve_classe_row(conn, row_map)
+                                        } else {
+                                            upsert_row(conn, t.name, &t.pk_cols, row_map)
+                                        };
+                                        if let Err(e) = result {
+                                            // Ne bloque pas le reste de la table, mais interdit
+                                            // d'avancer LAST_SYNC : la table sera relue au prochain run.
+                                            pull_had_error = true;
+                                            pull_errors.push(format!("{} : échec d'écriture locale : {}", t.name, e));
+                                        }
+                                    }
+                                }
+
+                                total_pulled += count;
+                                // Continuer tant qu'on reçoit une page complète (count == page_size)
+                                if count < page_size {
+                                    break;
+                                }
+                                offset += page_size;
+                            }
+                            Err(e) => {
+                                pull_had_error = true;
+                                pull_errors.push(format!(
+                                    "{} : réponse illisible (page {}) : {}",
+                                    t.name,
+                                    offset / page_size + 1,
+                                    e
+                                ));
+                                break;
                             }
                         }
-
-                        total_pulled += count;
-                        // Continuer tant qu'on reçoit une page complète (count == page_size)
-                        // Arrêter si la page est incomplète (count < page_size) ou si status 416
-                        if count < page_size || status_code == 416 {
-                            break;
-                        }
-                        offset += page_size;
                     } else {
+                        let body = resp.text().unwrap_or_default();
+                        let snippet: String = body.chars().take(300).collect();
+                        pull_had_error = true;
+                        pull_errors.push(format!("{} : HTTP {} — {}", t.name, status_code, snippet));
                         break;
                     }
                 }
-                Err(_) => {
+                Err(e) => {
+                    pull_had_error = true;
+                    pull_errors.push(format!("{} : {}", t.name, e));
                     break;
                 }
             }
@@ -358,10 +513,24 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             continue;
         }
         if table_name == "TuteurEleve" || table_name == "EleveClasse" || table_name == "FraisClasse" {
+            let (col1, col2) = match table_name.as_str() {
+                "TuteurEleve" => ("eleve_id", "tuteur_id"),
+                "EleveClasse" => ("eleve_id", "classe_id"),
+                "FraisClasse" => ("frais_scolaire_id", "classe_id"),
+                _ => continue,
+            };
             for id_pair in &ids {
-                let parts: Vec<&str> = id_pair.split(',').collect();
+                let parts = parse_composite_entite_id(id_pair);
                 if parts.len() == 2 {
-                    let filter = format!("{}=eq.{}&{}=eq.{}", parts[0].trim(), parts[1].trim(), parts[0].trim(), parts[1].trim());
+                    // Filtre correct : col1=eq.v1&col2=eq.v2 (l'ancien code utilisait
+                    // parts[0] pour les deux colonnes, la suppression ne matchetait jamais).
+                    let filter = format!(
+                        "{}=eq.{}&{}=eq.{}",
+                        col1,
+                        encode_param(&parts[0]),
+                        col2,
+                        encode_param(&parts[1])
+                    );
                     let url = format!("{}/rest/v1/{}?{}", supabase_url, table_name, filter);
                     let _ = client.delete(&url)
                         .header("apikey", &supabase_key)
@@ -459,6 +628,20 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             }
         }
 
+        // Tables dont la clé unique secondaire peut être utilisée comme cible de
+        // fusion SANS perte de données (deux lignes portant la même clé unique
+        // désignent logiquement la même donnée).
+        // Pour les autres (Eleve.matricule, User.username, Paiement.numero_recu),
+        // une fusion silencieuse ÉCRASERAIT une donnée : on préfère signaler l'erreur.
+        const SAFE_UNIQUE_MERGE: &[&str] = &[
+            "AnneeScolaire",
+            "Classe",
+            "Echeance",
+            "AnnulationRecu",
+            "ParametreEtablissement",
+        ];
+        let can_merge_on_unique = !t.unique_cols.is_empty() && SAFE_UNIQUE_MERGE.contains(&t.name);
+
         let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
 
         for batch in &batches {
@@ -476,7 +659,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                     } else {
                         let err_text = resp.text().unwrap_or_default();
 
-                        if !t.unique_cols.is_empty() {
+                        if can_merge_on_unique {
                             let alt_on_conflict = format!("on_conflict={}", t.unique_cols.join(","));
                             let alt_url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, alt_on_conflict);
                             let alt_res = http_post_with_retry(&client, &alt_url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
@@ -516,7 +699,12 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     }
 
     let end_time = now_iso();
-    if !push_had_error {
+    // LAST_SYNC n'avance QUE si PUSH et PULL se sont terminés sans erreur.
+    // Si le pull a échoué (ex. coupure réseau pendant le téléchargement), ne pas
+    // avancer LAST_SYNC garantit que les suppressions distantes et les données
+    // manquées seront re-téléchargées au prochain run au lieu d'être oubliées.
+    let sync_clean = !push_had_error && !pull_had_error;
+    if sync_clean {
         let uuid_str = uuid::Uuid::new_v4().to_string();
         let _ = conn.execute(
             "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
@@ -535,7 +723,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                 "skipped_orphans": stat.skipped_orphans
             }).to_string();
 
-            let sync_status = if push_had_error { "WARNING" } else { "SUCCESS" };
+            let sync_status = if sync_clean { "SUCCESS" } else { "WARNING" };
             let _ = conn.execute(
                 "INSERT INTO SyncLog (id, table_name, last_sync_at, direction, status, details, created_at) \
                  VALUES (?1, ?2, ?3, 'BIDIRECTIONAL', ?4, ?5, ?3)",
@@ -554,8 +742,25 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         );
     }
 
+    if !pull_errors.is_empty() {
+        let log_id = uuid::Uuid::new_v4().to_string();
+        let details = serde_json::json!({ "pull_errors": pull_errors }).to_string();
+        let _ = conn.execute(
+            "INSERT INTO SyncLog (id, table_name, last_sync_at, direction, status, details, created_at) \
+             VALUES (?1, 'PULL', ?2, 'PULL', 'WARNING', ?3, ?2)",
+            params![log_id, end_time, details],
+        );
+    }
+
+    // Nettoyage du journal d'audit : on ne supprime JAMAIS les entrées DELETE
+    // plus récentes que la dernière synchro réussie — ce sont des suppressions
+    // locales pas encore poussées vers le cloud. Les supprimer ferait perdre
+    // définitivement la suppression au niveau du serveur (données fantômes).
     let _ = conn.execute(
-        "DELETE FROM \"AuditLog\" WHERE id NOT IN (SELECT id FROM \"AuditLog\" ORDER BY created_at DESC LIMIT 200)",
+        "DELETE FROM \"AuditLog\" \
+         WHERE id NOT IN (SELECT id FROM \"AuditLog\" ORDER BY created_at DESC LIMIT 200) \
+           AND NOT (action = 'DELETE' AND created_at > COALESCE(\
+                (SELECT valeur FROM ConfigSysteme WHERE cle = 'LAST_SYNC'), '1970-01-01T00:00:00Z'))",
         [],
     );
 
@@ -564,14 +769,18 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     let mut stats_vec: Vec<TableSyncStats> = stats.into_values().collect();
     stats_vec.sort_by(|a, b| a.table_name.cmp(&b.table_name));
 
-    let message = if push_errors.is_empty() {
+    let mut all_warnings: Vec<String> = Vec::new();
+    all_warnings.extend(pull_errors.iter().cloned());
+    all_warnings.extend(push_errors.iter().cloned());
+
+    let message = if all_warnings.is_empty() {
         "Synchronisation réussie avec succès !".to_string()
     } else {
-        format!("Synchronisation effectuée avec des avertissements sur : {}", push_errors.join(" | "))
+        format!("Synchronisation effectuée avec des avertissements : {}", all_warnings.join(" | "))
     };
 
     Ok(SyncSummary {
-        success: push_errors.is_empty(),
+        success: all_warnings.is_empty(),
         start_time,
         end_time,
         stats: stats_vec,
@@ -739,7 +948,7 @@ fn dependency_configs(table_name: &str) -> Vec<(&'static str, &'static str)> {
         "Echeance" => vec![("eleve_id", "Eleve"), ("frais_scolaire_id", "FraisScolaire"), ("annee_scolaire_id", "AnneeScolaire")],
         "Paiement" => vec![("eleve_id", "Eleve"), ("echeance_id", "Echeance"), ("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("user_id", "User")],
         "AnnulationRecu" => vec![("paiement_id", "Paiement"), ("user_id", "User")],
-        "Depense" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("created_by", "User")],
+        "Depense" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire"), ("created_by_id", "User")],
         "ParametreEtablissement" => vec![("etablissement_id", "Etablissement"), ("annee_scolaire_id", "AnneeScolaire")],
         "AuditLog" => vec![("user_id", "User")],
         _ => Vec::new(),
@@ -915,17 +1124,7 @@ fn delete_composite_row(conn: &Connection, table_name: &str, entite_id: &str) ->
                 _ => unreachable!(),
             };
 
-            let parts: Vec<&str> = if entite_id.contains('=') {
-                entite_id.split(',').map(|p| {
-                    let mut kv = p.splitn(2, '=');
-                    (kv.next().unwrap_or(""), kv.next().unwrap_or(""))
-                }).collect::<Vec<(&str, &str)>>()
-                    .iter()
-                    .map(|(_, v)| *v)
-                    .collect()
-            } else {
-                entite_id.split(',').collect()
-            };
+            let parts = parse_composite_entite_id(entite_id);
 
             if parts.len() >= 2 {
                 let sql = format!("DELETE FROM \"{}\" WHERE \"{}\" = ? AND \"{}\" = ?", table_name, col1, col2);
@@ -1028,6 +1227,28 @@ fn query_table_all(
     Ok(results)
 }
 
+/// Insertion distante EleveClasse avec résolution du conflit « un seul ACTIF par élève » :
+/// avant d'insérer une inscription ACTIF, on rétrograde les éventuelles inscriptions ACTIF
+/// locales concurrentes du même élève. L'état distant fait foi : la contrainte partielle
+/// existe aussi côté serveur, donc l'inscription ACTIF reçue est forcément l'actuelle.
+fn upsert_eleve_classe_row(
+    conn: &Connection,
+    row_map: &serde_json::Map<String, Value>,
+) -> Result<(), AppError> {
+    if row_map.get("statut").and_then(|v| v.as_str()) == Some("ACTIF") {
+        if let Some(eleve_id) = row_map.get("eleve_id").and_then(|v| v.as_str()) {
+            let classe_id = row_map.get("classe_id").and_then(|v| v.as_str()).unwrap_or("");
+            let now = now_iso();
+            let _ = conn.execute(
+                "UPDATE \"EleveClasse\" SET statut = 'TRANSFERE', date_sortie = ?1 \
+                 WHERE eleve_id = ?2 AND statut = 'ACTIF' AND classe_id <> ?3",
+                params![now, eleve_id, classe_id],
+            );
+        }
+    }
+    upsert_row(conn, "EleveClasse", &["eleve_id", "classe_id"], row_map)
+}
+
 fn upsert_row(
     conn: &Connection,
     table_name: &str,
@@ -1054,7 +1275,7 @@ fn upsert_row(
                     Box::new(rusqlite::types::Null)
                 }
             }
-            Value::String(s) => Box::new(s.clone()),
+            Value::String(s) => Box::new(normalize_remote_timestamp(s)),
             _ => Box::new(v.to_string()),
         };
         params_val.push(sql_val);

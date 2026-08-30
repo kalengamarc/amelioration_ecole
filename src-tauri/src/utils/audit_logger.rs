@@ -23,9 +23,15 @@ pub fn log_audit(
         params![id, user_id, action, entite, entite_id, details, now],
     );
 
-    // Keep only the 200 most recent audit logs to prevent database bloat
+    // Keep only the 200 most recent audit logs to prevent database bloat.
+    // CRITIQUE : ne jamais supprimer les entrées DELETE plus récentes que la
+    // dernière synchro réussie — ce sont des suppressions locales qui n'ont pas
+    // encore été propagées vers le cloud. Les purger = suppression perdue.
     let _ = conn.execute(
-        "DELETE FROM AuditLog WHERE id NOT IN (SELECT id FROM AuditLog ORDER BY created_at DESC LIMIT 200)",
+        "DELETE FROM AuditLog \
+         WHERE id NOT IN (SELECT id FROM AuditLog ORDER BY created_at DESC LIMIT 200) \
+           AND NOT (action = 'DELETE' AND created_at > COALESCE(\
+                (SELECT valeur FROM ConfigSysteme WHERE cle = 'LAST_SYNC'), '1970-01-01T00:00:00Z'))",
         [],
     );
     }

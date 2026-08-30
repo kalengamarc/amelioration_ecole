@@ -2,6 +2,31 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 3
+Agent: main
+Task: Corriger les pertes de données lors de la synchronisation Supabase
+
+Work Log:
+- `src-tauri/src/sync/mod.rs` :
+  - Ajout d'un verrou global (Mutex) — la synchro auto (5 min) et le clic manuel ne peuvent plus s'exécuter en parallèle
+  - `LAST_SYNC` n'avance plus que si PULL **et** PUSH ont réussi (avant : seul le push était vérifié → les suppressions distantes ratées étaient oubliées pour toujours et les lignes supprimées remontaient via le push complet)
+  - Erreurs de pull désormais tracées (réseau, HTTP, JSON illisible, échec d'écriture locale) et visibles dans le résumé + SyncLog (direction PULL, status WARNING)
+  - Sauvegarde locale automatique avant synchro : `sgfs.db.bak-<ts>` via VACUUM INTO, 3 conservées
+  - Correction du filtre REST des suppressions des tables composites (TuteurEleve/EleveClasse/FraisClasse) : l'ancien code utilisait parts[0] pour les 2 colonnes → la suppression ne matchait jamais côté serveur
+  - Repli `on_conflict=unique` restreint aux tables sûres (AnneeScolaire, Classe, Echeance, AnnulationRecu, ParametreEtablissement) ; pour Paiement.numero_recu / Eleve.matricule / User.username un conflit est signalé en erreur au lieu d'écraser une donnée
+  - FK Depense corrigée : `created_by` → `created_by_id` (le contrôle parent/orphelin ne fonctionnait pas)
+  - Normalisation des horodatages distants (`+00:00` → `Z`) pour que les comparaisons lexicographiques du journal restent correctes
+  - Pull de l'AuditLog distant exclu (polluait l'audit local et grossissait la table à chaque run) — la propagation des suppressions utilise la requête incrémentale dédiée
+  - Résolution du conflit « un seul ACTIF par élève » lors du pull d'EleveClasse (l'état distant fait foi)
+- `src-tauri/src/utils/audit_logger.rs` : purge de l'AuditLog protégée — les entrées DELETE plus récentes que LAST_SYNC (suppressions locales pas encore poussées) ne sont plus jamais purgées
+- `supabase_schema.sql` + nouveau `supabase_triggers_deletes.sql` : triggers AFTER DELETE sur 10 tables → les suppressions faites directement dans Supabase sont journalisées dans AuditLog et propagées à toutes les machines
+- `src/app/page.tsx` : nouvel état de synchro « warning » — une synchro avec avertissements est affichée (au lieu d'un succès mensonger)
+
+Stage Summary:
+- Tous les chemins de perte de données identifiés sont corrigés ou signalés
+- Migration nécessaire sur base existante : exécuter `supabase_triggers_deletes.sql` une fois (NE PAS relancer supabase_schema.sql complet)
+
+---
 Task ID: 2
 Agent: main
 Task: Delete all unnecessary files for Tauri desktop app migration

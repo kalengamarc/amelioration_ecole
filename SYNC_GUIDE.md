@@ -116,6 +116,62 @@ Votre application utilise une **synchronisation bidirectionnelle** SQLite (local
 
 ---
 
+## 🛡️ Garde-fous anti-perte de données (version corrigée)
+
+La synchronisation inclut désormais les protections suivantes :
+
+1. **Verrou global anti-concurrence** — la synchro automatique (5 min) et le clic
+   manuel ne peuvent plus s'exécuter en même temps.
+2. **`LAST_SYNC` n'avance que si PULL **et** PUSH réussissent** — si le
+   téléchargement échoue (coupure réseau), les données et suppressions distantes
+   seront re-téléchargées au prochain run au lieu d'être oubliées.
+3. **Sauvegarde automatique locale** avant chaque synchronisation :
+   `sgfs.db.bak-<horodatage>` (les 3 dernières sont conservées). En cas de
+   problème, restaurez simplement ce fichier.
+4. **Journal des suppressions protégé** — les entrées `DELETE` de l'AuditLog
+   locales non encore poussées ne sont plus purgées : une suppression locale ne
+   peut plus être perdue avant d'atteindre le cloud.
+5. **Fusion unique sécurisée** — le repli `on_conflict=unique` ne s'applique plus
+   qu'aux tables sûres (AnneeScolaire, Classe, Echeance, AnnulationRecu,
+   ParametreEtablissement). Pour `Paiement` (numero_recu), `Eleve` (matricule) et
+   `User` (username), un conflit est **signalé en erreur** au lieu d'écraser
+   silencieusement une donnée.
+6. **Suppressions des tables de liaison corrigées** — les filtres REST des
+   suppressions `TuteurEleve`, `EleveClasse`, `FraisClasse` utilisaient deux fois
+   la même colonne : les suppressions ne s'appliquaient jamais côté serveur.
+7. **Horodatages normalisés** — les dates distantes (`+00:00`) sont converties au
+   format UTC local (`Z`) pour que le journal des suppressions reste fiable.
+8. **Conflit « un seul ACTIF par élève » résolu** lors du téléchargement
+   d'EleveClasse (l'état distant consolidé fait foi).
+
+### ⚠️ Limites connues
+
+- **Numéros de reçu / matricules** : `generate_receipt_number` et
+  `generate_matricule` comptent les lignes locales du jour. Deux machines qui
+  créent le même jour peuvent générer le même `numero_recu` / `matricule`. Le
+  conflit est désormais **signalé en erreur** (plus d'écrasement silencieux) :
+  corrigez alors le numéro dans l'application puis relancez la synchro.
+- **Résolution de conflits** : en cas de modification de la même ligne sur deux
+  machines, la règle reste « dernier run de synchro gagne » (pull puis push
+  complet). Les sauvegardes locales `.bak-*` permettent de restaurer un état
+  antérieur si besoin.
+
+### ⚠️ Migration requise (base Supabase EXISTANTE)
+
+Pour que les suppressions effectuées **directement dans Supabase** (Table Editor,
+scripts SQL) soient propagées aux machines synchronisées, exécutez **une seule
+fois** le script :
+
+```
+Supabase → SQL Editor → coller le contenu de supabase_triggers_deletes.sql → Run
+```
+
+⚠️ **Ne relancez PAS `supabase_schema.sql`** sur une base existante : il DROP
+toutes les tables et effacerait vos données cloud ! `supabase_triggers_deletes.sql`
+est idempotent et sans risque.
+
+---
+
 ## 🔄 Processus de Sync Sécurisé
 
 ### **Pour une PREMIÈRE synchronisation:**

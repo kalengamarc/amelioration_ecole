@@ -25,7 +25,7 @@ export default function Home() {
   const { isAuthenticated, currentPage, sidebarOpen, user, currentEtablissement, setCurrentEtablissement, setEtabParams } = useAppStore()
   const [loading, setLoading] = useState(true)
   const [etablissements, setEtablissements] = useState<any[]>([])
-  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'success' | 'offline'>('idle')
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'success' | 'offline' | 'warning'>('idle')
   
   // --- ÉTAT POUR GÉRER ACCUEIL / LOGIN ---
   const [showLogin, setShowLogin] = useState(false)
@@ -127,8 +127,11 @@ export default function Home() {
         const statusRes = await tc.syncStatus()
         const status = statusRes?.data ?? statusRes ?? {}
         if (status.configured) {
-          await tc.syncPush()
-          setSyncState('success')
+          const res = await tc.syncPush()
+          const summary = res?.data ?? res
+          // Une synchro avec avertissements (pull/push partiels) n'est pas un succès complet :
+          // on l'affiche pour que l'utilisateur vérifie Paramètres → Synchronisation.
+          setSyncState(summary && summary.success === false ? 'warning' : 'success')
           window.dispatchEvent(new Event('sync-completed'))
         } else {
           setSyncState('idle')
@@ -234,7 +237,10 @@ export default function Home() {
                 ? 'border-sky-200 bg-sky-50 text-sky-800'
                 : 'border-amber-200 bg-amber-50 text-amber-800'
           }`}>
-            {syncState === 'success' ? 'Synchronisation réussie' : syncState === 'syncing' ? 'Synchronisation...' : 'Hors ligne — données en attente'}
+            {syncState === 'success' ? 'Synchronisation réussie'
+              : syncState === 'syncing' ? 'Synchronisation...'
+              : syncState === 'warning' ? 'Synchronisation avec avertissements — voir Paramètres → Synchronisation'
+              : 'Hors ligne — données en attente'}
           </div>
         )}
       </main>
