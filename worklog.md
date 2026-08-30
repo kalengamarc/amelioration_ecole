@@ -37,6 +37,15 @@ Stage Summary:
   plus petites, décodage avec re-téléchargement, fusion automatique de
   l'admin local ↔ distant (pull et push). Prochaine synchro attendue sans
   ces erreurs.
+- Correctif post-`cargo check` : le retry de décodage en boucle provoquait
+  E0382 (move de `resp` dans une boucle). La réponse reçue est désormais
+  décodée une seule fois (hors boucle) ; les 2 tentatives suivantes
+  re-téléchargent la page.
+- Log des orphelins (push) : le message « Élève rejeté: ? (ID: ?) » était
+  générique et faux pour les tables à clé composite (EleveClasse,
+  TuteurEleve, FraisClasse n'ont pas de colonne `id`). `filter_orphan_rows`
+  affiche maintenant la vraie table + clé composite, limité à 10 lignes +
+  résumé (le détail complet reste dans SyncLog/ORPHANS).
 
 ---
 Task ID: 6

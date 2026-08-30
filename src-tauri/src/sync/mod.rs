@@ -456,37 +456,36 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                             .to_string();
 
                         // Retry de décodage : un body tronqué par une coupure réseau peut
-                        // faire échouer serde_json. Le retry RE-TÉLÉCHARGE la page (une
-                        // réponse reqwest ne peut être décodée qu'une fois).
+                        // faire échouer serde_json. La réponse déjà reçue est décodée une
+                        // seule fois ; si le décodage échoue, on RE-TÉLÉCHARGE la page
+                        // (resp.json() consomme le body) jusqu'à 2 nouvelles tentatives.
                         let mut decode_error: Option<String> = None;
                         let mut remote_rows: Option<Vec<Value>> = None;
-                        for attempt in 0..3 {
-                            let json_result: Result<Vec<Value>, String> = if attempt == 0 {
-                                resp.json::<Vec<Value>>().map_err(|e| format!("{}", e))
-                            } else {
-                                thread::sleep(Duration::from_millis(800 * (attempt as u64)));
-                                match http_get_with_retry(
-                                    &client,
-                                    &url,
-                                    &supabase_key,
-                                    &format!("Bearer {}", supabase_key),
-                                    Some(&range_header),
-                                ) {
-                                    Ok(r) if r.status().is_success() => {
-                                        r.json::<Vec<Value>>().map_err(|e| format!("{}", e))
+                        match resp.json::<Vec<Value>>() {
+                            Ok(rows) => remote_rows = Some(rows),
+                            Err(first_err) => {
+                                let mut last_err = format!("{}", first_err);
+                                for attempt in 1..3u32 {
+                                    thread::sleep(Duration::from_millis(800 * attempt as u64));
+                                    match http_get_with_retry(
+                                        &client,
+                                        &url,
+                                        &supabase_key,
+                                        &format!("Bearer {}", supabase_key),
+                                        Some(&range_header),
+                                    ) {
+                                        Ok(r) if r.status().is_success() => match r.json::<Vec<Value>>() {
+                                            Ok(rows) => {
+                                                remote_rows = Some(rows);
+                                                break;
+                                            }
+                                            Err(e) => last_err = format!("{}", e),
+                                        },
+                                        Ok(r) => last_err = format!("HTTP {}", r.status().as_u16()),
+                                        Err(e) => last_err = format!("{}", e),
                                     }
-                                    Ok(r) => Err(format!("HTTP {}", r.status().as_u16())),
-                                    Err(e) => Err(format!("{}", e)),
                                 }
-                            };
-                            match json_result {
-                                Ok(rows) => {
-                                    remote_rows = Some(rows);
-                                    break;
-                                }
-                                Err(e) => {
-                                    decode_error = Some(e);
-                                }
+                                decode_error = Some(last_err);
                             }
                         }
 
@@ -694,7 +693,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
         // --- Filtrage des orphelins locaux (Filet de sécurité) ---
         let mut skipped_orphans = 0usize;
         for (fk_col, parent_table) in &t.fk_deps {
-            let removed = filter_orphan_rows(conn, &mut local_rows, fk_col, parent_table);
+            let removed = filter_orphan_rows(conn, t.name, &mut local_rows, fk_col, parent_table);
             for (row_id, fk_val) in removed {
                 skipped_orphans += 1;
                 orphan_log.push(format!(
@@ -1288,8 +1287,42 @@ fn clear_remote_active_enrollment_conflicts(
 // FONCTIONS UTILITAIRES
 // =====================================================================
 
+/// Identifiant lisible d'une ligne pour les logs : `id` si la table en a une,
+/// sinon la clé composite (eleve_id/classe_id/tuteur_id/…) pour les tables de
+/// liaison (EleveClasse, TuteurEleve, FraisClasse n'ont pas de colonne `id`).
+fn describe_row_id(row: &Value) -> String {
+    if let Some(id) = row.get("id").and_then(|v| v.as_str()) {
+        if !id.is_empty() {
+            return id.to_string();
+        }
+    }
+    let parts: Vec<String> = [
+        "eleve_id", "classe_id", "tuteur_id", "frais_scolaire_id",
+        "paiement_id", "echeance_id", "annee_scolaire_id", "etablissement_id",
+    ]
+    .iter()
+    .filter_map(|col| {
+        row.get(*col)
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+            .map(|v| format!("{}={}", col, v))
+    })
+    .collect();
+    if parts.is_empty() {
+        "?".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+/// Filet de sécurité (côté push) : retire des lignes locales dont un parent FK
+/// est ABSENT de la base locale. Ces lignes sont orphelines (le cloud les
+/// rejetterait avec une violation de FK) ; le détail complet de chaque ligne
+/// est enregistré dans SyncLog/ORPHANS, et un résumé limité est affiché en
+/// console pour éviter le spam (des centaines de lignes possibles).
 fn filter_orphan_rows(
     conn: &Connection,
+    table_name: &str,
     rows: &mut Vec<Value>,
     fk_col: &str,
     parent_table: &str,
@@ -1306,6 +1339,7 @@ fn filter_orphan_rows(
     }
 
     let mut removed = Vec::new();
+    let mut orphan_desc: Vec<String> = Vec::new();
     rows.retain(|row| {
         let fk_val = row.get(fk_col).and_then(|v| v.as_str());
         match fk_val {
@@ -1315,22 +1349,28 @@ fn filter_orphan_rows(
                 if valid_parents.contains(fk) {
                     true
                 } else {
-                    let row_id = row.get("id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?")
-                        .to_string();
-                    let row_name = row.get("nom")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| row.get("matricule").and_then(|v| v.as_str()))
-                        .unwrap_or("?")
-                        .to_string();
-                    eprintln!("[SYNC] Élève rejeté: {} (ID: {}) - FK manquante: {}", row_name, row_id, fk);
+                    let row_id = describe_row_id(row);
+                    orphan_desc.push(format!(
+                        "{} ({}) : {}={} absent de {}",
+                        table_name, row_id, fk_col, fk, parent_table
+                    ));
                     removed.push((row_id, fk.to_string()));
                     false
                 }
             }
         }
     });
+
+    // Console : 10 détails max + résumé (le détail complet est dans SyncLog/ORPHANS).
+    for line in orphan_desc.iter().take(10) {
+        eprintln!("[SYNC] {} — ligne ignorée au push (orpheline)", line);
+    }
+    if orphan_desc.len() > 10 {
+        eprintln!(
+            "[SYNC] … et {} autres lignes orphelines ignorées au push (détail complet dans SyncLog/ORPHANS)",
+            orphan_desc.len() - 10
+        );
+    }
     removed
 }
 
