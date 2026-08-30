@@ -332,6 +332,10 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     let mut pull_errors: Vec<String> = Vec::new();
     let mut pull_had_error = false;
     let mut pull_warnings: Vec<String> = Vec::new();
+    // Ids supprimés à distance (par table), lus depuis l'AuditLog distant :
+    // sert à n'appliquer une "dégradation" (statut TRANSFERE / actif=0) que
+    // lorsqu'elle est réellement documentée par une suppression journalisée.
+    let mut remote_deleted_ids: HashMap<String, HashSet<String>> = HashMap::new();
     let mut failed_tables: HashSet<&str> = HashSet::new();
     let mut orphan_log: Vec<String> = Vec::new();
 
@@ -364,7 +368,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                                 del.get("entite_id").and_then(|v| v.as_str())
                             ) {
                                 if let Some(table_name) = map_entity_to_table(entite) {
-                                    if let Err(e) = delete_composite_row(conn, table_name, entite_id) {
+                                    if let Err(e) = apply_remote_delete(conn, table_name, entite_id, &mut remote_deleted_ids) {
                                         eprintln!("[SYNC] Échec suppression locale {} {} : {}", table_name, entite_id, e);
                                     }
                                 }
@@ -389,6 +393,19 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             pull_errors.push(format!("AuditLog (suppressions) : {}", e));
         }
     }
+
+    // AUTO-RÉPARATION des « TRANSFERE fantômes » : restaure les élèves marqués
+    // TRANSFERE sans AUCUNE suppression documentée (ni audit local ni audit
+    // distant). Ces marquages provenaient de l'ancien bug (pull qui appliquait
+    // un hard delete puis ré-importait la ligne avec son statut TRANSFERE) —
+    // ils font disparaître des élèves actifs des listes et des compteurs.
+    repair_ghost_transferes(
+        &conn,
+        &client,
+        &supabase_url,
+        &supabase_key,
+        &mut pull_warnings,
+    );
 
     for t in &tables {
         // AuditLog : on ne rapatrie PAS le journal distant dans la table locale.
@@ -429,16 +446,19 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                                 let count = remote_rows.len();
 
                                 for row in &remote_rows {
-                                    if let Some(row_map) = row.as_object() {
+                                    if let Some(row_obj) = row.as_object() {
+                                        let mut row_map = row_obj.clone();
                                         // Écriture intelligente : résout les conflits de clé
                                         // unique secondaire (matricule / numero_recu en double)
-                                        // au lieu d'échouer toute la synchro.
+                                        // et protège les élèves ACTIFS d'une rétrogradation
+                                        // TRANSFERE non documentée.
                                         let result = pull_insert_row(
                                             conn,
                                             t.name,
                                             &t.pk_cols,
-                                            row_map,
+                                            &mut row_map,
                                             &mut pull_warnings,
+                                            &remote_deleted_ids,
                                         );
                                         if let Err(e) = result {
                                             // Ne bloque pas le reste de la table, mais interdit
@@ -1225,12 +1245,12 @@ fn delete_composite_row(conn: &Connection, table_name: &str, entite_id: &str) ->
 
             if parts.len() >= 2 {
                 let sql = format!("DELETE FROM \"{}\" WHERE \"{}\" = ? AND \"{}\" = ?", table_name, col1, col2);
-                let _ = conn.execute(&sql, params![parts[0], parts[1]]);
+                conn.execute(&sql, params![parts[0], parts[1]])?;
             }
         }
         _ => {
             let sql = format!("DELETE FROM \"{}\" WHERE \"id\" = ?", table_name);
-            let _ = conn.execute(&sql, params![entite_id]);
+            conn.execute(&sql, params![entite_id])?;
         }
     }
     Ok(())
@@ -1324,6 +1344,217 @@ fn query_table_all(
     Ok(results)
 }
 
+/// Restaure en ACTIF les élèves localement TRANSFERE dont la suppression n'est
+/// documentée nulle part (ni dans l'AuditLog local, ni dans l'AuditLog distant).
+/// Une seule fois en pratique : une fois restaurés, ils repartent ACTIF vers le
+/// cloud au push suivant et les deux côtés convergent.
+fn repair_ghost_transferes(
+    conn: &Connection,
+    client: &reqwest::blocking::Client,
+    supabase_url: &str,
+    supabase_key: &str,
+    pull_warnings: &mut Vec<String>,
+) {
+    // 1) Élèves localement TRANSFERE (sans lui, pas de travail à faire)
+    let mut transferes: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT id FROM \"Eleve\" WHERE statut = 'TRANSFERE'") {
+        if let Ok(mut rows) = stmt.query([]) {
+            while let Ok(Some(row)) = rows.next() {
+                if let Ok(id) = row.get::<_, String>(0) {
+                    transferes.push(id);
+                }
+            }
+        }
+    }
+    if transferes.is_empty() {
+        return;
+    }
+
+    // 2) Suppressions documentées localement
+    let mut documented: HashSet<String> = HashSet::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT entite_id FROM \"AuditLog\" \
+         WHERE action = 'DELETE' AND entite IN ('eleve', 'Eleve') AND entite_id IS NOT NULL",
+    ) {
+        if let Ok(mut rows) = stmt.query([]) {
+            while let Ok(Some(row)) = rows.next() {
+                if let Ok(id) = row.get::<_, String>(0) {
+                    documented.insert(id);
+                }
+            }
+        }
+    }
+
+    // 3) Suppressions documentées dans l'AuditLog distant (historique complet,
+    //    pas seulement depuis LAST_SYNC : un archivage ancien reste documenté).
+    let mut offset = 0usize;
+    let page_size = 1000usize;
+    loop {
+        let range_header = format!("{}-{}", offset, offset + page_size - 1);
+        let url = format!(
+            "{}/rest/v1/AuditLog?action=eq.DELETE&entite=in.(eleve,Eleve)&select=entite_id&entite_id=not.is.null",
+            supabase_url
+        );
+        match http_get_with_retry(client, &url, supabase_key, &format!("Bearer {}", supabase_key), Some(&range_header)) {
+            Ok(resp) => {
+                let status = resp.status().as_u16();
+                if status == 416 {
+                    break;
+                }
+                if status != 200 && status != 206 {
+                    break;
+                }
+                match resp.json::<Vec<Value>>() {
+                    Ok(rows) => {
+                        let count = rows.len();
+                        for r in rows {
+                            if let Some(id) = r.get("entite_id").and_then(|v| v.as_str()) {
+                                if !id.is_empty() {
+                                    documented.insert(id.to_string());
+                                }
+                            }
+                        }
+                        if count < page_size {
+                            break;
+                        }
+                        offset += page_size;
+                    }
+                    Err(_) => break,
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    // 4) Restaurer les élèves TRANSFERE non documentés
+    let mut candidates: Vec<String> = Vec::new();
+    for id in transferes {
+        if !documented.contains(&id) {
+            candidates.push(id);
+        }
+    }
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    let now = now_iso();
+    let mut restored = 0usize;
+    for id in &candidates {
+        let ok = conn.execute(
+            "UPDATE \"Eleve\" SET statut = 'ACTIF', updated_at = ?1 WHERE id = ?2 AND statut = 'TRANSFERE'",
+            params![now, id],
+        );
+        if let Ok(affected) = ok {
+            restored += affected as usize;
+        }
+    }
+    if restored > 0 {
+        let msg = format!(
+            "{} élève(s) restauré(s) ACTIF (TRANSFERE sans suppression documentée — ancien bug)",
+            restored
+        );
+        eprintln!("[SYNC] {}", msg);
+        pull_warnings.push(msg);
+    }
+}
+
+/// Applique une suppression distante (issue de l'AuditLog) à la base locale.
+///
+/// Les tables que l'application gère en "archivage" (soft delete) sont traitées
+/// comme telles — sinon on supprimerait physiquement l'élève puis le pull
+/// complet le ré-importerait depuis le cloud avec son statut TRANSFERE, ce qui
+/// faisait apparaître des élèves non archivés comme « Transféré ».
+fn apply_remote_delete(
+    conn: &Connection,
+    table_name: &str,
+    entite_id: &str,
+    deleted_ids: &mut HashMap<String, HashSet<String>>,
+) -> Result<(), AppError> {
+    deleted_ids
+        .entry(table_name.to_string())
+        .or_default()
+        .insert(entite_id.to_string());
+
+    match table_name {
+        // Soft delete (comme le bouton « Archiver » de l'application)
+        "Eleve" => {
+            conn.execute(
+                "UPDATE \"Eleve\" SET statut = 'TRANSFERE', updated_at = ?1 WHERE id = ?2",
+                params![now_iso(), entite_id],
+            )?;
+        }
+        "User" => {
+            conn.execute(
+                "UPDATE \"User\" SET actif = 0, updated_at = ?1 WHERE id = ?2",
+                params![now_iso(), entite_id],
+            )?;
+        }
+        "Etablissement" => {
+            conn.execute(
+                "UPDATE \"Etablissement\" SET actif = 0, updated_at = ?1 WHERE id = ?2",
+                params![now_iso(), entite_id],
+            )?;
+        }
+        // Hard delete pour les tables réellement supprimées dans l'application
+        _ => delete_composite_row(conn, table_name, entite_id)?,
+    }
+    Ok(())
+}
+
+/// Empêche qu'un élève localement actif soit rétrogradé TRANSFERE par une ligne
+/// distante dont la suppression n'est PAS documentée dans le journal d'audit.
+fn protect_eleve_statut(
+    conn: &Connection,
+    row_map: &mut serde_json::Map<String, Value>,
+    pull_warnings: &mut Vec<String>,
+    remote_deleted_ids: &HashMap<String, HashSet<String>>,
+) {
+    let remote_statut = match row_map.get("statut").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => return,
+    };
+    if remote_statut != "TRANSFERE" {
+        return;
+    }
+    let Some(id) = row_map.get("id").and_then(|v| v.as_str()) else {
+        return;
+    };
+    if id.is_empty() {
+        return;
+    }
+
+    // Statut local actuel de l'élève
+    let local_statut: Option<String> = conn
+        .query_row("SELECT statut FROM \"Eleve\" WHERE id = ?1", [id], |r| r.get(0))
+        .ok();
+    let local_active = match local_statut.as_deref() {
+        Some(s) => s != "TRANSFERE",
+        // Élève inconnu localement : on insère tel quel (probable nouvel archivé distant).
+        None => return,
+    };
+    if !local_active {
+        return; // déjà archivé localement : rien à protéger
+    }
+
+    // La suppression est-elle documentée dans l'AuditLog distant (ce run) ?
+    let audit_backed = remote_deleted_ids
+        .get("Eleve")
+        .map(|ids| ids.contains(id))
+        .unwrap_or(false);
+
+    if !audit_backed {
+        // Cloud périmé/pollué : on conserve l'état local ACTIF/INSCRIT.
+        if let Some(local) = local_statut {
+            row_map.insert("statut".to_string(), Value::String(local.clone()));
+        }
+        pull_warnings.push(format!(
+            "Eleve (id {}) : marqué TRANSFERE côté cloud sans suppression journalisée — statut local conservé",
+            id
+        ));
+    }
+}
+
 /// Insère ou réconcilie une ligne distante dans la base locale.
 ///
 /// Résout les conflits de clé unique secondaire qui, sinon, feraient échouer
@@ -1337,15 +1568,25 @@ fn query_table_all(
 /// - `User` : un username en double est ignoré localement avec un avertissement
 ///   (deux comptes avec le même login nécessitent une fusion manuelle dans
 ///   Supabase) ; cela ne bloque pas le reste de la synchro.
+///
+/// Protection supplémentaire : un élève local ACTIF/INSCRIT n'est JAMAIS rétrogradé
+/// en TRANSFERE par une ligne distante, sauf si la suppression est documentée dans
+/// le journal d'audit distant (vraie propagation d'un archivage). Une ligne
+/// TRANSFERE sans journal = donnée cloud périmée/polluée → on conserve l'état local.
 fn pull_insert_row(
     conn: &Connection,
     table_name: &str,
     pk_cols: &[&str],
-    row_map: &serde_json::Map<String, Value>,
+    row_map: &mut serde_json::Map<String, Value>,
     pull_warnings: &mut Vec<String>,
+    remote_deleted_ids: &HashMap<String, HashSet<String>>,
 ) -> Result<(), AppError> {
     if table_name == "EleveClasse" {
         return upsert_eleve_classe_row(conn, row_map);
+    }
+
+    if table_name == "Eleve" {
+        protect_eleve_statut(conn, row_map, pull_warnings, remote_deleted_ids);
     }
 
     match upsert_row(conn, table_name, pk_cols, row_map) {

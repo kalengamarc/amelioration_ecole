@@ -182,6 +182,29 @@ La synchro ne bloque plus à cause de cela :
   identifiant de connexion) — la ligne est ignorée localement avec un
   avertissement et nécessite une fusion manuelle dans Supabase.
 
+### 🧑🎓 Élèves passés « Transféré » sans raison
+
+Un ancien bug faisait apparaître des élèves actifs comme « Transféré » après une
+synchro : la propagation des suppressions appliquait un **hard delete** local
+puis le pull complet **ré-importait la ligne depuis le cloud avec son statut
+TRANSFERE** — même pour des élèves jamais archivés.
+
+Corrections en place :
+
+- **Propagation d'archivage = soft delete** : une suppression distante d'un
+  élève (ou utilisateur/établissement) applique désormais le même traitement que
+  le bouton « Archiver » (`statut='TRANSFERE'`, `actif=0`) au lieu d'une
+  suppression physique.
+- **Protection des élèves actifs** : un élève localement ACTIF/INSCRIT n'est
+  JAMAIS rétrogradé TRANSFERE par le cloud, sauf si la suppression est
+  documentée dans le journal d'audit (vrai archivage).
+- **Auto-réparation** : les élèves déjà marqués TRANSFERE par l'ancien bug (sans
+  AUCUNE suppression documentée, ni localement ni dans l'audit distant) sont
+  restaurés ACTIF automatiquement à la prochaine synchro — puis repoussés ACTIF
+  vers le cloud. L'opération est journalisée dans SyncLog (table `CONFLICTS`) et
+  signalée dans le résumé. Les élèves **réellement archivés** (avec entrée
+  d'audit) restent archivés.
+
 ### 🔢 Numéros de reçu et matricules uniques par machine
 
 Depuis cette version :

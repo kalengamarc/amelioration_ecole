@@ -2,6 +2,38 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 6
+Agent: main
+Task: Élèves passés « Transféré » sans raison après synchro
+
+Work Log:
+- Symptôme : des élèves actifs apparaissaient avec statut TRANSFERE après synchro
+  (donc masqués des listes et compteurs — « chiffres incorrects »).
+- Cause racine : la propagation des suppressions via l'AuditLog appliquait un
+  HARD DELETE local (DELETE FROM Eleve), puis le pull complet ré-importait la
+  ligne depuis le cloud avec son statut TRANSFERE (le cloud avait été mis à jour
+  par le push « archivé »). Même des élèves jamais archivés pouvaient être
+  touchés si une entrée DELETE distante existait pour leur id.
+- `src-tauri/src/sync/mod.rs` :
+  - Nouvelle `apply_remote_delete` : soft delete pour Eleve (statut=TRANSFERE),
+    User (actif=0), Etablissement (actif=0) ; hard delete conservé pour les
+    autres tables. Enregistre aussi les ids supprimés (remote_deleted_ids).
+  - Nouvelle `protect_eleve_statut` : un élève local ACTIF/INSCRIT n'est jamais
+    rétrogradé TRANSFERE par une ligne distante SANS suppression journalisée
+    (audit local ou distant) — état local conservé + avertissement.
+  - Nouvelle `repair_ghost_transferes` : restaure ACTIF les élèves TRANSFERE
+    sans AUCUNE suppression documentée (audit local + audit distant complet) ;
+    les élèves réellement archivés (avec entrée d'audit) restent archivés.
+    Une fois restaurés, le push suivant corrige aussi le cloud (convergence).
+  - `delete_composite_row` : propage maintenant les erreurs (au lieu de les
+    ignorer silencieusement) — visible dans les logs de synchro.
+- `SYNC_GUIDE.md` : section « Élèves passés Transféré sans raison ».
+
+Stage Summary:
+- Plus aucune rétrogradation TRANSFERE non documentée ; auto-réparation des
+  élèves victimes de l'ancien bug à la prochaine synchro.
+
+---
 Task ID: 5
 Agent: main
 Task: Auto-réparation des matricules/numéros de reçu en double (données héritées)
