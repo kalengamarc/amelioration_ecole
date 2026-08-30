@@ -2,9 +2,10 @@
 use crate::db::DbConn;
 use crate::error::{AppError, api_response};
 use crate::utils::audit_logger::log_audit;
-use crate::utils::id::generate_id;
+use crate::utils::id::{generate_id, generate_matricule};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use tauri::State;
 
 // ─── Types de réponse (camelCase) ──────────────────────────────────────────
@@ -160,31 +161,113 @@ pub struct UpdateEleveInput {
 
 // ─── Fonctions utilitaires ──────────────────────────────────────────────────
 
-fn generate_matricule(conn: &rusqlite::Connection, etablissement_id: &str) -> Result<String, AppError> {
-    let year = chrono::Utc::now().format("%Y").to_string();
-    let prefix = format!("ELV-{}-", year);
-    
-    // Trouver le suffixe numérique maximum existant pour cette année
-    let max_num: i64 = conn.query_row(
-        "SELECT COALESCE(MAX(CAST(SUBSTR(matricule, 10) AS INTEGER)), 0) FROM Eleve WHERE matricule LIKE ?",
-        params![format!("{}%", prefix)],
-        |row| row.get(0),
-    ).unwrap_or(0);
+// NOTE : le générateur de matricule vit dans src-tauri/src/utils/id.rs
+// (generate_matricule). Il intègre un code machine persistant pour éviter
+// les collisions entre machines sur la clé unique Eleve.matricule.
 
-    let mut next_num = max_num + 1;
-    loop {
-        let candidate = format!("ELV-{}-{:04}", year, next_num);
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) > 0 FROM Eleve WHERE matricule = ?",
-            params![candidate],
-            |row| row.get(0),
-        ).unwrap_or(false);
-
-        if !exists {
-            return Ok(candidate);
+/// Réconcilie les tuteurs d'un élève avec la liste reçue du formulaire.
+///
+/// Avant : chaque édition d'un élève SUPPRIMAIT tous les liens TuteurEleve puis
+/// recréait des lignes Tuteur avec de nouveaux UUID. Résultat : doublons de
+/// tuteurs, orphelins, et à chaque synchro le push renvoyait des tuteurs neufs.
+///
+/// Maintenant : un tuteur existant est réutilisé par numéro de téléphone (et
+/// ses champs sont mis à jour), les liens sont créés/supprimés différemment,
+/// et is_principal est synchronisé. Les IDs restent stables entre machines.
+fn reconcile_tuteurs_for_eleve(
+    conn: &rusqlite::Connection,
+    eleve_id: &str,
+    tuteurs: &[TuteurInput],
+    now: &str,
+) -> Result<(), AppError> {
+    // Liens existants (tuteur_id, is_principal)
+    let mut existing: Vec<(String, i32)> = Vec::new();
+    {
+        let mut stmt = conn.prepare("SELECT tuteur_id, is_principal FROM TuteurEleve WHERE eleve_id = ?")?;
+        let rows = stmt.query_map([eleve_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i32>(1)?)))?;
+        for r in rows {
+            existing.push(r?);
         }
-        next_num += 1;
     }
+
+    let mut kept: HashSet<String> = HashSet::new();
+
+    for t in tuteurs {
+        let nom = t.nom.trim();
+        let prenom = t.prenom.trim();
+        let tel = t.telephone.trim();
+        let tel_norm = tel.replace(' ', "");
+        let tel_lower = tel_norm.to_lowercase();
+        // Le formulaire envoie 'Non renseigné' quand aucun téléphone n'est saisi.
+        // Un tel "téléphone" ne permet PAS d'identifier un tuteur : le dédupliquer
+        // fusionnerait tous les parents sans téléphone en un seul tuteur.
+        let has_real_phone = !tel_norm.is_empty()
+            && tel_lower != "nonrenseigné"
+            && tel_lower != "nonrenseigne";
+
+        // Réutiliser un tuteur existant ayant le même téléphone normalisé
+        // (le numéro est l'identifiant naturel du parent/tuteur).
+        let tuteur_id: Option<String> = if has_real_phone {
+            conn.query_row(
+                "SELECT id FROM Tuteur WHERE REPLACE(COALESCE(telephone, ''), ' ', '') = ?1 LIMIT 1",
+                [&tel_norm],
+                |r| r.get(0),
+            )
+            .ok()
+        } else {
+            None
+        };
+
+        let tuteur_id = match tuteur_id {
+            Some(id) => {
+                // Mettre à jour les informations du tuteur existant
+                conn.execute(
+                    "UPDATE Tuteur SET nom = ?1, prenom = ?2, telephone = ?3, telephone2 = ?4, \
+                     relation = ?5, adresse = ?6, profession = ?7, updated_at = ?8 WHERE id = ?9",
+                    params![nom, prenom, tel, t.telephone2.as_deref(), t.relation.as_deref(),
+                            t.adresse.as_deref(), t.profession.as_deref(), now, id],
+                )?;
+                id
+            }
+            None => {
+                let id = generate_id();
+                conn.execute(
+                    "INSERT INTO Tuteur (id, nom, prenom, telephone, telephone2, relation, adresse, profession, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![id, nom, prenom, tel, t.telephone2.as_deref(), t.relation.as_deref(),
+                            t.adresse.as_deref(), t.profession.as_deref(), now, now],
+                )?;
+                id
+            }
+        };
+
+        let is_principal = t.is_principal.unwrap_or(false) as i32;
+
+        if existing.iter().any(|(eid, _)| *eid == tuteur_id) {
+            conn.execute(
+                "UPDATE TuteurEleve SET is_principal = ?1 WHERE eleve_id = ?2 AND tuteur_id = ?3",
+                params![is_principal, eleve_id, tuteur_id],
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO TuteurEleve (eleve_id, tuteur_id, is_principal, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![eleve_id, tuteur_id, is_principal, now],
+            )?;
+        }
+        kept.insert(tuteur_id);
+    }
+
+    // Supprimer uniquement les liens qui ne sont plus dans la liste
+    for (tuteur_id, _) in existing {
+        if !kept.contains(&tuteur_id) {
+            conn.execute(
+                "DELETE FROM TuteurEleve WHERE eleve_id = ?1 AND tuteur_id = ?2",
+                params![eleve_id, tuteur_id],
+            )?;
+        }
+    }
+
+    Ok(())
 }
 
 fn fetch_inscriptions(conn: &rusqlite::Connection, eleve_id: &str) -> Result<Vec<InscriptionRef>, AppError> {
@@ -546,7 +629,7 @@ pub fn create_eleve(
 
     {
         let conn = db.lock()?;
-        matricule = generate_matricule(&conn, &data.etablissement_id)?;
+        matricule = generate_matricule(&conn);
 
         // Vérifications
         let etab_exists: bool = conn.query_row(
@@ -586,24 +669,8 @@ pub fn create_eleve(
             params![id, data.classe_id, now],
         )?;
 
-        eprintln!("DEBUG: Tuteurs reçus dans create_eleve: {:?}", data.tuteurs);
         if let Some(tuteurs) = &data.tuteurs {
-            eprintln!("DEBUG: Nombre de tuteurs: {}", tuteurs.len());
-            for t in tuteurs {
-                let tid = generate_id();
-                conn.execute(
-                    "INSERT INTO Tuteur (id, nom, prenom, telephone, telephone2, relation, adresse, profession, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                    params![tid, t.nom, t.prenom, t.telephone, t.telephone2,
-                            t.relation, t.adresse, t.profession, now, now],
-                )?;
-                conn.execute(
-                    "INSERT INTO TuteurEleve (eleve_id, tuteur_id, is_principal, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    params![id, tid, t.is_principal.unwrap_or(false) as i32, now],
-                )?;
-            }
-        } else {
-            eprintln!("DEBUG: data.tuteurs est None");
+            reconcile_tuteurs_for_eleve(&conn, &id, tuteurs, &now)?;
         }
     }
 
@@ -704,31 +771,8 @@ pub fn update_eleve(
             }
         }
 
-        eprintln!("DEBUG: Tuteurs reçus dans update_eleve: {:?}", data.tuteurs);
         if let Some(tuteurs) = &data.tuteurs {
-            eprintln!("DEBUG: Nombre de tuteurs dans update: {}", tuteurs.len());
-            // Supprimer les anciens tuteurs de cet élève
-            conn.execute(
-                "DELETE FROM TuteurEleve WHERE eleve_id = ?",
-                params![id],
-            )?;
-            // Note: On ne supprime pas les tuteurs de la table Tuteur car ils pourraient être utilisés par d'autres élèves
-
-            for t in tuteurs {
-                let tid = generate_id();
-                conn.execute(
-                    "INSERT INTO Tuteur (id, nom, prenom, telephone, telephone2, relation, adresse, profession, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                    params![tid, t.nom, t.prenom, t.telephone, t.telephone2,
-                            t.relation, t.adresse, t.profession, now, now],
-                )?;
-                conn.execute(
-                    "INSERT INTO TuteurEleve (eleve_id, tuteur_id, is_principal, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    params![id, tid, t.is_principal.unwrap_or(false) as i32, now],
-                )?;
-            }
-        } else {
-            eprintln!("DEBUG: data.tuteurs est None dans update");
+            reconcile_tuteurs_for_eleve(&conn, &id, tuteurs, &now)?;
         }
 
         let new_nom = data.nom.unwrap_or(nom_old);

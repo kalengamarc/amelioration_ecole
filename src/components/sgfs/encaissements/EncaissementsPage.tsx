@@ -311,6 +311,20 @@ export default function EncaissementsPage() {
     if (user) fetchHistory(page)
   }, [user, page, fetchHistory])
 
+  // Rafraîchir les données (élèves, historique, taux…) après une synchronisation
+  // — qu'elle soit automatique ou manuelle — afin que les nouvelles données
+  // reçues du cloud apparaissent sans avoir à quitter la page.
+  useEffect(() => {
+    const handleSync = () => {
+      fetchStudents()
+      fetchTaux()
+      fetchAnnee()
+      fetchHistory(page)
+    }
+    window.addEventListener('sync-completed', handleSync)
+    return () => window.removeEventListener('sync-completed', handleSync)
+  }, [fetchStudents, fetchTaux, fetchAnnee, fetchHistory, page])
+
   function clearStudent() {
     setSelectedStudent(null)
     setStudentSearch('')

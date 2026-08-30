@@ -194,19 +194,26 @@ fn http_post_with_retry(
     apikey: &str,
     auth: &str,
     body: &Value,
+    merge_duplicates: bool,
 ) -> Result<reqwest::blocking::Response, reqwest::Error> {
     const MAX_ATTEMPTS: usize = 4;
     let mut last_err = None;
 
     for attempt in 0..MAX_ATTEMPTS {
-        match client
+        let mut req = client
             .post(url)
             .header("apikey", apikey)
             .header("Authorization", auth)
-            .header("Content-Type", "application/json")
-            .header("Prefer", "resolution=merge-duplicates")
-            .json(body)
-            .send()
+            .header("Content-Type", "application/json");
+        // `resolution=merge-duplicates` fait fusionner par PostgREST TOUTE
+        // violation de contrainte unique — y compris sur des clés que nous ne
+        // voulons pas fusionner (Paiement.numero_recu, Eleve.matricule,
+        // User.username) car cela ÉCRASERAIT une donnée existante. On ne
+        // l'active donc que pour les tables où la fusion est sûre.
+        if merge_duplicates {
+            req = req.header("Prefer", "resolution=merge-duplicates");
+        }
+        match req.json(body).send()
         {
             Ok(resp) => {
                 let retryable = resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
@@ -492,6 +499,19 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
     // On pousse TOUTES les lignes locales, sans filtre temporel.
     // ==========================================
 
+    // Après le pull, les paiements reçus du cloud peuvent rendre obsolètes les
+    // montant_paye locaux des échéances. On les recalcule depuis les paiements
+    // valides réels AVANT de pousser, pour ne pas écraser le cloud avec des
+    // valeurs périmées (convergence inter-machines).
+    let _ = conn.execute(
+        "UPDATE Echeance SET montant_paye = COALESCE(\
+            (SELECT SUM(COALESCE(p.montant_affecte, p.montant)) FROM Paiement p \
+             WHERE p.echeance_id = Echeance.id AND COALESCE(p.annule, 0) = 0), 0), \
+         updated_at = ?1 \
+         WHERE EXISTS (SELECT 1 FROM Paiement p WHERE p.echeance_id = Echeance.id)",
+        params![now_iso()],
+    );
+
     let mut stmt_del = conn.prepare(
         "SELECT entite, entite_id FROM \"AuditLog\" WHERE action = 'DELETE' AND created_at > ?"
     )?;
@@ -641,13 +661,17 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
             "ParametreEtablissement",
         ];
         let can_merge_on_unique = !t.unique_cols.is_empty() && SAFE_UNIQUE_MERGE.contains(&t.name);
+        // Tables sans clé unique secondaire : seule la PK peut entrer en conflit,
+        // déjà gérée par on_conflict=id. La fusion est donc sans risque.
+        // Tables à clé unique sensible (Eleve, User, Paiement) : pas de merge.
+        let merge_duplicates = can_merge_on_unique || t.unique_cols.is_empty();
 
         let batches: Vec<Vec<Value>> = local_rows.chunks(push_batch_size).map(|chunk| chunk.to_vec()).collect();
 
         for batch in &batches {
             let on_conflict = format!("on_conflict={}", t.pk_cols.join(","));
             let url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, on_conflict);
-            let res = http_post_with_retry(&client, &url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
+            let res = http_post_with_retry(&client, &url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()), merge_duplicates);
 
             match res {
                 Ok(resp) => {
@@ -662,7 +686,7 @@ pub fn run_bidirectional_sync(conn: &Connection) -> Result<SyncSummary, AppError
                         if can_merge_on_unique {
                             let alt_on_conflict = format!("on_conflict={}", t.unique_cols.join(","));
                             let alt_url = format!("{}/rest/v1/{}?{}", supabase_url, t.name, alt_on_conflict);
-                            let alt_res = http_post_with_retry(&client, &alt_url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()));
+                            let alt_res = http_post_with_retry(&client, &alt_url, &supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(batch.clone()), true);
 
                             if let Ok(alt_resp) = alt_res {
                                 if alt_resp.status().is_success() {
@@ -1003,7 +1027,10 @@ fn push_rows_with_dependencies(
 
     if ok {
         let push_url = format!("{}/rest/v1/{}?on_conflict=id", supabase_url, table_name);
-        match http_post_with_retry(client, &push_url, supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(rows.to_vec())) {
+        // Merge volontairement désactivé : l'auto-réparation pousse des parents
+        // par leur id. En cas de conflit de clé unique secondaire, on préfère
+        // échouer (et logguer) plutôt que d'écraser une autre ligne.
+        match http_post_with_retry(client, &push_url, supabase_key, &format!("Bearer {}", supabase_key), &Value::Array(rows.to_vec()), false) {
             Ok(resp) if resp.status().is_success() => {}
             Ok(resp) => {
                 repair_log.push(format!("ÉCHEC du push vers '{}' : {}", table_name, resp.text().unwrap_or_default()));

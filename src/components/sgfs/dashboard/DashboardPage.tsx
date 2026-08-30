@@ -421,6 +421,15 @@ export default function DashboardPage() {
     fetchData()
   }, [fetchData])
 
+  // Rafraîchir les statistiques après une synchronisation (auto ou manuelle) :
+  // les paiements/dépenses/élèves reçus du cloud doivent apparaître sans
+  // recharger la page.
+  useEffect(() => {
+    const handleSync = () => { fetchData() }
+    window.addEventListener('sync-completed', handleSync)
+    return () => window.removeEventListener('sync-completed', handleSync)
+  }, [fetchData])
+
   const serieMois = useMemo(
     () =>
       (data?.encaissementsParMois ?? [])

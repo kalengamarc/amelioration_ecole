@@ -122,12 +122,16 @@ export default function ParametresPage() {
       const data = res?.data ?? res ?? {}
       if (data.success) {
         toast.success(data.message || "Synchronisation réussie.")
-        setSyncSummary(data)
-        fetchSyncStatus()
-        fetchSyncValidation()
       } else {
         toast.error(data.message || "La synchronisation a échoué.")
       }
+      setSyncSummary(data)
+      fetchSyncStatus()
+      fetchSyncValidation()
+      // Prévenir les pages ouvertes (élèves, classes, encaissements…) qu'elles
+      // doivent se rafraîchir après une synchro manuelle (comme le fait la
+      // synchro automatique).
+      window.dispatchEvent(new Event('sync-completed'))
     } catch (err: any) {
       const msg = typeof err === 'string' ? err : (err?.message || err?.error || (typeof err === 'object' ? JSON.stringify(err) : String(err)))
       toast.error(msg || "Erreur réseau ou connexion Supabase impossible.")

@@ -143,18 +143,41 @@ La synchronisation inclut désormais les protections suivantes :
    format UTC local (`Z`) pour que le journal des suppressions reste fiable.
 8. **Conflit « un seul ACTIF par élève » résolu** lors du téléchargement
    d'EleveClasse (l'état distant consolidé fait foi).
+9. **Identifiants uniques par machine** : numéros de reçu et matricules incluent
+   un code machine (`REC-20260830-A7K-0001`, `ELV-2026-A7K-0001`) — plus aucune
+   collision entre machines sur `numero_recu` / `matricule`.
+10. **Fusion dupliquée désactivée côté PostgREST** : l'en-tête
+    `resolution=merge-duplicates` n'est plus envoyé pour `Paiement`, `Eleve` et
+    `User` (il faisait fusionner silencieusement les conflits même sans repli).
+11. **Tuteurs stables** : plus de recréation de tuteurs à chaque édition d'élève
+    (réutilisation par téléphone) — pas de doublons ni d'orphelins repoussés.
+12. **Échéances recalculées avant push** : `montant_paye` est recalculé depuis
+    les paiements réels après le pull, pour ne pas écraser le cloud avec des
+    montants périmés.
 
 ### ⚠️ Limites connues
 
-- **Numéros de reçu / matricules** : `generate_receipt_number` et
-  `generate_matricule` comptent les lignes locales du jour. Deux machines qui
-  créent le même jour peuvent générer le même `numero_recu` / `matricule`. Le
-  conflit est désormais **signalé en erreur** (plus d'écrasement silencieux) :
-  corrigez alors le numéro dans l'application puis relancez la synchro.
 - **Résolution de conflits** : en cas de modification de la même ligne sur deux
   machines, la règle reste « dernier run de synchro gagne » (pull puis push
   complet). Les sauvegardes locales `.bak-*` permettent de restaurer un état
   antérieur si besoin.
+
+### 🔢 Numéros de reçu et matricules uniques par machine
+
+Depuis cette version :
+
+- Chaque machine possède un **code machine persistant** (3 caractères, stocké
+  dans `ConfigSysteme` clé `MACHINE_CODE`).
+- Les nouveaux numéros de reçu ont le format `REC-20260830-A7K-0001` et les
+  nouveaux matricules `ELV-2026-A7K-0001` : **deux machines ne peuvent plus
+  générer le même numéro**, plus aucune collision ni écrasement sur
+  `numero_recu` / `matricule`.
+- Les anciennes données (`REC-20260830-0001`, `ELV-2026-0001`) restent
+  inchangées : leurs formats ne peuvent pas entrer en collision avec les
+  nouveaux.
+- Bonus : les tuteurs ne sont plus recréés avec un nouvel ID à chaque édition
+  d'élève (réutilisation par numéro de téléphone) — fini les doublons et les
+  orphelins qui polluaient les synchronisations.
 
 ### ⚠️ Migration requise (base Supabase EXISTANTE)
 

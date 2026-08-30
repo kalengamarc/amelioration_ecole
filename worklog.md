@@ -2,6 +2,33 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 4
+Agent: main
+Task: Suite — collisions d'identifiants, tuteurs, rafraîchissement UI, convergence échéances
+
+Work Log:
+- `src-tauri/src/utils/id.rs` :
+  - Nouveau code machine persistant (ConfigSysteme clé MACHINE_CODE, 3 caractères sans ambiguïté)
+  - `generate_receipt_number` → format `REC-YYYYMMDD-CODE-####` (compteur par machine : plus de collision entre machines)
+  - `generate_matricule` → format `ELV-YYYY-CODE-####` (déplacé de eleves.rs vers utils/id.rs)
+- `src-tauri/src/commands/eleves.rs` :
+  - Suppression du doublon local `generate_matricule` (utilise désormais utils/id.rs)
+  - Nouvelle fonction `reconcile_tuteurs_for_eleve` : les tuteurs sont RÉUTILISÉS par téléphone (fini la suppression + recréation avec nouveaux UUID à chaque édition d'élève qui créait doublons/orphelins et repoussait des tuteurs neufs à chaque sync)
+  - Téléphones 'Non renseigné' exclus de la déduplication (ne fusionne pas les parents sans téléphone)
+- `src-tauri/src/commands/encaissements.rs` : boucle de retry sur violation UNIQUE du numero_recu (double-clic / insertions simultanées) — le paiement est réessayé avec un nouveau numéro au lieu d'échouer
+- `src-tauri/src/sync/mod.rs` :
+  - `Prefer: resolution=merge-duplicates` rendu conditionnel : PostgREST fusionnait TOUTES les violations uniques (y compris Paiement.numero_recu / Eleve.matricule / User.username) même sans repli explicite → plus de merge que pour les tables sûres ou sans clé unique secondaire
+  - Auto-réparation : merge désactivé (échec + log plutôt qu'écrasement)
+  - Recalcul de `Echeance.montant_paye` après le pull, avant le push (convergence : on n'écrase plus le cloud avec des montants périmés)
+- Frontend :
+  - `ParametresPage` : déclenche `sync-completed` après une synchro manuelle (avant : seules les synchros auto rafraîchissaient les pages)
+  - `EncaissementsPage` + `DashboardPage` : listeners `sync-completed` → rechargent élèves/taux/historique/statistiques après synchro
+
+Stage Summary:
+- Identifiants uniques par machine (reçus + matricules) : plus de collisions inter-machines
+- Tuteurs stables entre machines ; UI rafraîchie après chaque synchro (auto ou manuelle)
+
+---
 Task ID: 3
 Agent: main
 Task: Corriger les pertes de données lors de la synchronisation Supabase

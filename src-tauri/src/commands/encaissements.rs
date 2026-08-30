@@ -170,7 +170,7 @@ pub fn create_paiement(
     let conn = db.lock()?;
     let now = now_iso();
     let id = generate_id();
-    let numero_recu = generate_receipt_number(&conn);
+    let mut numero_recu = generate_receipt_number(&conn);
 
     let eleve_exists: bool = conn.query_row(
         "SELECT COUNT(*) > 0 FROM Eleve WHERE id = ?",
@@ -255,12 +255,39 @@ pub fn create_paiement(
     let montant_affecte_val = montant_affecte.unwrap_or(montant);
     let devise_echeance_val = devise_echeance.unwrap_or_else(|| devise.clone());
 
-    // Insert payment record with echeance_id
-    conn.execute(
-        "INSERT INTO Paiement (id, eleve_id, echeance_id, etablissement_id, annee_scolaire_id, user_id, motif, montant, devise, montant_affecte, devise_echeance, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, annule, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, ?17, ?17)",
-        params![id, eleve_id, ech_clean, etab_id, final_annee_id, valid_user_id, motif, montant, devise, montant_affecte_val, devise_echeance_val, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, now],
-    )?;
+    // Insert payment record with echeance_id.
+    // En cas de collision sur le numero_recu (double-clic, ou course entre deux
+    // insertions simultanées), on régénère un numéro et on réessaie au lieu
+    // d'échouer — évite le rejet du paiement par la contrainte UNIQUE.
+    let mut inserted = false;
+    for attempt in 0..5 {
+        let res = conn.execute(
+            "INSERT INTO Paiement (id, eleve_id, echeance_id, etablissement_id, annee_scolaire_id, user_id, motif, montant, devise, montant_affecte, devise_echeance, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, annule, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, ?17, ?17)",
+            params![id, eleve_id, ech_clean, etab_id, final_annee_id, valid_user_id, motif, montant, devise, montant_affecte_val, devise_echeance_val, mode_paiement, reference_paiement, taux_change, montant_original, numero_recu, now],
+        );
+        match res {
+            Ok(_) => {
+                inserted = true;
+                break;
+            }
+            Err(e) => {
+                let is_unique_violation = matches!(
+                    &e,
+                    rusqlite::Error::SqliteFailure(ferr, _)
+                        if ferr.code == rusqlite::ErrorCode::ConstraintViolation
+                );
+                if is_unique_violation && attempt < 4 {
+                    numero_recu = generate_receipt_number(&conn);
+                    continue;
+                }
+                return Err(e.into());
+            }
+        }
+    }
+    if !inserted {
+        return Err(AppError::Database("Insertion du paiement impossible après plusieurs tentatives".into()));
+    }
 
     // Update Echeance.montant_paye if echeance_id is provided
     if let Some(ref ech_id) = ech_clean {
