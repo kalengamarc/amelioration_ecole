@@ -1517,16 +1517,20 @@ fn protect_eleve_statut(
     if remote_statut != "TRANSFERE" {
         return;
     }
-    let Some(id) = row_map.get("id").and_then(|v| v.as_str()) else {
+    let Some(id_ref) = row_map.get("id").and_then(|v| v.as_str()) else {
         return;
     };
-    if id.is_empty() {
+    if id_ref.is_empty() {
         return;
     }
+    // String possédée : `id` est utilisé APRÈS `row_map.insert(...)` plus bas,
+    // une référence empruntée à row_map provoquerait E0502 (emprunt mutable
+    // pendant qu'un emprunt immuable est encore vivant).
+    let id = id_ref.to_string();
 
     // Statut local actuel de l'élève
     let local_statut: Option<String> = conn
-        .query_row("SELECT statut FROM \"Eleve\" WHERE id = ?1", [id], |r| r.get(0))
+        .query_row("SELECT statut FROM \"Eleve\" WHERE id = ?1", [&id], |r| r.get(0))
         .ok();
     let local_active = match local_statut.as_deref() {
         Some(s) => s != "TRANSFERE",
@@ -1540,7 +1544,7 @@ fn protect_eleve_statut(
     // La suppression est-elle documentée dans l'AuditLog distant (ce run) ?
     let audit_backed = remote_deleted_ids
         .get("Eleve")
-        .map(|ids| ids.contains(id))
+        .map(|ids| ids.contains(&id))
         .unwrap_or(false);
 
     if !audit_backed {
