@@ -43,7 +43,7 @@ export async function getEtablissement(id: string) {
   return cmd('get_etablissement', { id })
 }
 export async function createEtablissement(data: Record<string, any>) {
-  const couleur = data.couleurPrincipale || data.couleur_principale || '#0c241f'
+  const couleur = data.couleurPrincipale || data.couleur_principale || '#1e3a8a'
 
   return cmd('create_etablissement', {
     nom: data.nom,

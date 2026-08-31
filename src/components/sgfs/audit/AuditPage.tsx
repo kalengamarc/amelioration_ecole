@@ -191,9 +191,9 @@ export default function AuditPage() {
 
       {/* Stats Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#1e3a8a]">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-[#0c241f]/10 text-[#0c241f]"><Activity className="w-5 h-5" /></div>
+            <div className="p-3 rounded-2xl bg-[#1e3a8a]/10 text-[#1e3a8a]"><Activity className="w-5 h-5" /></div>
             <div><p className="text-xs font-semibold text-stone-500">Total Actions</p><p className="text-xl font-extrabold text-stone-900">{totalActions}</p></div>
           </CardContent>
         </Card>
@@ -268,8 +268,8 @@ export default function AuditPage() {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-[#0c241f] text-white">
-                    <TableRow className="hover:bg-[#0c241f]">
+                  <TableHeader className="bg-[#1e3a8a] text-white">
+                    <TableRow className="hover:bg-[#1e3a8a]">
                       <TableHead className="text-amber-300 font-bold">Date & Heure</TableHead>
                       <TableHead className="text-white font-bold">Utilisateur</TableHead>
                       <TableHead className="text-white font-bold">Action</TableHead>
@@ -295,7 +295,7 @@ export default function AuditPage() {
                           <TableCell className="text-xs text-stone-600 font-medium break-words max-w-[280px]">{entry.details || '—'}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="icon" onClick={() => openDetail(entry)}
-                              className="h-8 w-8 text-[#0c241f] hover:bg-stone-100" title="Voir les détails">
+                              className="h-8 w-8 text-[#1e3a8a] hover:bg-stone-100" title="Voir les détails">
                               <Eye className="w-4 h-4" />
                             </Button>
                           </TableCell>
@@ -330,11 +330,11 @@ export default function AuditPage() {
         <DialogContent className="max-w-lg bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
                 <Shield className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">Détails de l&apos;entrée d&apos;audit</DialogTitle>
+                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">Détails de l&apos;entrée d&apos;audit</DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Trace d&apos;exécution système.</p>
               </div>
             </div>
