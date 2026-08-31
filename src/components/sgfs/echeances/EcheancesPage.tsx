@@ -103,10 +103,10 @@ const PAGE_SIZE = 20
 const PRINT_FRAME_ID = '__relance_print_frame__'
 const DEVISE_DEFAUT = 'CDF'
 
-const ETAB_NOM = 'Complexe Scolaire Le Bon Berger'
-const ETAB_SITE = 'Dav/Kahinda'
-const ETAB_SIGNATURE = "L'Administration\nCS Le Bon Berger (Dav/Kahinda)"
-const ETAB_TELEPHONE = '+243 000 000 000'
+const ETAB_NOM = 'Complexe Scolaire AGAPE'
+const ETAB_SITE = ''
+const ETAB_SIGNATURE = "L'Administration\nCS AGAPE"
+const ETAB_TELEPHONE = '+000 000 000 000'
 const ETAB_LIEU_PAIEMENT = "Secrétariat de l'établissement."
 const ETAB_HORAIRES = 'du lundi au vendredi, 08h00 – 15h00'
 const ETAB_MODES_PAIEMENT = 'espèces, chèque, virement bancaire'
@@ -702,7 +702,7 @@ export default function EcheancesPage() {
     const L: string[] = []
     L.push(`Bonjour ${civilite},`)
     L.push('')
-    L.push(`La comptabilité du ${ETAB_NOM} (${ETAB_SITE}) vous informe de la situation des frais de scolarité de votre enfant ${eleve}${matricule}${classe}.`)
+    L.push(`La comptabilité du ${ETAB_NOM}${ETAB_SITE ? ` (${ETAB_SITE})` : ''} vous informe de la situation des frais de scolarité de votre enfant ${eleve}${matricule}${classe}.`)
     L.push('')
     L.push('📌 RÉCAPITULATIF DU COMPTE')
     L.push(SEP)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAppStore, canManageSettings, getTypeIcon, onEtabSelect } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,7 +45,9 @@ export default function ParametresPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [identiteForm, setIdentiteForm] = useState({ logo: '', couleurPrimaire: '#0c241f' })
+  const [identiteForm, setIdentiteForm] = useState({ logo: '', couleurPrimaire: '#1e3a8a' })
+  const [logoPosition, setLogoPosition] = useState<'left' | 'center' | 'right'>('center')
+  const logoInputRef = useRef<HTMLInputElement | null>(null)
   const [contactForm, setContactForm] = useState({ nom: '', telephone: '', email: '', adresse: '', rccm: '', idNat: '' })
   const [annees, setAnnees] = useState<AnneeScolaire[]>([])
   const [newAnnee, setNewAnnee] = useState({ libelle: '', dateDebut: '', dateFin: '' })
@@ -196,13 +198,19 @@ export default function ParametresPage() {
     if (ecole) {
       setIdentiteForm({
         logo: ecole.logoUrl || '',
-        couleurPrimaire: ecole.couleurPrincipale || '#0c241f'
+        couleurPrimaire: ecole.couleurPrincipale || '#1e3a8a'
       })
       setContactForm({
         nom: ecole.nom || '', telephone: ecole.telephone || '', email: ecole.email || '',
         adresse: ecole.adresse || '', rccm: ecole.rccm || '', idNat: ecole.idNat || ''
       })
     }
+    tc.getReceiptLogoPosition()
+      .then((res: any) => {
+        const pos = (res?.data ?? res)?.position
+        if (pos === 'left' || pos === 'center' || pos === 'right') setLogoPosition(pos)
+      })
+      .catch(() => { /* valeur par défaut : centre */ })
     setLoading(true)
     Promise.all([fetchParametres(), fetchAnnees()]).finally(() => setLoading(false))
   }, [selectedEcole, ecoles])
@@ -224,6 +232,25 @@ export default function ParametresPage() {
     return annees.find((a) => a.id === anneeId)?.libelle || ''
   }
 
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo trop volumineux (max 2 Mo)')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      setIdentiteForm((f) => ({ ...f, logo: dataUrl }))
+      toast.success('Logo chargé — pensez à enregistrer')
+    }
+    reader.onerror = () => toast.error('Impossible de lire le fichier')
+    reader.readAsDataURL(file)
+    // Permet de re-sélectionner le même fichier après suppression
+    e.target.value = ''
+  }
+
   async function saveIdentite() {
     setSaving(true)
     try {
@@ -231,6 +258,7 @@ export default function ParametresPage() {
         logoUrl: identiteForm.logo || null,
         couleurPrincipale: identiteForm.couleurPrimaire,
       })
+      await tc.saveReceiptLogoPosition(logoPosition)
       toast.success('Identité visuelle mise à jour avec succès')
       fetchEcoles()
     } catch (err: any) { toast.error(err.message || 'Erreur lors de la sauvegarde') }
@@ -367,12 +395,68 @@ export default function ParametresPage() {
                   <div className="space-y-6">
                     <div>
                       <Label className="text-xs font-semibold text-stone-600">Logo de l&apos;établissement</Label>
-                      <div className="border-2 border-dashed border-stone-300 rounded-2xl p-8 flex flex-col items-center gap-3 hover:border-[#0c241f] transition-colors cursor-pointer bg-stone-50/50 mt-1">
-                        <Upload className="w-10 h-10 text-stone-400" />
-                        <p className="text-xs font-semibold text-stone-600">Cliquez ou glissez pour télécharger le logo officiel</p>
-                        <p className="text-[11px] text-stone-400">PNG, JPG, SVG — Max 2 Mo</p>
-                        {identiteForm.logo && <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold">Logo configuré</Badge>}
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                        onChange={handleLogoFile}
+                      />
+                      <div
+                        onClick={() => logoInputRef.current?.click()}
+                        className="border-2 border-dashed border-stone-300 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-[#1e3a8a] transition-colors cursor-pointer bg-stone-50/50 mt-1"
+                      >
+                        {identiteForm.logo ? (
+                          <div className="flex flex-col items-center gap-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={identiteForm.logo}
+                              alt="Aperçu du logo"
+                              className="h-20 w-20 rounded-xl border border-stone-200 bg-white object-contain p-1 shadow-sm"
+                            />
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold">Logo chargé</Badge>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setIdentiteForm((f) => ({ ...f, logo: '' })) }}
+                                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 underline underline-offset-2"
+                              >
+                                Retirer
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload className="w-10 h-10 text-stone-400" />
+                            <p className="text-xs font-semibold text-stone-600">Cliquez pour télécharger le logo officiel</p>
+                            <p className="text-[11px] text-stone-400">PNG, JPG, SVG — Max 2 Mo</p>
+                          </>
+                        )}
                       </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-stone-600">Position du logo sur le reçu</Label>
+                      <div className="flex gap-2 mt-1">
+                        {([
+                          ['left', 'Gauche'],
+                          ['center', 'Centre'],
+                          ['right', 'Droite'],
+                        ] as const).map(([val, label]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setLogoPosition(val)}
+                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                              logoPosition === val
+                                ? 'border-[#1e3a8a] bg-blue-50 text-[#1e3a8a] shadow-sm'
+                                : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-stone-400 mt-1">Le logo apparaîtra en haut du reçu de paiement, aligné comme choisi.</p>
                     </div>
                     <div>
                       <Label htmlFor="couleurPrimaire" className="text-xs font-semibold text-stone-600">Couleur thématique principale</Label>
@@ -419,7 +503,7 @@ export default function ParametresPage() {
                   <div className="space-y-4">
                     <div>
                       <Label htmlFor="nom-etab" className="text-xs font-semibold text-stone-600">Nom de l&apos;établissement *</Label>
-                      <Input id="nom-etab" placeholder="Ex: Complexe Scolaire Le Bon Berger" value={contactForm.nom} onChange={(e) => setContactForm({ ...contactForm, nom: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold mt-1" />
+                      <Input id="nom-etab" placeholder="Ex: Complexe Scolaire AGAPE" value={contactForm.nom} onChange={(e) => setContactForm({ ...contactForm, nom: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold mt-1" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>

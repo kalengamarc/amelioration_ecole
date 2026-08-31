@@ -2,6 +2,53 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 9
+Agent: main
+Task: Version AGAPE — branding bleu, suppression photos Jésus, humanités, logo reçu, dashboard moderne
+
+Work Log:
+- Objectif : adapter la même application pour le Complexe Scolaire AGAPE
+  (décisions : couleur bleue #1e3a8a, changement direct sans fichier de config,
+  dashboard moderne). « Bon Berger » sera traité plus tard.
+- Couleur & branding :
+  - store.ts : DEFAULT_COLOR #0c241f → #1e3a8a (sidebar, login, selecteurs).
+  - tauri.conf.json : productName + titre fenêtre → « Complexe Scolaire AGAPE ».
+  - page.tsx (accueil) et LoginPage.tsx réécrits : dégradé bleu
+    (linear-gradient 135deg #1e3a8a → #1d4ed8 → #172554), aucune photo, icône
+    GraduationCap, boutons blancs.
+  - Sidebar : logo dynamique — logoUrl de l'établissement si présent, sinon
+    icône GraduationCap colorée accentColor.
+  - EcheancesPage : constantes SMS/relance (ETAB_NOM/SIGNATURE/TELEPHONE)
+    passées à AGAPE ; ETAB_SITE géré vide.
+  - Supprimés de git : src/assets/bg-jesus.png, Jesus.jpeg, logo.png
+    (il ne reste que gramme.png, filigrane du reçu).
+- Niveaux de classe : HUMANITE ajouté dans ClassesPage (badge violet,
+  NIVEAUX = MATERNELLE, PRIMAIRE, SECONDAIRE, HUMANITE) et dans
+  EtablissementsPage (TYPE_MAP 🏛️ + SelectItem). Champ niveau = TEXT libre :
+  aucun changement Rust nécessaire.
+- Logo dans Paramètres (fonctionnel) :
+  - ParametresPage : input fichier caché + FileReader → data-URL base64 dans
+    identiteForm.logo, aperçu + bouton Retirer, garde-fou 2 Mo.
+  - Position du logo sur le reçu : sélecteur Gauche/Centre/Droite, stockée dans
+    ConfigSysteme (clé RECU_LOGO_POSITION) via 2 nouvelles commandes Tauri
+    get_receipt_logo_position / save_receipt_logo_position (parametres.rs,
+    enregistrées dans lib.rs) + wrappers getReceiptLogoPosition /
+    saveReceiptLogoPosition (tauri-commands.ts). Aucune migration de schéma.
+  - ReceiptPOS : PosSchoolData.logoUrl ; logo affiché en tête (écran ET
+    impression iframe) aligné selon la position ; EncaissementsPage transmet
+    logoUrl (interface Etablissement complétée).
+- Dashboard moderne : bannière héro en dégradé accentColor (currentEtablissement
+  → darkenHex), cartes KPI dégradées (élèves = couleur école, retard = ambre,
+  retard moyen = émeraude), graphique d'aire + barres + sélecteur de devise aux
+  couleurs de l'école, palette Modes/Motifs passée au bleu.
+
+Stage Summary:
+- Application rebrandée AGAPE (bleu, sans photos religieuses), niveau
+  Humanités ajouté, upload du logo fonctionnel, position du logo sur le reçu
+  configurable, dashboard aux couleurs de l'école. À valider par cargo check +
+  build sur Windows.
+
+---
 Task ID: 7
 Agent: main
 Task: Synchro propre — pages illisibles (Eleve) et conflit admin User (23505)

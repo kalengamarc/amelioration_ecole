@@ -68,6 +68,7 @@ interface Etablissement {
   type?: string
   adresse?: string
   telephone?: string
+  logoUrl?: string | null
 }
 
 interface Eleve {
@@ -1081,6 +1082,7 @@ export default function EncaissementsPage() {
                 nom: etablissementRecu?.nom || receipt.etablissementNom || 'SGFS-ME',
                 adresse: etablissementRecu?.adresse,
                 telephone: etablissementRecu?.telephone,
+                logoUrl: etablissementRecu?.logoUrl,
               }}
               onClose={() => setReceipt(null)}
             />

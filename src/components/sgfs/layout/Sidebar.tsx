@@ -26,8 +26,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import type { LucideIcon } from 'lucide-react'
 
-import logoSrc from '@/assets/logo.png'
-
 export type { PageName }
 
 interface Etablissement {
@@ -176,15 +174,21 @@ export default function Sidebar({ etablissements }: SidebarProps) {
           
           {/* Logo Section - Compact */}
           <div className="flex items-center gap-3 px-3.5 h-16 mt-2 shrink-0 border-b border-emerald-900/30">
-            <div className="relative h-10 w-10 shrink-0 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center p-1">
-              <Image
-                src={logoSrc}
-                alt="Logo"
-                fill
-                sizes="32px"
-                className="object-contain p-0.5"
-                priority
-              />
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border p-1 overflow-hidden"
+              style={{ backgroundColor: `${accentColor}22`, borderColor: `${accentColor}55` }}
+            >
+              {currentEtablissement?.logoUrl ? (
+                <Image
+                  src={currentEtablissement.logoUrl}
+                  alt="Logo"
+                  width={32}
+                  height={32}
+                  className="object-contain"
+                />
+              ) : (
+                <GraduationCap className="h-5 w-5" style={{ color: accentColor }} />
+              )}
             </div>
             <AnimatePresence>
               {sidebarOpen && (

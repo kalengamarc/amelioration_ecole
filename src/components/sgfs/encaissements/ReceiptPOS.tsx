@@ -1,9 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import filigram from '@/assets/gramme.png'
 import { Printer, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
+import * as tc from '@/lib/tauri-commands'
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Types
@@ -71,6 +73,8 @@ export interface PosSchoolData {
   siteWeb?: string
   rccm?: string | null
   idNat?: string | null
+  /** Logo de l'établissement (URL ou data-URL base64) affiché en tête de reçu. */
+  logoUrl?: string | null
 }
 
 export interface PosEtabParams {
@@ -203,6 +207,7 @@ function printPosReceipt(
   receipt: PosReceiptData,
   school?: PosSchoolData,
   etabParams?: PosEtabParams | null,
+  logoPosition: 'left' | 'center' | 'right' = 'center',
 ) {
   const iframe = document.createElement('iframe')
   Object.assign(iframe.style, {
@@ -344,6 +349,9 @@ function printPosReceipt(
 <body>
 <main class="ticket">
   <header class="center">
+    ${school?.logoUrl ? `<div style="text-align:${logoPosition};margin-bottom:1mm;">
+      <img src="${escapeHtml(school.logoUrl)}" alt="Logo" style="max-width:32mm;max-height:20mm;object-fit:contain;" />
+    </div>` : ''}
     <h1>${escapeHtml(school?.nom || 'SGFS-ME')}</h1>
     <p>${escapeHtml(school?.siteWeb || ETAB_SITE_WEB)}</p>
     ${school?.adresse ? `<p>${escapeHtml(school.adresse)}</p>` : ''}
@@ -429,8 +437,21 @@ export function ReceiptPOS({
   // Le store expose `EtabParams | null` ; on l'élargit pour accepter les deux
   // formes (null | undefined) sans caster à chaque usage.
   const etabParams = useAppStore((s) => s.etabParams) as PosEtabParams | null | undefined
+  const [logoPosition, setLogoPosition] = useState<'left' | 'center' | 'right'>('center')
   const devise = receipt.devise
   const anneeLbl = anneeScolaireDuRecu(receipt.dateEncaissement)
+
+  // Position du logo configurée dans Paramètres (ConfigSysteme, local).
+  useEffect(() => {
+    let mounted = true
+    tc.getReceiptLogoPosition()
+      .then((res: any) => {
+        const pos = (res?.data ?? res)?.position
+        if (mounted && (pos === 'left' || pos === 'center' || pos === 'right')) setLogoPosition(pos)
+      })
+      .catch(() => { /* défaut : centre */ })
+    return () => { mounted = false }
+  }, [])
 
   // Situation ventilée si disponible, sinon repli sur les champs scalaires.
   const multi = (receipt.totaux?.length ?? 0) > 0
@@ -456,6 +477,16 @@ export function ReceiptPOS({
 
       <div className="relative z-10">
         <header className="text-center">
+          {school?.logoUrl && (
+            <div style={{ textAlign: logoPosition }} className="mb-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={school.logoUrl}
+                alt="Logo"
+                className="inline-block max-h-16 max-w-[42mm] object-contain"
+              />
+            </div>
+          )}
           <h2 className="text-sm font-extrabold uppercase leading-tight">
             {school?.nom || 'SGFS-ME'}
           </h2>
@@ -624,8 +655,8 @@ export function ReceiptPOS({
           </Button>
           <Button
             size="sm"
-            onClick={() => printPosReceipt(receipt, school, etabParams)}
-            className="bg-[#0f0e50f1] text-white"
+            onClick={() => printPosReceipt(receipt, school, etabParams, logoPosition)}
+            className="bg-[#1e3a8a] text-white"
           >
             Imprimer
           </Button>

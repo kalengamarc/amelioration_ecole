@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useAppStore, DEFAULT_COLOR } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
 import { toast } from 'sonner'
-import Image from 'next/image'
 import {
   User,
   Lock,
@@ -13,14 +12,12 @@ import {
   EyeOff,
   LogIn,
   Loader2,
-  Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  GraduationCap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import logoSrc from '@/assets/logo.png'
-import backgroundImage from '@/assets/bg-jesus.png'
 
 interface Etablissement {
   id: string
@@ -119,35 +116,33 @@ export default function LoginPage() {
 
   return (
     <div
-      className="relative flex flex-col h-screen w-screen font-poppins overflow-hidden bg-cover bg-center bg-no-repeat text-white"
-      style={{ backgroundImage: `url(${backgroundImage.src})` }}
+      className="relative flex flex-col h-screen w-screen font-poppins overflow-hidden text-white"
+      style={{
+        background:
+          "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #172554 100%)",
+      }}
     >
-      {/* Léger filtre pour préserver la clarté et la visibilité intégrale de l'image de Jésus */}
-      <div className="absolute inset-0 bg-black/30 z-0" />
+      {/* Halos décoratifs discrets (aucune photo) */}
+      <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -left-24 h-[28rem] w-[28rem] rounded-full bg-sky-400/20 blur-3xl" />
 
-      {/* Disposition : Carte positionnée sur le CÔTÉ DROIT pour ne JAMAIS masquer le visage de Jésus au centre */}
+      {/* Carte positionnée sur le CÔTÉ DROIT */}
       <main className="relative flex-1 flex items-center justify-center sm:justify-end px-4 sm:px-12 lg:px-20 py-4 z-10">
         <div className="w-full max-w-[370px]">
-          {/* Carte compacte en verre sombre décalée sur la droite */}
-          <div className="bg-[#0c241f]/90 backdrop-blur-md overflow-hidden rounded-3xl border border-white/15 shadow-2xl p-5 sm:p-6">
+          {/* Carte compacte en verre bleu */}
+          <div className="bg-[#0f1f4b]/90 backdrop-blur-md overflow-hidden rounded-3xl border border-white/15 shadow-2xl p-5 sm:p-6">
             {/* ── Logo & Branding ── */}
             <div className="text-center mb-4">
               <div className="flex justify-center mb-2">
-                <div className="relative h-14 w-14 rounded-2xl bg-white border border-amber-500/30 p-1.5 shadow-md flex items-center justify-center">
-                  <Image
-                    src={logoSrc}
-                    alt="Logo Complexe Scolaire Le Bon Bergerz"
-                    width={52}
-                    height={72}
-                    className="object-contain"
-                  />
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white border border-sky-400/30 p-1.5 shadow-md">
+                  <GraduationCap className="h-8 w-8 text-[#1e3a8a]" />
                 </div>
               </div>
-              
+
               <h2 className="text-base font-extrabold text-white tracking-tight leading-snug">
-                CS. Le Bon Berger Dav/ KAHINDA
+                Complexe Scolaire AGAPE
               </h2>
-              <p className="text-stone-300 text-[11px] mt-0.5 font-medium">
+              <p className="text-sky-200 text-[11px] mt-0.5 font-medium">
                 Gestion Financière & Scolaire
               </p>
             </div>
@@ -156,17 +151,17 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-3">
               {/* Nom d'utilisateur */}
               <div>
-                <Label className="block text-stone-200 font-semibold mb-1 text-[11px]">
+                <Label className="block text-sky-100 font-semibold mb-1 text-[11px]">
                   Nom d&apos;utilisateur *
                 </Label>
                 <div className="relative">
-                  <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sky-300" />
                   <Input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={isLoading}
-                    className="w-full text-xs text-white pl-9 pr-3 h-9 border border-stone-600 rounded-xl bg-black/30 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 outline-none transition font-medium"
+                    className="w-full text-xs text-white pl-9 pr-3 h-9 border border-sky-400/30 rounded-xl bg-black/30 focus:border-sky-300 focus:ring-2 focus:ring-sky-300/20 outline-none transition font-medium"
                     placeholder="Identifiant"
                     required
                     autoComplete="username"
@@ -176,17 +171,17 @@ export default function LoginPage() {
 
               {/* Mot de passe */}
               <div>
-                <Label className="block text-stone-200 font-semibold mb-1 text-[11px]">
+                <Label className="block text-sky-100 font-semibold mb-1 text-[11px]">
                   Mot de passe *
                 </Label>
                 <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sky-300" />
                   <Input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
-                    className="w-full text-xs text-white pl-9 pr-10 h-9 border border-stone-600 rounded-xl bg-black/30 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 outline-none transition font-medium"
+                    className="w-full text-xs text-white pl-9 pr-10 h-9 border border-sky-400/30 rounded-xl bg-black/30 focus:border-sky-300 focus:ring-2 focus:ring-sky-300/20 outline-none transition font-medium"
                     placeholder="Mot de passe"
                     required
                     autoComplete="current-password"
@@ -194,7 +189,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white transition"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-300 hover:text-white transition"
                     tabIndex={-1}
                   >
                     {showPassword ? (
@@ -210,7 +205,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-bold rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 h-9 mt-2"
+                className="w-full bg-white hover:bg-sky-100 text-blue-900 text-xs font-bold rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 h-9 mt-2"
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-1.5">
@@ -231,13 +226,13 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => window.dispatchEvent(new Event('go-to-accueil'))}
-                className="inline-flex items-center gap-1 text-stone-300 hover:text-amber-400 text-xs font-semibold transition-colors duration-200"
+                className="inline-flex items-center gap-1 text-sky-200 hover:text-white text-xs font-semibold transition-colors duration-200"
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> Retour à l&apos;accueil
               </button>
-              <p className="text-[10px] text-stone-400 font-medium block">
+              <p className="text-[10px] text-sky-200/70 font-medium block">
                 © {new Date().getFullYear()}{" "}
-                <span className="text-amber-400 font-bold">CS. Le Bon Berger Dav/ KAHINDA</span>
+                <span className="text-white font-bold">Complexe Scolaire AGAPE</span>
               </p>
             </div>
           </div>

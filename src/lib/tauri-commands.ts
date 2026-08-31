@@ -641,6 +641,15 @@ export async function saveParametres(etablissementId: string, data: Record<strin
   return cmd('save_parametres', { etablissementId, ...data })
 }
 
+// ── Position du logo sur le reçu ─────────────────────────────
+
+export async function getReceiptLogoPosition() {
+  return cmd<{ position: string }>('get_receipt_logo_position', {})
+}
+export async function saveReceiptLogoPosition(position: string) {
+  return cmd<{ position: string }>('save_receipt_logo_position', { position })
+}
+
 // ── Utilisateurs ─────────────────────────────────────────────
 
 export async function listUtilisateurs(etablissementId?: string) {

@@ -84,6 +84,11 @@ const TYPE_MAP: Record<string, { label: string; className: string; icon: string 
     icon: '🎓',
     className: 'bg-sky-100 text-sky-900 border border-sky-200 font-semibold',
   },
+  HUMANITE: {
+    label: 'Humanités',
+    icon: '🏛️',
+    className: 'bg-violet-100 text-violet-900 border border-violet-200 font-semibold',
+  },
   COMPLEXE: {
     label: 'Complexe',
     icon: '🏫',
@@ -508,7 +513,7 @@ export default function EtablissementsPage() {
               <Label htmlFor="etab-nom" className="text-xs font-semibold text-stone-600">Nom de l&apos;établissement *</Label>
               <Input
                 id="etab-nom"
-                placeholder="Ex: Complexe Scolaire Le Bon Berger"
+                placeholder="Ex: Complexe Scolaire AGAPE"
                 value={form.nom}
                 onChange={(e) => setForm({ ...form, nom: e.target.value })}
                 className="rounded-xl border-stone-200 bg-white font-medium mt-1"
@@ -529,6 +534,7 @@ export default function EtablissementsPage() {
                     <SelectItem value="MATERNELLE">🧒 Maternelle</SelectItem>
                     <SelectItem value="PRIMAIRE">📚 Primaire</SelectItem>
                     <SelectItem value="SECONDAIRE">🎓 Secondaire</SelectItem>
+                    <SelectItem value="HUMANITE">🏛️ Humanités</SelectItem>
                     <SelectItem value="COMPLEXE">🏫 Complexe</SelectItem>
                   </SelectContent>
                 </Select>

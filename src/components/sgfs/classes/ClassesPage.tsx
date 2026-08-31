@@ -81,9 +81,13 @@ const NIVEAU_MAP: Record<string, { label: string; className: string }> = {
     label: 'Secondaire',
     className: 'bg-sky-100 text-sky-900 border border-sky-200 font-semibold',
   },
+  HUMANITE: {
+    label: 'Humanités',
+    className: 'bg-violet-100 text-violet-900 border border-violet-200 font-semibold',
+  },
 }
 
-const NIVEAUX = ['MATERNELLE', 'PRIMAIRE', 'SECONDAIRE'] as const
+const NIVEAUX = ['MATERNELLE', 'PRIMAIRE', 'SECONDAIRE', 'HUMANITE'] as const
 
 const emptyForm = {
   nom: '',
