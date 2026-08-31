@@ -325,7 +325,7 @@ pub fn get_db_path() -> String {
     let path = std::path::PathBuf::from(base)
         .join("SGFS-ME")
         .join("data")
-        .join("sgfs.db");
+        .join("sgfs-b.db");
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).ok();
     }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/config.schema.json",
-  "productName": "bon berger Kahinda Dav",
+  "productName": "le bon berger Dav Kahinda",
   "version": "1.0.0",
-  "identifier": "com.sgfs.me",
+  "identifier": "com.sgfs-b.me",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "bon berger Kahinda Dav",
+        "title": "le bon berger Dav Kahinda",
         "width": 1250,
         "height": 700,
         "minWidth": 1024,
