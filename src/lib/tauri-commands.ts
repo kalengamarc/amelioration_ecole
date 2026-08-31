@@ -43,7 +43,7 @@ export async function getEtablissement(id: string) {
   return cmd('get_etablissement', { id })
 }
 export async function createEtablissement(data: Record<string, any>) {
-  const couleur = data.couleurPrincipale || data.couleur_principale || '#0c241f'
+  const couleur = data.couleurPrincipale || data.couleur_principale || '#1e3a8a'
 
   return cmd('create_etablissement', {
     nom: data.nom,
@@ -639,6 +639,15 @@ export async function getParametres(etablissementId: string) {
 }
 export async function saveParametres(etablissementId: string, data: Record<string, any>) {
   return cmd('save_parametres', { etablissementId, ...data })
+}
+
+// ── Position du logo sur le reçu ─────────────────────────────
+
+export async function getReceiptLogoPosition() {
+  return cmd<{ position: string }>('get_receipt_logo_position', {})
+}
+export async function saveReceiptLogoPosition(position: string) {
+  return cmd<{ position: string }>('save_receipt_logo_position', { position })
 }
 
 // ── Utilisateurs ─────────────────────────────────────────────

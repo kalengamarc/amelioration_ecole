@@ -15,7 +15,7 @@ import {
   CheckCircle, Clock, ArrowUpRight, School, Wallet,
   Plus, Receipt, ShieldCheck, Sparkles, Building2
 } from 'lucide-react'
-import { useAppStore, getSchoolFilter } from '@/lib/store'
+import { useAppStore, getSchoolFilter, DEFAULT_COLOR, darkenHex } from '@/lib/store'
 import * as tc from '@/lib/tauri-commands'
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -92,8 +92,8 @@ interface DashboardData {
  * Palette de couleurs (inspirée du design de référence)
  * ──────────────────────────────────────────────────────────────────────────*/
 
-const COLORS_MODE = ['#0c241f', '#d97706', '#124e3f', '#0284c7', '#7c3aed']
-const COLORS_MOTIF = ['#0c241f', '#d97706', '#059669', '#0284c7', '#d97706', '#475569']
+const COLORS_MODE = ['#1e3a8a', '#d97706', '#059669', '#0284c7', '#7c3aed']
+const COLORS_MOTIF = ['#1e3a8a', '#d97706', '#059669', '#0284c7', '#7c3aed', '#475569']
 
 const COULEUR_DEVISE: Record<string, { badge: string; texte: string; barre: string }> = {
   CDF: { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', texte: 'text-emerald-700', barre: '#059669' },
@@ -106,7 +106,7 @@ function couleurDevise(d: string) {
     COULEUR_DEVISE[d] ?? {
       badge: 'bg-stone-100 text-stone-700 border-stone-200',
       texte: 'text-stone-700',
-      barre: '#0c241f',
+      barre: '#1e3a8a',
     }
   )
 }
@@ -220,7 +220,7 @@ function CarteDevise({
 
           <div className="flex items-baseline justify-between gap-2 border-t border-stone-100 pt-3">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
-              <Wallet className="h-4 w-4 text-[#0c241f]" /> Solde Net
+              <Wallet className="h-4 w-4 text-[#1e3a8a]" /> Solde Net
             </span>
             <span
               className={`text-lg font-bold tabular-nums ${
@@ -324,6 +324,10 @@ function SkeletonChart() {
 
 export default function DashboardPage() {
   const { user, currentEtablissement, setPage } = useAppStore()
+  // Couleur de l'école (Paramètres → Identité visuelle) : tous les dégradés
+  // du dashboard s'en déduisent.
+  const accentColor = currentEtablissement?.couleurPrincipale || DEFAULT_COLOR
+  const accentDark = darkenHex(accentColor, 0.25)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -491,7 +495,8 @@ export default function DashboardPage() {
         </p>
         <button
           onClick={fetchData}
-          className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#0c241f] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-[#071916]"
+          className="mt-2 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-colors"
+          style={{ backgroundColor: accentColor }}
         >
           <ArrowUpRight className="h-4 w-4" /> Réessayer
         </button>
@@ -509,32 +514,39 @@ export default function DashboardPage() {
       animate="visible"
       className="space-y-8 p-2 sm:p-4 md:p-6"
     >
-      {/* ── HERO HEADER BANNER (couleur solide et texte 100% visible) ── */}
-      <motion.div variants={itemVariants} className="relative rounded-3xl bg-[#0c241f] p-6 sm:p-8 text-white shadow-xl border border-emerald-900/40">
+      {/* ── HERO HEADER BANNER (dégradé aux couleurs de l'école) ── */}
+      <motion.div
+        variants={itemVariants}
+        className="relative overflow-hidden rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-white/10"
+        style={{ background: `linear-gradient(135deg, ${accentColor} 0%, ${accentDark} 100%)` }}
+      >
+        {/* Halos décoratifs */}
+        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-white/5 blur-3xl" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#d97706]/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white border border-white/20">
                {currentEtablissement?.nom || 'Complexe Scolaire'}
             </div>
             <h1 className="text-2xl sm:text-xl lg:text-2xl font-extrabold tracking-tight text-white leading-tight">
               Aperçu Général & Performance Financière
             </h1>
-            <p className="text-sm text-stone-300 leading-relaxed">
+            <p className="text-sm text-white/80 leading-relaxed">
               Suivi en temps réel des encaissements, des dépenses et de la situation des élèves par établissement.
             </p>
 
             {/* Badges statistiques rapides intégrés dans la bannière */}
             <div className="pt-2 flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/10 text-xs font-semibold">
-                <Users className="h-4 w-4 text-amber-400" />
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/15 text-xs font-semibold backdrop-blur-sm">
+                <Users className="h-4 w-4 text-white" />
                 <span>{formatNumber(data.nombreEleves.total)} Élèves Inscrits</span>
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/10 text-xs font-semibold">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/15 text-xs font-semibold backdrop-blur-sm">
+                <ShieldCheck className="h-4 w-4 text-white" />
                 <span>{Math.round(tauxGlobalRecouvrement)}% Recouvré</span>
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/10 text-xs font-semibold">
-                <Clock className="h-4 w-4 text-amber-300" />
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-1.5 border border-white/15 text-xs font-semibold backdrop-blur-sm">
+                <Clock className="h-4 w-4 text-white" />
                 <span>{data.elevesEnRetard} Élèves en retard</span>
               </div>
             </div>
@@ -544,16 +556,16 @@ export default function DashboardPage() {
           <div className="flex flex-wrap lg:flex-col gap-3 shrink-0">
             <Button
               onClick={() => setPage('encaissements')}
-              className="bg-[#d97706] hover:bg-[#b45309] text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition-all gap-2 text-xs sm:text-sm"
+              className="bg-white text-blue-900 hover:bg-blue-50 font-bold px-5 py-2.5 rounded-xl shadow-md transition-all gap-2 text-xs sm:text-sm"
             >
               <Receipt className="h-4 w-4" /> Nouvel Encaissement
             </Button>
             <Button
               onClick={() => setPage('eleves')}
               variant="outline"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 font-semibold px-5 py-2.5 rounded-xl transition-all gap-2 text-xs sm:text-sm"
+              className="bg-white/10 hover:bg-white/20 text-white border-white/25 font-semibold px-5 py-2.5 rounded-xl transition-all gap-2 text-xs sm:text-sm"
             >
-              <Users className="h-4 w-4 text-amber-300" /> Inscrire un Élève
+              <Users className="h-4 w-4 text-white" /> Inscrire un Élève
             </Button>
           </div>
         </div>
@@ -606,8 +618,9 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => setDeviseActive(d)}
                   className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
-                    actif ? 'bg-[#0c241f] text-amber-400 shadow-sm' : 'bg-white text-stone-600 hover:bg-stone-200'
+                    actif ? 'text-white shadow-sm' : 'bg-white text-stone-600 hover:bg-stone-200'
                   }`}
+                  style={actif ? { backgroundColor: accentColor } : undefined}
                 >
                   {d}
                 </button>
@@ -641,8 +654,8 @@ export default function DashboardPage() {
                   <AreaChart data={serieMois} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorMontant" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#059669" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#059669" stopOpacity={0.0}/>
+                        <stop offset="5%" stopColor={accentColor} stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor={accentColor} stopOpacity={0.0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -661,11 +674,11 @@ export default function DashboardPage() {
                       type="monotone"
                       dataKey="montant"
                       name="Encaissements"
-                      stroke="#059669"
+                      stroke={accentColor}
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorMontant)"
-                      dot={{ r: 4, strokeWidth: 2, fill: '#ffffff', stroke: '#059669' }}
+                      dot={{ r: 4, strokeWidth: 2, fill: '#ffffff', stroke: accentColor }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -714,7 +727,7 @@ export default function DashboardPage() {
           <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm">
             <CardHeader className="px-6 pb-2">
               <CardTitle className="flex items-center gap-2 text-base font-bold text-stone-900">
-                <School className="h-5 w-5 text-[#0c241f]" /> Comparaison Écoles
+                <School className="h-5 w-5" style={{ color: accentColor }} /> Comparaison Écoles
                 {deviseActive && <DeviseBadge devise={deviseActive} />}
               </CardTitle>
             </CardHeader>
@@ -732,7 +745,7 @@ export default function DashboardPage() {
                     <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={formatCompact} />
                     <RechartsTooltip formatter={(v: number) => formatCurrency(v, deviseActive)} />
                     <Legend />
-                    <Bar dataKey="encaissements" name="Encaissements" fill="#059669" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="encaissements" name="Encaissements" fill={accentColor} radius={[6, 6, 0, 0]} />
                     <Bar dataKey="depenses" name="Dépenses" fill="#e11d48" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -867,25 +880,28 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {/* ── KPI COMPTEURS D'EFFECTIFS ── */}
+      {/* ── KPI COMPTEURS D'EFFECTIFS (cartes dégradées) ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="flex items-center gap-4 px-6">
-            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
-              <Users className="h-6 w-6 text-[#0c241f]" />
+        <Card
+          className="overflow-hidden rounded-2xl border-0 text-white shadow-md hover:shadow-lg transition-shadow"
+          style={{ background: `linear-gradient(135deg, ${accentColor} 0%, ${accentDark} 100%)` }}
+        >
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-white/20 p-3.5 border border-white/25">
+              <Users className="h-6 w-6 text-white" />
             </div>
             <div>
-              <p className="text-2xl font-extrabold text-stone-900">{formatNumber(data.nombreEleves.total)}</p>
-              <p className="text-xs font-semibold text-stone-500">Total Élèves</p>
+              <p className="text-2xl font-extrabold text-white">{formatNumber(data.nombreEleves.total)}</p>
+              <p className="text-xs font-semibold text-white/80">Total Élèves</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="flex items-center gap-4 px-6">
+        <Card className="overflow-hidden rounded-2xl border-0 bg-white shadow-md hover:shadow-lg transition-shadow">
+          <CardContent className="flex items-center gap-4 p-5">
             <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
-              <CircularProgress value={tauxGlobalRecouvrement} size={48} strokeWidth={5} />
-              <span className="absolute text-[10px] font-extrabold text-amber-700">
+              <CircularProgress value={tauxGlobalRecouvrement} size={48} strokeWidth={5} color={accentColor} />
+              <span className="absolute text-[10px] font-extrabold" style={{ color: accentColor }}>
                 {Math.round(tauxGlobalRecouvrement)}%
               </span>
             </div>
@@ -896,28 +912,34 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="flex items-center gap-4 px-6">
-            <div className="rounded-2xl bg-amber-500/10 p-3.5 border border-amber-500/20">
-              <AlertTriangle className="h-6 w-6 text-amber-600" />
+        <Card
+          className="overflow-hidden rounded-2xl border-0 text-white shadow-md hover:shadow-lg transition-shadow"
+          style={{ background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)' }}
+        >
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-white/20 p-3.5 border border-white/25">
+              <AlertTriangle className="h-6 w-6 text-white" />
             </div>
             <div>
-              <p className="text-2xl font-extrabold text-stone-900">{formatNumber(data.elevesEnRetard)}</p>
-              <p className="text-xs font-semibold text-stone-500">Élèves en Retard</p>
+              <p className="text-2xl font-extrabold text-white">{formatNumber(data.elevesEnRetard)}</p>
+              <p className="text-xs font-semibold text-white/80">Élèves en Retard</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-stone-200/80 bg-white py-5 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="flex items-center gap-4 px-6">
-            <div className="rounded-2xl bg-emerald-500/10 p-3.5 border border-emerald-500/20">
-              <Clock className="h-6 w-6 text-emerald-600" />
+        <Card
+          className="overflow-hidden rounded-2xl border-0 text-white shadow-md hover:shadow-lg transition-shadow"
+          style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }}
+        >
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="rounded-2xl bg-white/20 p-3.5 border border-white/25">
+              <Clock className="h-6 w-6 text-white" />
             </div>
             <div>
-              <p className="text-2xl font-extrabold text-stone-900">
+              <p className="text-2xl font-extrabold text-white">
                 {Math.round(data.margeRetardMoyenne)} Jours
               </p>
-              <p className="text-xs font-semibold text-stone-500">Retard Moyen</p>
+              <p className="text-xs font-semibold text-white/80">Retard Moyen</p>
             </div>
           </CardContent>
         </Card>

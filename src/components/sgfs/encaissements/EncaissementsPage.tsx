@@ -68,6 +68,7 @@ interface Etablissement {
   type?: string
   adresse?: string
   telephone?: string
+  logoUrl?: string | null
 }
 
 interface Eleve {
@@ -639,8 +640,8 @@ export default function EncaissementsPage() {
 
       <Tabs defaultValue="nouveau" className="w-full">
         <TabsList className="bg-stone-100 p-1 rounded-xl border border-stone-200">
-          <TabsTrigger value="nouveau" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Nouvel encaissement</TabsTrigger>
-          <TabsTrigger value="historique" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Historique des reçus</TabsTrigger>
+          <TabsTrigger value="nouveau" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">Nouvel encaissement</TabsTrigger>
+          <TabsTrigger value="historique" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">Historique des reçus</TabsTrigger>
         </TabsList>
 
         {/* ── Nouvel encaissement ───────────────────────────────────── */}
@@ -648,7 +649,7 @@ export default function EncaissementsPage() {
           <div className="space-y-6 lg:col-span-2">
             <Card className="rounded-2xl border-stone-200/80 shadow-sm">
               <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                <CardTitle className="text-sm font-bold text-[#0c241f]">Recherche de l&apos;élève</CardTitle>
+                <CardTitle className="text-sm font-bold text-[#1e3a8a]">Recherche de l&apos;élève</CardTitle>
               </CardHeader>
               <CardContent className="p-6">
                 <div className="relative">
@@ -687,7 +688,7 @@ export default function EncaissementsPage() {
                 {selectedStudent && (
                   <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-xs font-semibold text-stone-800">
                     <div className="break-words pr-2">
-                      <b className="text-[#0c241f] text-sm">{selectedStudent.nom} {selectedStudent.prenom}</b>
+                      <b className="text-[#1e3a8a] text-sm">{selectedStudent.nom} {selectedStudent.prenom}</b>
                       <span className="mx-2 text-stone-300">•</span>
                       <span className="font-mono text-amber-800">{selectedStudent.matricule}</span>
                       <span className="mx-2 text-stone-300">•</span>
@@ -704,7 +705,7 @@ export default function EncaissementsPage() {
             {selectedStudent && (
               <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                  <CardTitle className="text-sm font-bold text-[#0c241f]">Échéances en attente de paiement</CardTitle>
+                  <CardTitle className="text-sm font-bold text-[#1e3a8a]">Échéances en attente de paiement</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {loadingEcheances ? (
@@ -715,8 +716,8 @@ export default function EncaissementsPage() {
                     </p>
                   ) : (
                     <Table>
-                      <TableHeader className="bg-[#0c241f] text-white">
-                        <TableRow className="hover:bg-[#0c241f]">
+                      <TableHeader className="bg-[#1e3a8a] text-white">
+                        <TableRow className="hover:bg-[#1e3a8a]">
                           <TableHead className="text-amber-300 font-bold">Frais</TableHead>
                           <TableHead className="text-white font-bold">Échéance</TableHead>
                           <TableHead className="text-right text-white font-bold">Déjà Payé</TableHead>
@@ -755,7 +756,7 @@ export default function EncaissementsPage() {
           {/* Panneau latéral : détails du paiement */}
           <Card className="rounded-2xl border-stone-200/80 shadow-sm h-fit">
             <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-              <CardTitle className="text-sm font-bold text-[#0c241f]">Saisie de l&apos;Encaissement</CardTitle>
+              <CardTitle className="text-sm font-bold text-[#1e3a8a]">Saisie de l&apos;Encaissement</CardTitle>
             </CardHeader>
             <CardContent className="p-6 space-y-4">
               <div>
@@ -839,7 +840,7 @@ export default function EncaissementsPage() {
               )}
 
               <Button
-                className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-11 shadow-md"
+                className="w-full bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl h-11 shadow-md"
                 disabled={
                   !selectedEcheance ||
                   !modePaiement ||
@@ -914,7 +915,7 @@ export default function EncaissementsPage() {
 
               <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-1">
                 <Button
-                  className="min-w-[120px] flex-1 bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl"
+                  className="min-w-[120px] flex-1 bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl"
                   onClick={() => {
                     setPage(1)
                     fetchHistory(1)
@@ -953,8 +954,8 @@ export default function EncaissementsPage() {
                 <>
                   <div className="overflow-x-auto">
                     <Table>
-                      <TableHeader className="bg-[#0c241f] text-white">
-                        <TableRow className="hover:bg-[#0c241f]">
+                      <TableHeader className="bg-[#1e3a8a] text-white">
+                        <TableRow className="hover:bg-[#1e3a8a]">
                           <TableHead className="text-amber-300 font-bold">N° Reçu</TableHead>
                           <TableHead className="text-white font-bold">Date</TableHead>
                           <TableHead className="text-white font-bold">Élève</TableHead>
@@ -997,7 +998,7 @@ export default function EncaissementsPage() {
                                   size="icon"
                                   variant="ghost"
                                   title="Voir / Imprimer le reçu"
-                                  className="h-8 w-8 text-[#0c241f] hover:bg-stone-100"
+                                  className="h-8 w-8 text-[#1e3a8a] hover:bg-stone-100"
                                   onClick={() => ouvrirRecu(e)}
                                 >
                                   <Receipt className="h-4 w-4" />
@@ -1081,6 +1082,7 @@ export default function EncaissementsPage() {
                 nom: etablissementRecu?.nom || receipt.etablissementNom || 'SGFS-ME',
                 adresse: etablissementRecu?.adresse,
                 telephone: etablissementRecu?.telephone,
+                logoUrl: etablissementRecu?.logoUrl,
               }}
               onClose={() => setReceipt(null)}
             />
@@ -1135,7 +1137,7 @@ export default function EncaissementsPage() {
       >
         <DialogContent className="rounded-3xl border-stone-200 p-6 shadow-2xl max-w-md bg-white">
           <DialogHeader>
-            <DialogTitle className="text-[#0c241f] font-extrabold text-lg flex items-center gap-2">
+            <DialogTitle className="text-[#1e3a8a] font-extrabold text-lg flex items-center gap-2">
               <Pencil className="h-5 w-5 text-amber-600" />
               Modifier le reçu
             </DialogTitle>
@@ -1185,7 +1187,7 @@ export default function EncaissementsPage() {
             <Button variant="outline" className="rounded-xl border-stone-200 font-semibold" disabled={modifying} onClick={() => setModificationTarget(null)}>
               Fermer
             </Button>
-            <Button className="rounded-xl bg-[#0c241f] hover:bg-[#071916] text-white font-bold" disabled={modifying} onClick={confirmModification}>
+            <Button className="rounded-xl bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold" disabled={modifying} onClick={confirmModification}>
               {modifying ? 'Enregistrement...' : 'Enregistrer les modifications'}
             </Button>
           </div>

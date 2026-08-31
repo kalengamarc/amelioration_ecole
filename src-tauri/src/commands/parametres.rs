@@ -123,3 +123,40 @@ pub fn save_parametres(
 
     Ok(api_response(Ok(result)))
 }
+
+/// Position du logo de l'établissement sur le reçu (gauche / centre / droite).
+/// Stockée dans ConfigSysteme (local) pour ne pas modifier le schéma de la base.
+#[tauri::command]
+pub fn get_receipt_logo_position(db: State<'_, DbConn>) -> Result<serde_json::Value, AppError> {
+    let conn = db.lock()?;
+    let position: String = conn
+        .query_row(
+            "SELECT valeur FROM ConfigSysteme WHERE cle = 'RECU_LOGO_POSITION'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or_else(|_| "center".to_string());
+    Ok(api_response(Ok(serde_json::json!({ "position": position }))))
+}
+
+#[tauri::command]
+pub fn save_receipt_logo_position(
+    db: State<'_, DbConn>,
+    position: String,
+) -> Result<serde_json::Value, AppError> {
+    let position = position.trim().to_string();
+    if !["left", "center", "right"].contains(&position.as_str()) {
+        return Err(AppError::Validation(
+            "Position invalide : attendu left, center ou right".into(),
+        ));
+    }
+    let now = now_iso();
+    let conn = db.lock()?;
+    conn.execute(
+        "INSERT INTO ConfigSysteme (id, cle, valeur, created_at, updated_at) \
+         VALUES (?1, 'RECU_LOGO_POSITION', ?2, ?3, ?3) \
+         ON CONFLICT(cle) DO UPDATE SET valeur = ?2, updated_at = ?3",
+        params![generate_id(), position, now],
+    )?;
+    Ok(api_response(Ok(serde_json::json!({ "position": position }))))
+}

@@ -63,6 +63,8 @@ pub fn run() {
             // Parametres
             commands::parametres::get_parametres,
             commands::parametres::save_parametres,
+            commands::parametres::get_receipt_logo_position,
+            commands::parametres::save_receipt_logo_position,
             // Utilisateurs
             commands::utilisateurs::list_utilisateurs,
             commands::utilisateurs::create_utilisateur,
