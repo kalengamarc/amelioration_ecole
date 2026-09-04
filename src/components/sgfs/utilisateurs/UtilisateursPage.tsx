@@ -387,7 +387,7 @@ export default function UtilisateursPage() {
           </p>
         </div>
         {canManageUsers(user?.role || '') && (
-          <Button onClick={openCreate} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
+          <Button onClick={openCreate} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
             <Plus className="w-4 h-4 text-amber-400" />
             Nouvel utilisateur
           </Button>
@@ -396,10 +396,10 @@ export default function UtilisateursPage() {
 
       {/* Stats Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#1e3a8a]">
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="p-3.5 rounded-2xl bg-[#1e3a8a]/10 border border-[#1e3a8a]/20">
-              <Users className="w-6 h-6 text-[#1e3a8a]" />
+            <div className="p-3.5 rounded-2xl bg-[#0c241f]/10 border border-[#0c241f]/20">
+              <Users className="w-6 h-6 text-[#0c241f]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-stone-500">Total Utilisateurs</p>
@@ -482,8 +482,8 @@ export default function UtilisateursPage() {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-[#1e3a8a] text-white">
-                    <TableRow className="hover:bg-[#1e3a8a]">
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
                       <TableHead className="text-amber-300 font-bold">Utilisateur</TableHead>
                       <TableHead className="text-white font-bold">Identifiant</TableHead>
                       <TableHead className="text-white font-bold">Rôle</TableHead>
@@ -538,7 +538,7 @@ export default function UtilisateursPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => openDetail(u)}
-                              className="h-8 w-8 text-stone-600 hover:text-[#1e3a8a] hover:bg-stone-100"
+                              className="h-8 w-8 text-stone-600 hover:text-[#0c241f] hover:bg-stone-100"
                               title="Voir la fiche"
                             >
                               <Eye className="w-4 h-4" />
@@ -593,11 +593,11 @@ export default function UtilisateursPage() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <UserCog className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
                   {editingUser ? "Modifier le compte utilisateur" : 'Créer un utilisateur'}
                 </DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Saisissez les identifiants et le rôle système.</p>
@@ -649,7 +649,7 @@ export default function UtilisateursPage() {
             )}
             <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
               <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button onClick={handleSave} disabled={saving} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md">
+              <Button onClick={handleSave} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md">
                 {saving ? 'Enregistrement...' : editingUser ? 'Mettre à jour' : 'Créer le compte'}
               </Button>
             </div>
@@ -661,7 +661,7 @@ export default function UtilisateursPage() {
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-4">
-            <DialogTitle className="text-lg font-bold text-[#1e3a8a]">Fiche Utilisateur</DialogTitle>
+            <DialogTitle className="text-lg font-bold text-[#0c241f]">Fiche Utilisateur</DialogTitle>
             <DialogDescription className="text-xs text-stone-500 font-medium">Informations du compte et droits d&apos;accès</DialogDescription>
           </DialogHeader>
           {detailUser && (
@@ -684,7 +684,7 @@ export default function UtilisateursPage() {
 
               <div className="space-y-3">
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50">
-                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#1e3a8a]"><Building2 className="w-4 h-4" /></div>
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#0c241f]"><Building2 className="w-4 h-4" /></div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] text-stone-400 font-bold uppercase tracking-wider">Établissement Affecté</p>
                     <p className="text-xs font-semibold text-stone-800 break-words mt-0.5">
@@ -694,7 +694,7 @@ export default function UtilisateursPage() {
                 </div>
 
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50">
-                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#1e3a8a]"><Clock className="w-4 h-4" /></div>
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#0c241f]"><Clock className="w-4 h-4" /></div>
                   <div>
                     <p className="text-[11px] text-stone-400 font-bold uppercase tracking-wider">Dernière Connexion</p>
                     <p className="text-xs font-semibold text-stone-800 mt-0.5">{formatDateTime(detailUser.dernierLogin)}</p>
@@ -702,7 +702,7 @@ export default function UtilisateursPage() {
                 </div>
 
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-100 bg-stone-50/50">
-                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#1e3a8a]"><CalendarDays className="w-4 h-4" /></div>
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[#0c241f]"><CalendarDays className="w-4 h-4" /></div>
                   <div>
                     <p className="text-[11px] text-stone-400 font-bold uppercase tracking-wider">Date de Création</p>
                     <p className="text-xs font-semibold text-stone-800 mt-0.5">{formatDateTime(detailUser.createdAt)}</p>
@@ -717,7 +717,7 @@ export default function UtilisateursPage() {
                 <div className="space-y-2">
                   {getRolePermissions(detailUser.role).map((perm, i) => (
                     <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 border border-stone-100">
-                      <div className="p-1.5 rounded-lg bg-[#1e3a8a]/10 text-[#1e3a8a] mt-0.5"><perm.icon className="w-3.5 h-3.5" /></div>
+                      <div className="p-1.5 rounded-lg bg-[#0c241f]/10 text-[#0c241f] mt-0.5"><perm.icon className="w-3.5 h-3.5" /></div>
                       <div>
                         <p className="text-xs font-bold text-stone-900">{perm.label}</p>
                         <p className="text-[11px] text-stone-500 font-medium mt-0.5">{perm.desc}</p>

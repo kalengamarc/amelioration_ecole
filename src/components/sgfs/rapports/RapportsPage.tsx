@@ -338,15 +338,15 @@ function buildRapportHtml(ctx: PrintContext): string {
       color: #111827; font-size: 12px; line-height: 1.45;
     }
     header {
-      border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 18px;
+      border-bottom: 3px solid #0c241f; padding-bottom: 10px; margin-bottom: 18px;
       display: flex; justify-content: space-between; align-items: flex-end;
     }
-    header h1 { font-size: 20px; color: #1e3a8a; letter-spacing: -.3px; }
+    header h1 { font-size: 20px; color: #0c241f; letter-spacing: -.3px; }
     header .sub { color: #6b7280; font-size: 11px; margin-top: 3px; }
     header .meta { text-align: right; font-size: 11px; color: #6b7280; }
     h2 {
       font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
-      color: #1e3a8a; margin: 16px 0 6px; padding-bottom: 3px;
+      color: #0c241f; margin: 16px 0 6px; padding-bottom: 3px;
       border-bottom: 1px solid #e5e7eb;
     }
     .cards { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -358,7 +358,7 @@ function buildRapportHtml(ctx: PrintContext): string {
     .card b { font-size: 15px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
     th {
-      background: #1e3a8a; color: #fff; padding: 6px 8px; text-align: left;
+      background: #0c241f; color: #fff; padding: 6px 8px; text-align: left;
       font-size: 10px; text-transform: uppercase; letter-spacing: .4px;
     }
     td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
@@ -681,7 +681,7 @@ export default function RapportsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
+            className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
             onClick={handlePrint}
             disabled={!peutImprimer}
             title={peutImprimer ? 'Imprimer ou enregistrer en PDF' : 'Générez un rapport pour l’imprimer'}
@@ -764,7 +764,7 @@ export default function RapportsPage() {
             </div>
           )}
           <div className="flex items-end">
-            <Button onClick={generate} disabled={loading || !school || !year || (activeTab === 'journalier' && !dateJournalier)} className="w-full bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl h-10 shadow-md">
+            <Button onClick={generate} disabled={loading || !school || !year || (activeTab === 'journalier' && !dateJournalier)} className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-10 shadow-md">
               {loading ? 'Génération...' : 'Générer le rapport'}
             </Button>
           </div>
@@ -773,9 +773,9 @@ export default function RapportsPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-stone-100 p-1 rounded-xl border border-stone-200">
-          <TabsTrigger value="financier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">Rapport financier</TabsTrigger>
-          <TabsTrigger value="eleves" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">Rapport élèves</TabsTrigger>
-          <TabsTrigger value="journalier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">Rapport journalier</TabsTrigger>
+          <TabsTrigger value="financier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport financier</TabsTrigger>
+          <TabsTrigger value="eleves" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport élèves</TabsTrigger>
+          <TabsTrigger value="journalier" className="rounded-lg font-bold text-xs sm:text-sm data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">Rapport journalier</TabsTrigger>
         </TabsList>
 
         {/* ── Financier ─────────────────────────────────────────────── */}
@@ -795,9 +795,9 @@ export default function RapportsPage() {
                   {rapportFinancier.soldes.map((s) => (
                     <Card key={s.devise} className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                       <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
-                        <CardTitle className="flex items-center justify-between text-sm font-bold text-[#1e3a8a]">
+                        <CardTitle className="flex items-center justify-between text-sm font-bold text-[#0c241f]">
                           <span>Bilan Financier</span>
-                          <span className="rounded-md bg-[#1e3a8a] text-amber-400 px-2.5 py-0.5 text-xs font-bold">
+                          <span className="rounded-md bg-[#0c241f] text-amber-400 px-2.5 py-0.5 text-xs font-bold">
                             {s.devise}
                           </span>
                         </CardTitle>
@@ -844,15 +844,15 @@ export default function RapportsPage() {
                       <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
                         <CardTitle className="flex items-center justify-between text-base font-bold text-stone-900">
                           <span>Évolution Mensuelle</span>
-                          <span className="rounded-md bg-[#1e3a8a] text-amber-400 px-2.5 py-0.5 text-xs font-bold">
+                          <span className="rounded-md bg-[#0c241f] text-amber-400 px-2.5 py-0.5 text-xs font-bold">
                             {dev}
                           </span>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
                         <Table>
-                          <TableHeader className="bg-[#1e3a8a] text-white">
-                            <TableRow className="hover:bg-[#1e3a8a]">
+                          <TableHeader className="bg-[#0c241f] text-white">
+                            <TableRow className="hover:bg-[#0c241f]">
                               <TableHead className="text-amber-300 font-bold">Mois</TableHead>
                               <TableHead className="text-right text-white font-bold">Encaissements</TableHead>
                               <TableHead className="text-right text-white font-bold">Dépenses</TableHead>
@@ -939,19 +939,19 @@ export default function RapportsPage() {
                   <Users className="h-6 w-6 text-amber-600" />
                   <div>
                     <p className="text-xs font-semibold text-stone-500">Total élèves comptés</p>
-                    <p className="text-2xl font-extrabold text-[#1e3a8a]">{rapportEleves.total}</p>
+                    <p className="text-2xl font-extrabold text-[#0c241f]">{rapportEleves.total}</p>
                   </div>
                 </CardContent>
               </Card>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
-                  <CardTitle className="text-sm font-bold text-[#1e3a8a]">Par Statut</CardTitle>
+                  <CardTitle className="text-sm font-bold text-[#0c241f]">Par Statut</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
-                    <TableHeader className="bg-[#1e3a8a] text-white">
-                      <TableRow className="hover:bg-[#1e3a8a]">
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
                         <TableHead className="text-amber-300 font-bold">Statut</TableHead>
                         <TableHead className="text-right text-white font-bold">Nombre</TableHead>
                       </TableRow>
@@ -970,12 +970,12 @@ export default function RapportsPage() {
 
               <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
-                  <CardTitle className="text-sm font-bold text-[#1e3a8a]">Par Sexe</CardTitle>
+                  <CardTitle className="text-sm font-bold text-[#0c241f]">Par Sexe</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
-                    <TableHeader className="bg-[#1e3a8a] text-white">
-                      <TableRow className="hover:bg-[#1e3a8a]">
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
                         <TableHead className="text-amber-300 font-bold">Sexe</TableHead>
                         <TableHead className="text-right text-white font-bold">Nombre</TableHead>
                       </TableRow>
@@ -994,12 +994,12 @@ export default function RapportsPage() {
 
               <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-3">
-                  <CardTitle className="text-sm font-bold text-[#1e3a8a]">Par Classe</CardTitle>
+                  <CardTitle className="text-sm font-bold text-[#0c241f]">Par Classe</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
-                    <TableHeader className="bg-[#1e3a8a] text-white">
-                      <TableRow className="hover:bg-[#1e3a8a]">
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
                         <TableHead className="text-amber-300 font-bold">Classe</TableHead>
                         <TableHead className="text-right text-white font-bold">Nombre</TableHead>
                       </TableRow>
@@ -1030,7 +1030,7 @@ export default function RapportsPage() {
         <TabsContent value="journalier" className="mt-4 space-y-4">
           {rapportJournalier ? (
             <>
-              <Card className="rounded-2xl border-stone-200/80 bg-[#1e3a8a] text-white shadow-lg">
+              <Card className="rounded-2xl border-stone-200/80 bg-[#0c241f] text-white shadow-lg">
                 <CardContent className="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
                   <div><p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Reçus enregistrés</p><p className="mt-1 text-2xl font-extrabold">{rapportJournalier.totalRecus}</p></div>
                   <div><p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Reçus valides</p><p className="mt-1 text-2xl font-extrabold">{rapportJournalier.totalValides}</p></div>
@@ -1043,9 +1043,9 @@ export default function RapportsPage() {
                   <Card key={t.devise} className="rounded-2xl border-stone-200/80 shadow-sm"><CardContent className="grid grid-cols-3 gap-3 p-5"><div><p className="text-[10px] font-bold uppercase text-stone-500">Encaissements</p><p className="mt-1 text-sm font-extrabold text-emerald-700">{formatMoney(t.encaissements, t.devise)}</p></div><div><p className="text-[10px] font-bold uppercase text-stone-500">Dépenses</p><p className="mt-1 text-sm font-extrabold text-rose-600">{formatMoney(t.depenses, t.devise)}</p></div><div><p className="text-[10px] font-bold uppercase text-stone-500">Solde net</p><p className={`mt-1 text-sm font-extrabold ${t.solde >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{formatMoney(t.solde, t.devise)}</p></div></CardContent></Card>
                 ))}
               </div>
-              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#1e3a8a]">Répartition par mode de paiement</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader className="bg-[#1e3a8a] text-white"><TableRow><TableHead className="text-amber-300">Mode</TableHead><TableHead>Devise</TableHead><TableHead className="text-right">Nombre</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.parMode.map((m, i) => <TableRow key={`${m.mode}-${m.devise}-${i}`}><TableCell className="text-xs font-semibold">{m.mode || '—'}</TableCell><TableCell className="text-xs">{m.devise}</TableCell><TableCell className="text-right text-xs font-bold">{m.nombre}</TableCell><TableCell className="text-right text-xs font-bold text-emerald-700">{formatMoney(m.total, m.devise)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
-              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#1e3a8a]">Détail des reçus — {dateJournalier}</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader className="bg-[#1e3a8a] text-white"><TableRow><TableHead className="text-amber-300">Heure</TableHead><TableHead>N° reçu</TableHead>{school === 'ALL' && <TableHead>Établissement</TableHead>}<TableHead>Élève</TableHead><TableHead>Motif</TableHead><TableHead>Mode</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.recus.map((r, i) => <TableRow key={`${r.numeroRecu}-${i}`} className={r.statut === 'ANNULE' ? 'bg-rose-50/50 opacity-60' : ''}><TableCell className="text-xs">{r.heure}</TableCell><TableCell className="font-mono text-xs font-bold">{r.numeroRecu}</TableCell>{school === 'ALL' && <TableCell className="text-xs font-semibold">{r.etablissementNom || '—'}</TableCell>}<TableCell className="text-xs font-semibold">{r.eleve}<br /><span className="text-[10px] text-stone-400">{r.matricule} — {r.classe}</span></TableCell><TableCell className="text-xs">{r.motif}</TableCell><TableCell className="text-xs">{r.modePaiement}</TableCell><TableCell className="text-right text-xs font-bold">{formatMoney(r.montant, r.devise)}</TableCell><TableCell className="text-xs font-bold">{r.statut === 'ANNULE' ? 'Annulé' : 'Valide'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
-              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#1e3a8a]">Détail des dépenses</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader className="bg-[#1e3a8a] text-white"><TableRow><TableHead className="text-amber-300">Heure</TableHead>{school === 'ALL' && <TableHead>Établissement</TableHead>}<TableHead>Catégorie</TableHead><TableHead>Libellé</TableHead><TableHead>Bénéficiaire</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.depenses.map((d, i) => <TableRow key={`${d.heure}-${d.libelle}-${i}`}><TableCell className="text-xs">{d.heure}</TableCell>{school === 'ALL' && <TableCell className="text-xs font-semibold">{d.etablissementNom || '—'}</TableCell>}<TableCell className="text-xs">{d.categorie}</TableCell><TableCell className="text-xs font-semibold">{d.libelle}</TableCell><TableCell className="text-xs">{d.beneficiaire || '—'}</TableCell><TableCell className="text-right text-xs font-bold">{formatMoney(d.montant, d.devise)}</TableCell><TableCell className="text-xs">{d.statut}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#0c241f]">Répartition par mode de paiement</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader className="bg-[#0c241f] text-white"><TableRow><TableHead className="text-amber-300">Mode</TableHead><TableHead>Devise</TableHead><TableHead className="text-right">Nombre</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.parMode.map((m, i) => <TableRow key={`${m.mode}-${m.devise}-${i}`}><TableCell className="text-xs font-semibold">{m.mode || '—'}</TableCell><TableCell className="text-xs">{m.devise}</TableCell><TableCell className="text-right text-xs font-bold">{m.nombre}</TableCell><TableCell className="text-right text-xs font-bold text-emerald-700">{formatMoney(m.total, m.devise)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#0c241f]">Détail des reçus — {dateJournalier}</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader className="bg-[#0c241f] text-white"><TableRow><TableHead className="text-amber-300">Heure</TableHead><TableHead>N° reçu</TableHead>{school === 'ALL' && <TableHead>Établissement</TableHead>}<TableHead>Élève</TableHead><TableHead>Motif</TableHead><TableHead>Mode</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.recus.map((r, i) => <TableRow key={`${r.numeroRecu}-${i}`} className={r.statut === 'ANNULE' ? 'bg-rose-50/50 opacity-60' : ''}><TableCell className="text-xs">{r.heure}</TableCell><TableCell className="font-mono text-xs font-bold">{r.numeroRecu}</TableCell>{school === 'ALL' && <TableCell className="text-xs font-semibold">{r.etablissementNom || '—'}</TableCell>}<TableCell className="text-xs font-semibold">{r.eleve}<br /><span className="text-[10px] text-stone-400">{r.matricule} — {r.classe}</span></TableCell><TableCell className="text-xs">{r.motif}</TableCell><TableCell className="text-xs">{r.modePaiement}</TableCell><TableCell className="text-right text-xs font-bold">{formatMoney(r.montant, r.devise)}</TableCell><TableCell className="text-xs font-bold">{r.statut === 'ANNULE' ? 'Annulé' : 'Valide'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+              <Card className="overflow-hidden rounded-2xl border-stone-200/80 shadow-sm"><CardHeader className="border-b border-stone-100 bg-stone-50/50 px-6 py-3"><CardTitle className="text-sm font-bold text-[#0c241f]">Détail des dépenses</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader className="bg-[#0c241f] text-white"><TableRow><TableHead className="text-amber-300">Heure</TableHead>{school === 'ALL' && <TableHead>Établissement</TableHead>}<TableHead>Catégorie</TableHead><TableHead>Libellé</TableHead><TableHead>Bénéficiaire</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{rapportJournalier.depenses.map((d, i) => <TableRow key={`${d.heure}-${d.libelle}-${i}`}><TableCell className="text-xs">{d.heure}</TableCell>{school === 'ALL' && <TableCell className="text-xs font-semibold">{d.etablissementNom || '—'}</TableCell>}<TableCell className="text-xs">{d.categorie}</TableCell><TableCell className="text-xs font-semibold">{d.libelle}</TableCell><TableCell className="text-xs">{d.beneficiaire || '—'}</TableCell><TableCell className="text-right text-xs font-bold">{formatMoney(d.montant, d.devise)}</TableCell><TableCell className="text-xs">{d.statut}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
             </>
           ) : (
             <Card className="rounded-2xl border-stone-200 shadow-sm"><CardContent className="p-12 text-center text-stone-400 font-medium"><FileText className="mx-auto mb-3 h-12 w-12 opacity-30" /><p className="text-base font-bold text-stone-700">Sélectionnez une date puis générez le rapport journalier.</p></CardContent></Card>

@@ -656,7 +656,7 @@ export function ReceiptPOS({
           <Button
             size="sm"
             onClick={() => printPosReceipt(receipt, school, etabParams, logoPosition)}
-            className="bg-[#1e3a8a] text-white"
+            className="bg-[#0c241f] text-white"
           >
             Imprimer
           </Button>

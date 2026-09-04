@@ -107,7 +107,7 @@ const emptyForm = {
   adresse: '',
   telephone: '',
   email: '',
-  couleurPrincipale: '#1e3a8a',
+  couleurPrincipale: '#0c241f',
   devise: 'CDF',
   rccm: '',
   idNat: '',
@@ -207,7 +207,7 @@ export default function EtablissementsPage() {
       adresse: e.adresse || '',
       telephone: e.telephone || '',
       email: e.email || '',
-      couleurPrincipale: e.couleurPrincipale || '#1e3a8a',
+      couleurPrincipale: e.couleurPrincipale || '#0c241f',
       devise: e.devise || 'CDF',
       rccm: e.rccm || '',
       idNat: e.idNat || '',
@@ -294,7 +294,7 @@ export default function EtablissementsPage() {
         </div>
         <Button
           onClick={openCreate}
-          className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
+          className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
         >
           <Plus className="h-4 w-4 text-amber-400" />
           Nouvel établissement
@@ -306,10 +306,10 @@ export default function EtablissementsPage() {
         variants={itemVariants}
         className="grid grid-cols-1 gap-4 sm:grid-cols-3"
       >
-        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#1e3a8a]">
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
           <CardContent className="flex items-center gap-4 p-5">
-            <div className="rounded-2xl bg-[#1e3a8a]/10 p-3.5 border border-[#1e3a8a]/20">
-              <Building2 className="h-6 w-6 text-[#1e3a8a]" />
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <Building2 className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-stone-500">
@@ -389,8 +389,8 @@ export default function EtablissementsPage() {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-[#1e3a8a] text-white">
-                    <TableRow className="hover:bg-[#1e3a8a]">
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
                       <TableHead className="text-amber-300 font-bold">Nom de l&apos;Établissement</TableHead>
                       <TableHead className="text-white font-bold">Type</TableHead>
                       <TableHead className="text-white font-bold">Téléphone</TableHead>
@@ -423,7 +423,7 @@ export default function EtablissementsPage() {
                               <div
                                 className="h-3.5 w-3.5 rounded-full flex-shrink-0 shadow-sm border border-black/10"
                                 style={{
-                                  backgroundColor: e.couleurPrincipale || '#1e3a8a',
+                                  backgroundColor: e.couleurPrincipale || '#0c241f',
                                 }}
                               />
                               <span className="font-bold text-stone-900 break-words">{e.nom}</span>
@@ -496,11 +496,11 @@ export default function EtablissementsPage() {
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <Building2 className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
                   {editingId ? "Modifier l'établissement" : 'Nouvel établissement'}
                 </DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Saisissez les coordonnées et caractéristiques du site.</p>
@@ -513,7 +513,7 @@ export default function EtablissementsPage() {
               <Label htmlFor="etab-nom" className="text-xs font-semibold text-stone-600">Nom de l&apos;établissement *</Label>
               <Input
                 id="etab-nom"
-                placeholder="Ex: Complexe Scolaire AGAPE"
+                placeholder="Ex: Complexe Scolaire Le Bon Berger"
                 value={form.nom}
                 onChange={(e) => setForm({ ...form, nom: e.target.value })}
                 className="rounded-xl border-stone-200 bg-white font-medium mt-1"
@@ -652,7 +652,7 @@ export default function EtablissementsPage() {
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md"
+                className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md"
               >
                 {saving
                   ? 'Enregistrement...'

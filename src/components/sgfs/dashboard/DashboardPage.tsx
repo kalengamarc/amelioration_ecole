@@ -92,8 +92,8 @@ interface DashboardData {
  * Palette de couleurs (inspirée du design de référence)
  * ──────────────────────────────────────────────────────────────────────────*/
 
-const COLORS_MODE = ['#1e3a8a', '#d97706', '#059669', '#0284c7', '#7c3aed']
-const COLORS_MOTIF = ['#1e3a8a', '#d97706', '#059669', '#0284c7', '#7c3aed', '#475569']
+const COLORS_MODE = ['#0c241f', '#d97706', '#059669', '#0284c7', '#7c3aed']
+const COLORS_MOTIF = ['#0c241f', '#d97706', '#059669', '#0284c7', '#7c3aed', '#475569']
 
 const COULEUR_DEVISE: Record<string, { badge: string; texte: string; barre: string }> = {
   CDF: { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', texte: 'text-emerald-700', barre: '#059669' },
@@ -106,7 +106,7 @@ function couleurDevise(d: string) {
     COULEUR_DEVISE[d] ?? {
       badge: 'bg-stone-100 text-stone-700 border-stone-200',
       texte: 'text-stone-700',
-      barre: '#1e3a8a',
+      barre: '#0c241f',
     }
   )
 }
@@ -220,7 +220,7 @@ function CarteDevise({
 
           <div className="flex items-baseline justify-between gap-2 border-t border-stone-100 pt-3">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
-              <Wallet className="h-4 w-4 text-[#1e3a8a]" /> Solde Net
+              <Wallet className="h-4 w-4 text-[#0c241f]" /> Solde Net
             </span>
             <span
               className={`text-lg font-bold tabular-nums ${
@@ -556,7 +556,7 @@ export default function DashboardPage() {
           <div className="flex flex-wrap lg:flex-col gap-3 shrink-0">
             <Button
               onClick={() => setPage('encaissements')}
-              className="bg-white text-blue-900 hover:bg-blue-50 font-bold px-5 py-2.5 rounded-xl shadow-md transition-all gap-2 text-xs sm:text-sm"
+              className="bg-white text-[#0c241f] hover:bg-emerald-50 font-bold px-5 py-2.5 rounded-xl shadow-md transition-all gap-2 text-xs sm:text-sm"
             >
               <Receipt className="h-4 w-4" /> Nouvel Encaissement
             </Button>

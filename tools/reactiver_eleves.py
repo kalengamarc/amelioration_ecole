@@ -9,7 +9,7 @@ Usage (Windows, depuis le dossier du projet) :
     python tools/reactiver_eleves.py --all      # réactive TOUS les TRANSFERE
                                                 # (y compris archivés manuellement)
     python tools/reactiver_eleves.py --dry-run  # affiche seulement (ne modifie rien)
-    python tools/reactiver_eleves.py --db "C:\\chemin\\vers\\sgfs.db"  # base ailleurs
+    python tools/reactiver_eleves.py --db "C:\\chemin\\vers\\sgfs-b.db"  # base ailleurs
 
 ⚠️  FERMEZ l'application SGFS-ME avant d'exécuter ce script
     (la base est verrouillée tant que l'app tourne).
@@ -28,7 +28,7 @@ def db_path() -> str:
         base = os.environ.get("APPDATA", ".")
     else:
         base = os.environ.get("HOME", ".")
-    return os.path.join(base, "SGFS-ME", "data", "sgfs.db")
+    return os.path.join(base, "SGFS-ME", "data", "sgfs-b.db")
 
 
 def main() -> int:

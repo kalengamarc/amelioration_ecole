@@ -288,17 +288,17 @@ export default function FraisPage() {
           <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Gestion des Frais Scolaires</h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-1">Définissez et gérez les différents types de frais par classe et par tranche.</p>
         </div>
-        <Button onClick={openCreate} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
+        <Button onClick={openCreate} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
           <Plus className="h-4 w-4 text-amber-400" /> Nouveau frais
         </Button>
       </motion.div>
 
       {/* Stats Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#1e3a8a]">
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
           <CardContent className="flex items-center gap-4 p-5">
-            <div className="rounded-2xl bg-[#1e3a8a]/10 p-3.5 border border-[#1e3a8a]/20">
-              <DollarSign className="h-6 w-6 text-[#1e3a8a]" />
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <DollarSign className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-stone-500">Total Frais Actifs</p>
@@ -384,8 +384,8 @@ export default function FraisPage() {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-[#1e3a8a] text-white">
-                    <TableRow className="hover:bg-[#1e3a8a]">
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
                       <TableHead className="text-amber-300 font-bold">Libellé du Frais</TableHead>
                       <TableHead className="text-white font-bold">Type</TableHead>
                       <TableHead className="text-white font-bold">Montant</TableHead>
@@ -454,11 +454,11 @@ export default function FraisPage() {
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <Banknote className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
                   {editingId ? 'Modifier le frais' : 'Nouveau frais'}
                 </DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Définissez les modalités financières.</p>
@@ -549,7 +549,7 @@ export default function FraisPage() {
 
             <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
               <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button disabled={saving} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md" onClick={handleSave}>
+              <Button disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md" onClick={handleSave}>
                 {saving ? 'Enregistrement...' : editingId ? 'Mettre à jour' : 'Créer le frais'}
               </Button>
             </div>

@@ -257,7 +257,7 @@ export default function ElevesPage() {
           <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Répertoire des Élèves</h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-1">Inscriptions, scolarité, tuteurs et situation financière.</p>
         </div>
-        <Button onClick={openCreate} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
+        <Button onClick={openCreate} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2">
           <Plus className="h-4 w-4 text-amber-400" /> Nouvel élève
         </Button>
       </header>
@@ -301,8 +301,8 @@ export default function ElevesPage() {
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-[#1e3a8a] text-white">
-              <TableRow className="hover:bg-[#1e3a8a]">
+            <TableHeader className="bg-[#0c241f] text-white">
+              <TableRow className="hover:bg-[#0c241f]">
                 <TableHead className="text-amber-300 font-bold">Matricule</TableHead>
                 <TableHead className="text-white font-bold">Élève</TableHead>
                 <TableHead className="text-white font-bold">Classe</TableHead>
@@ -333,7 +333,7 @@ export default function ElevesPage() {
                       <TableCell><Badge variant="outline" className={`font-semibold ${st.className}`}>{st.label}</Badge></TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-stone-600 hover:text-[#1e3a8a] hover:bg-stone-100" onClick={(e) => { e.stopPropagation(); showDetail(s) }}><Eye className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-stone-600 hover:text-[#0c241f] hover:bg-stone-100" onClick={(e) => { e.stopPropagation(); showDetail(s) }}><Eye className="h-4 w-4" /></Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-700 hover:bg-amber-50" onClick={(e) => { e.stopPropagation(); openEdit(s) }}><Pencil className="h-4 w-4" /></Button>
                           {isCoordinateur(role) && (
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600 hover:bg-rose-50" onClick={(e) => { e.stopPropagation(); setDeleteTarget(s) }}><Trash2 className="h-4 w-4" /></Button>
@@ -364,11 +364,11 @@ export default function ElevesPage() {
         <DialogContent className="!w-[calc(100vw-2rem)] !max-w-5xl max-h-[92vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <GraduationCap className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
                   {editingId ? 'Modifier la fiche élève' : 'Inscrire un nouvel élève'}
                 </DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Saisissez les informations de scolarité et du tuteur légal.</p>
@@ -412,7 +412,7 @@ export default function ElevesPage() {
             {/* Scolarité */}
             <section className="space-y-4 rounded-2xl border border-stone-200/80 bg-stone-50/50 p-5">
               <h3 className="font-bold text-stone-800 text-sm flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-[#1e3a8a]" /> Affectation Scolaire
+                <Building2 className="h-4 w-4 text-[#0c241f]" /> Affectation Scolaire
               </h3>
               <div className="space-y-3">
                 <div>
@@ -502,7 +502,7 @@ export default function ElevesPage() {
 
           <div className="flex justify-end gap-3 border-t border-stone-100 pt-4">
             <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setFormOpen(false)}>Annuler</Button>
-            <Button disabled={busy} onClick={handleSave} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md">
+            <Button disabled={busy} onClick={handleSave} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md">
               {busy ? 'Enregistrement...' : editingId ? 'Mettre à jour' : 'Inscrire l’élève'}
             </Button>
           </div>
@@ -518,7 +518,7 @@ export default function ElevesPage() {
                 {detail ? detail.prenom[0] + detail.nom[0] : 'EL'}
               </div>
               <div>
-                <DialogTitle className="text-2xl font-extrabold text-[#1e3a8a]">{detail?.nom} {detail?.prenom}</DialogTitle>
+                <DialogTitle className="text-2xl font-extrabold text-[#0c241f]">{detail?.nom} {detail?.prenom}</DialogTitle>
                 <p className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/50 w-fit mt-1">
                   Matricule : {detail?.matricule}
                 </p>
@@ -528,11 +528,11 @@ export default function ElevesPage() {
 
           {detail && (
             <div className="grid gap-5 md:grid-cols-2 pt-2">
-              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#1e3a8a]">Informations Personnelles</CardTitle></CardHeader><CardContent className="space-y-2 text-xs sm:text-sm font-medium"><p><b>Sexe :</b> {detail.sexe === 'F' ? 'Féminin' : 'Masculin'}</p><p><b>Date de naissance :</b> {detail.dateNaissance ? new Date(detail.dateNaissance).toLocaleDateString('fr-FR') : '—'}</p><p><b>Lieu :</b> {detail.lieuNaissance || '—'}</p><p><b>Établissement :</b> {detail.etablissement?.nom || '—'}</p></CardContent></Card>
-              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#1e3a8a]">Scolarité Actuelle</CardTitle></CardHeader><CardContent className="space-y-2">{(detail.inscriptions || detail.classes || []).map((i: any, n: number) => (<div key={n} className="rounded-xl border border-stone-200 p-3 bg-stone-50/50"><b>{i.classe?.nom || '—'}</b><p className="text-xs text-stone-500 mt-0.5">{i.classe?.anneeScolaire?.libelle || i.classe?.annee_scolaire?.libelle || '—'} · <Badge variant="outline" className="text-[10px] ml-1">{i.statut}</Badge></p></div>))}</CardContent></Card>
-              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#1e3a8a]">Tuteur Légal</CardTitle></CardHeader><CardContent className="space-y-2">{detail.tuteurs?.length ? detail.tuteurs.map((x: any, n: number) => (<div key={n} className="rounded-xl border border-stone-200 p-3 bg-stone-50/50"><b>{x.tuteur?.nom} {x.tuteur?.prenom}</b><p className="text-xs font-semibold text-amber-700 mt-1">{x.tuteur?.relation || '—'} · {x.tuteur?.telephone || '—'}</p><p className="text-xs text-stone-500">{x.tuteur?.adresse || '—'}</p></div>)) : <p className="text-xs text-stone-400 font-medium">Aucun tuteur renseigné.</p>}</CardContent></Card>
-              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#1e3a8a]">Situation Financière</CardTitle></CardHeader><CardContent>{detail.echeances?.length ? (<Table><TableHeader><TableRow><TableHead>Frais</TableHead><TableHead>Dû</TableHead><TableHead>Payé</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{detail.echeances.map((e: any) => (<TableRow key={e.id}><TableCell className="font-semibold text-xs">{e.fraisScolaire?.libelle || e.frais_scolaire?.libelle || '—'}</TableCell><TableCell className="text-xs font-bold">{Number(e.montantDu || e.montant_du || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell className="text-xs text-emerald-700 font-bold">{Number(e.montantPaye || e.montant_paye || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell><Badge variant="outline" className="text-[10px]">{e.statut}</Badge></TableCell></TableRow>))}</TableBody></Table>) : <p className="text-xs text-stone-400 font-medium">Aucune échéance enregistrée.</p>}</CardContent></Card>
-              <Card className="md:col-span-2 rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#1e3a8a]">Historique des Paiements</CardTitle></CardHeader><CardContent>{detail.paiements?.length ? (<div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>N° Reçu</TableHead><TableHead>Motif</TableHead><TableHead>Montant</TableHead><TableHead>Mode</TableHead><TableHead>Date</TableHead><TableHead>État</TableHead></TableRow></TableHeader><TableBody>{detail.paiements.map((p: any) => (<TableRow key={p.id} className={p.annule ? 'opacity-50 line-through bg-rose-50/50' : ''}><TableCell className="font-mono text-xs font-bold">{p.numeroRecu || p.numero_recu || '—'}</TableCell><TableCell className="text-xs font-medium">{p.motif || '—'}</TableCell><TableCell className="text-xs font-bold text-emerald-700">{Number(p.montant || 0).toLocaleString('fr-CD')} {p.devise || 'CDF'}</TableCell><TableCell className="text-xs">{p.modePaiement === 'ESPECES' ? 'Espèces' : p.modePaiement === 'CHEQUE' ? 'Chèque' : p.modePaiement === 'VIREMENT' ? 'Virement' : p.modePaiement || '—'}</TableCell><TableCell className="text-xs">{p.createdAt || p.created_at ? new Date(p.createdAt || p.created_at).toLocaleDateString('fr-FR') : '—'}</TableCell><TableCell>{p.annule ? <Badge variant="destructive" className="text-[10px]">Annulé</Badge> : <Badge className="bg-emerald-600 text-[10px]">Validé</Badge>}</TableCell></TableRow>))}</TableBody></Table></div>) : <p className="text-xs text-stone-400 font-medium">Aucun paiement enregistré.</p>}</CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Informations Personnelles</CardTitle></CardHeader><CardContent className="space-y-2 text-xs sm:text-sm font-medium"><p><b>Sexe :</b> {detail.sexe === 'F' ? 'Féminin' : 'Masculin'}</p><p><b>Date de naissance :</b> {detail.dateNaissance ? new Date(detail.dateNaissance).toLocaleDateString('fr-FR') : '—'}</p><p><b>Lieu :</b> {detail.lieuNaissance || '—'}</p><p><b>Établissement :</b> {detail.etablissement?.nom || '—'}</p></CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Scolarité Actuelle</CardTitle></CardHeader><CardContent className="space-y-2">{(detail.inscriptions || detail.classes || []).map((i: any, n: number) => (<div key={n} className="rounded-xl border border-stone-200 p-3 bg-stone-50/50"><b>{i.classe?.nom || '—'}</b><p className="text-xs text-stone-500 mt-0.5">{i.classe?.anneeScolaire?.libelle || i.classe?.annee_scolaire?.libelle || '—'} · <Badge variant="outline" className="text-[10px] ml-1">{i.statut}</Badge></p></div>))}</CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Tuteur Légal</CardTitle></CardHeader><CardContent className="space-y-2">{detail.tuteurs?.length ? detail.tuteurs.map((x: any, n: number) => (<div key={n} className="rounded-xl border border-stone-200 p-3 bg-stone-50/50"><b>{x.tuteur?.nom} {x.tuteur?.prenom}</b><p className="text-xs font-semibold text-amber-700 mt-1">{x.tuteur?.relation || '—'} · {x.tuteur?.telephone || '—'}</p><p className="text-xs text-stone-500">{x.tuteur?.adresse || '—'}</p></div>)) : <p className="text-xs text-stone-400 font-medium">Aucun tuteur renseigné.</p>}</CardContent></Card>
+              <Card className="rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Situation Financière</CardTitle></CardHeader><CardContent>{detail.echeances?.length ? (<Table><TableHeader><TableRow><TableHead>Frais</TableHead><TableHead>Dû</TableHead><TableHead>Payé</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader><TableBody>{detail.echeances.map((e: any) => (<TableRow key={e.id}><TableCell className="font-semibold text-xs">{e.fraisScolaire?.libelle || e.frais_scolaire?.libelle || '—'}</TableCell><TableCell className="text-xs font-bold">{Number(e.montantDu || e.montant_du || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell className="text-xs text-emerald-700 font-bold">{Number(e.montantPaye || e.montant_paye || 0).toLocaleString('fr-CD')} {e.fraisScolaire?.devise || e.frais_scolaire?.devise || 'CDF'}</TableCell><TableCell><Badge variant="outline" className="text-[10px]">{e.statut}</Badge></TableCell></TableRow>))}</TableBody></Table>) : <p className="text-xs text-stone-400 font-medium">Aucune échéance enregistrée.</p>}</CardContent></Card>
+              <Card className="md:col-span-2 rounded-2xl border-stone-200 shadow-sm"><CardHeader><CardTitle className="text-sm font-bold text-[#0c241f]">Historique des Paiements</CardTitle></CardHeader><CardContent>{detail.paiements?.length ? (<div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>N° Reçu</TableHead><TableHead>Motif</TableHead><TableHead>Montant</TableHead><TableHead>Mode</TableHead><TableHead>Date</TableHead><TableHead>État</TableHead></TableRow></TableHeader><TableBody>{detail.paiements.map((p: any) => (<TableRow key={p.id} className={p.annule ? 'opacity-50 line-through bg-rose-50/50' : ''}><TableCell className="font-mono text-xs font-bold">{p.numeroRecu || p.numero_recu || '—'}</TableCell><TableCell className="text-xs font-medium">{p.motif || '—'}</TableCell><TableCell className="text-xs font-bold text-emerald-700">{Number(p.montant || 0).toLocaleString('fr-CD')} {p.devise || 'CDF'}</TableCell><TableCell className="text-xs">{p.modePaiement === 'ESPECES' ? 'Espèces' : p.modePaiement === 'CHEQUE' ? 'Chèque' : p.modePaiement === 'VIREMENT' ? 'Virement' : p.modePaiement || '—'}</TableCell><TableCell className="text-xs">{p.createdAt || p.created_at ? new Date(p.createdAt || p.created_at).toLocaleDateString('fr-FR') : '—'}</TableCell><TableCell>{p.annule ? <Badge variant="destructive" className="text-[10px]">Annulé</Badge> : <Badge className="bg-emerald-600 text-[10px]">Validé</Badge>}</TableCell></TableRow>))}</TableBody></Table></div>) : <p className="text-xs text-stone-400 font-medium">Aucun paiement enregistré.</p>}</CardContent></Card>
             </div>
           )}
         </DialogContent>
@@ -541,7 +541,7 @@ export default function ElevesPage() {
       {/* ── DIALOG CONFIRMATION SUPPRESSION / ARCHIVAGE ── */}
       <Dialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
         <DialogContent className="rounded-3xl border border-stone-200 p-6 shadow-2xl max-w-md">
-          <DialogHeader><DialogTitle className="text-lg font-bold text-[#1e3a8a]">Archiver la fiche élève ?</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-lg font-bold text-[#0c241f]">Archiver la fiche élève ?</DialogTitle></DialogHeader>
           <p className="text-sm text-stone-600 font-medium mt-1">Voulez-vous archiver la fiche de <b className="text-stone-900">{deleteTarget?.nom} {deleteTarget?.prenom}</b> ? L'historique financier et les reçus seront conservés.</p>
           <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setDeleteTarget(null)}>Annuler</Button><Button variant="destructive" className="rounded-xl font-bold" disabled={busy} onClick={handleDelete}>{busy ? 'Traitement...' : 'Archiver'}</Button></div>
         </DialogContent>

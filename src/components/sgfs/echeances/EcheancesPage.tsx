@@ -103,10 +103,10 @@ const PAGE_SIZE = 20
 const PRINT_FRAME_ID = '__relance_print_frame__'
 const DEVISE_DEFAUT = 'CDF'
 
-const ETAB_NOM = 'Complexe Scolaire AGAPE'
-const ETAB_SITE = ''
-const ETAB_SIGNATURE = "L'Administration\nCS AGAPE"
-const ETAB_TELEPHONE = '+000 000 000 000'
+const ETAB_NOM = 'Complexe Scolaire Le Bon Berger'
+const ETAB_SITE = 'Dav/Kahinda'
+const ETAB_SIGNATURE = "L'Administration\nCS Le Bon Berger (Dav/Kahinda)"
+const ETAB_TELEPHONE = '+243 000 000 000'
 const ETAB_LIEU_PAIEMENT = "Secrétariat de l'établissement."
 const ETAB_HORAIRES = 'du lundi au vendredi, 08h00 – 15h00'
 const ETAB_MODES_PAIEMENT = 'espèces, chèque, virement bancaire'
@@ -488,10 +488,10 @@ export default function EcheancesPage() {
       }
       .sheet { max-width: 174mm; margin: 0 auto; }
       .header {
-        border-bottom: 3px solid #1e3a8a; padding-bottom: 14px; margin-bottom: 22px;
+        border-bottom: 3px solid #0c241f; padding-bottom: 14px; margin-bottom: 22px;
         display: flex; justify-content: space-between; align-items: flex-end;
       }
-      .header h1 { margin: 0; font-size: 22px; color: #1e3a8a; letter-spacing: -0.3px; }
+      .header h1 { margin: 0; font-size: 22px; color: #0c241f; letter-spacing: -0.3px; }
       .header .sub { margin: 4px 0 0; color: #6b7280; font-size: 12px; }
       .header .ref { text-align: right; font-size: 11px; color: #6b7280; }
       .tag {
@@ -504,15 +504,15 @@ export default function EcheancesPage() {
       .lien { font-weight: 400; color: #6b7280; font-size: 12px; }
       .muted { font-weight: 400; color: #9ca3af; font-style: italic; }
       .dest {
-        border-left: 3px solid #1e3a8a; background: #f0fdf4;
+        border-left: 3px solid #0c241f; background: #f0fdf4;
         padding: 10px 14px; margin-bottom: 20px; border-radius: 0 6px 6px 0;
       }
       .dest-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #6b7280; }
-      .dest-name { font-size: 15px; font-weight: 700; color: #1e3a8a; margin-top: 2px; }
+      .dest-name { font-size: 15px; font-weight: 700; color: #0c241f; margin-top: 2px; }
       .dest-sub { font-size: 11px; color: #6b7280; margin-top: 1px; }
       table.detail { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 11px; }
       table.detail th {
-        background: #1e3a8a; color: #fff; padding: 6px 8px; text-align: left;
+        background: #0c241f; color: #fff; padding: 6px 8px; text-align: left;
         font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px;
       }
       table.detail th.n, table.detail td.n { text-align: right; }
@@ -529,10 +529,10 @@ export default function EcheancesPage() {
       .pay-box { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 14px;
                  margin-bottom: 16px; background: #f9fafb; break-inside: avoid; }
       .pay-box h3 { font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px;
-                    color: #1e3a8a; margin: 0 0 6px; font-weight: 800; }
+                    color: #0c241f; margin: 0 0 6px; font-weight: 800; }
       .pay-box ul { list-style: none; margin: 0; padding: 0; font-size: 11px; color: #374151; }
       .pay-box li { padding: 2px 0 2px 13px; position: relative; }
-      .pay-box li:before { content: '▸'; position: absolute; left: 0; color: #1e3a8a; }
+      .pay-box li:before { content: '▸'; position: absolute; left: 0; color: #0c241f; }
       table.info { width: 100%; border-collapse: collapse; margin-bottom: 22px; }
       table.info td { padding: 7px 0; vertical-align: top; border-bottom: 1px solid #f3f4f6; }
       table.info td.k { color: #6b7280; width: 42%; font-size: 12px; }
@@ -702,7 +702,7 @@ export default function EcheancesPage() {
     const L: string[] = []
     L.push(`Bonjour ${civilite},`)
     L.push('')
-    L.push(`La comptabilité du ${ETAB_NOM}${ETAB_SITE ? ` (${ETAB_SITE})` : ''} vous informe de la situation des frais de scolarité de votre enfant ${eleve}${matricule}${classe}.`)
+    L.push(`La comptabilité du ${ETAB_NOM} (${ETAB_SITE}) vous informe de la situation des frais de scolarité de votre enfant ${eleve}${matricule}${classe}.`)
     L.push('')
     L.push('📌 RÉCAPITULATIF DU COMPTE')
     L.push(SEP)
@@ -798,7 +798,7 @@ export default function EcheancesPage() {
             Actualiser
           </Button>
           {!loading && (resteParDevise.length > 0 || totalReste > 0) && (
-            <div className="rounded-xl border border-emerald-900/20 bg-[#1e3a8a] px-4 py-2 text-white shadow-sm">
+            <div className="rounded-xl border border-emerald-900/20 bg-[#0c241f] px-4 py-2 text-white shadow-sm">
               <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Reste à percevoir</p>
               {resteParDevise.length > 0 ? (
                 <div className="space-y-0.5">
@@ -842,7 +842,7 @@ export default function EcheancesPage() {
               aria-pressed={active}
               className={`group relative overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:shadow-md ${
                 active
-                  ? `border-[#1e3a8a] ring-2 ring-offset-1 ring-[#1e3a8a]`
+                  ? `border-[#0c241f] ring-2 ring-offset-1 ring-[#0c241f]`
                   : 'border-stone-200/80'
               }`}
             >
@@ -856,7 +856,7 @@ export default function EcheancesPage() {
                 </div>
               </div>
               {active && (
-                <span className="absolute right-2 top-2 rounded-full bg-[#1e3a8a] px-2 py-0.5 text-[9px] font-bold uppercase text-amber-400">
+                <span className="absolute right-2 top-2 rounded-full bg-[#0c241f] px-2 py-0.5 text-[9px] font-bold uppercase text-amber-400">
                   filtré
                 </span>
               )}
@@ -926,8 +926,8 @@ export default function EcheancesPage() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader className="bg-[#1e3a8a] text-white">
-                  <TableRow className="hover:bg-[#1e3a8a]">
+                <TableHeader className="bg-[#0c241f] text-white">
+                  <TableRow className="hover:bg-[#0c241f]">
                     <TableHead className="text-amber-300 font-bold">Élève</TableHead>
                     <TableHead className="hidden md:table-cell text-white font-bold">Classe</TableHead>
                     <TableHead className="hidden lg:table-cell text-white font-bold">Total Dû</TableHead>
@@ -1011,7 +1011,7 @@ export default function EcheancesPage() {
                           </TableCell>
                           <TableCell className="py-3 text-right">
                             <Button size="icon" variant="ghost" title="Imprimer l'avis de relance"
-                              className="h-8 w-8 text-[#1e3a8a] hover:bg-stone-100"
+                              className="h-8 w-8 text-[#0c241f] hover:bg-stone-100"
                               onClick={() => setSelectedId(e.eleveId)}>
                               <Printer className="h-4 w-4" />
                             </Button>
@@ -1041,11 +1041,11 @@ export default function EcheancesPage() {
         <DialogContent className="sm:max-w-md bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <Printer className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">Relance de Paiement</DialogTitle>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">Relance de Paiement</DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Avis individuel pour parents/tuteurs.</p>
               </div>
             </div>
@@ -1065,7 +1065,7 @@ export default function EcheancesPage() {
               <div className="grid grid-cols-3 gap-2 pt-2">
                 <Button
                   variant="outline"
-                  className="rounded-xl border-stone-200 bg-[#1e3a8a] text-white hover:bg-[#172554] font-bold text-xs py-3 gap-1.5 shadow-md"
+                  className="rounded-xl border-stone-200 bg-[#0c241f] text-white hover:bg-[#071916] font-bold text-xs py-3 gap-1.5 shadow-md"
                   onClick={() => printRelance(selected)}
                 >
                   <Printer className="h-4 w-4 text-amber-400" />

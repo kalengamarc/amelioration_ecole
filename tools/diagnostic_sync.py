@@ -12,7 +12,7 @@ Usage (Windows, depuis le dossier du projet) :
     python tools/diagnostic_sync.py                # diagnostic local uniquement
     python tools/diagnostic_sync.py --cloud        # + comparaison avec Supabase
                                                    #   (lit SUPABASE_URL/KEY dans ConfigSysteme)
-    python tools/diagnostic_sync.py --db "C:\\chemin\\vers\\sgfs.db"
+    python tools/diagnostic_sync.py --db "C:\\chemin\\vers\\sgfs-b.db"
 
 ⚠️  FERMEZ l'application SGFS-ME avant d'exécuter ce script
     (la base est verrouillée tant que l'app tourne).
@@ -38,7 +38,7 @@ def default_db_path() -> str:
         base = os.environ.get("APPDATA", ".")
     else:
         base = os.environ.get("HOME", ".")
-    return os.path.join(base, "SGFS-ME", "data", "sgfs.db")
+    return os.path.join(base, "SGFS-ME", "data", "sgfs-b.db")
 
 
 def q(conn, sql, params=()):
@@ -104,7 +104,7 @@ def fetch_all_rows(url, key, table, select_cols, page_size=500, max_pages=200):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Diagnostic d'intégrité SGFS-ME (lecture seule).")
-    ap.add_argument("--db", help="Chemin de la base SQLite (défaut : %APPDATA%\\SGFS-ME\\data\\sgfs.db)")
+    ap.add_argument("--db", help="Chemin de la base SQLite (défaut : %APPDATA%\\SGFS-ME\\data\\sgfs-b.db)")
     ap.add_argument("--cloud", action="store_true", help="Compare aussi avec Supabase")
     args = ap.parse_args()
 

@@ -430,7 +430,7 @@ const handleCleanDuplicates = async () => {
           </h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-1">
             {selectedYearLabel ? (
-              <>Année en cours : <span className="font-bold text-[#1e3a8a]">{selectedYearLabel}</span></>
+              <>Année en cours : <span className="font-bold text-[#0c241f]">{selectedYearLabel}</span></>
             ) : (
               "Organisez vos classes par niveau, effectif et établissement."
             )}
@@ -457,7 +457,7 @@ const handleCleanDuplicates = async () => {
           </Button>
           <Button
             onClick={openCreate}
-            className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
+            className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold px-5 py-2.5 rounded-xl shadow-md gap-2"
           >
             <Plus className="h-4 w-4 text-amber-400" />
             Nouvelle classe
@@ -538,10 +538,10 @@ const handleCleanDuplicates = async () => {
         variants={itemVariants}
         className="grid grid-cols-2 gap-4 lg:grid-cols-4"
       >
-        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#1e3a8a]">
+        <Card className="rounded-2xl border-stone-200/80 bg-white shadow-sm border-l-4 border-l-[#0c241f]">
           <CardContent className="flex items-center gap-4 p-5">
-            <div className="rounded-2xl bg-[#1e3a8a]/10 p-3.5 border border-[#1e3a8a]/20">
-              <GraduationCap className="h-6 w-6 text-[#1e3a8a]" />
+            <div className="rounded-2xl bg-[#0c241f]/10 p-3.5 border border-[#0c241f]/20">
+              <GraduationCap className="h-6 w-6 text-[#0c241f]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-stone-500">Total Classes</p>
@@ -610,8 +610,8 @@ const handleCleanDuplicates = async () => {
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-[#1e3a8a] text-white">
-                    <TableRow className="hover:bg-[#1e3a8a]">
+                  <TableHeader className="bg-[#0c241f] text-white">
+                    <TableRow className="hover:bg-[#0c241f]">
                       <TableHead className="text-amber-300 font-bold">Nom de la Classe</TableHead>
                       <TableHead className="text-white font-bold">Niveau</TableHead>
                       <TableHead className="hidden md:table-cell text-white font-bold">Établissement</TableHead>
@@ -735,11 +735,11 @@ const handleCleanDuplicates = async () => {
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <GraduationCap className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
                   {editingId ? 'Modifier la classe' : 'Nouvelle classe'}
                 </DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Saisissez les caractéristiques de la classe.</p>
@@ -826,7 +826,7 @@ const handleCleanDuplicates = async () => {
             <div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="effectif-max" className="text-xs font-semibold text-stone-600">Effectif maximum *</Label>
-                <span className="text-xs font-bold text-[#1e3a8a] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <span className="text-xs font-bold text-[#0c241f] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   {form.effectifMax || '0'} élèves
                 </span>
               </div>
@@ -851,7 +851,7 @@ const handleCleanDuplicates = async () => {
               </Button>
               <Button
                 disabled={saving || !form.nom.trim() || !form.etablissementId || !form.anneeScolaireId}
-                className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md"
+                className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md"
                 onClick={handleSave}
               >
                 {saving ? (
@@ -936,7 +936,7 @@ const handleCleanDuplicates = async () => {
                 <UserX className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">
                   Élèves sans classe active
                 </DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">
@@ -971,7 +971,7 @@ const handleCleanDuplicates = async () => {
           )}
 
           <div className="flex justify-end border-t border-stone-100 pt-4">
-            <Button onClick={() => setOrphanDialogOpen(false)} className="rounded-xl bg-[#1e3a8a] px-6 font-bold text-white hover:bg-[#172554]">
+            <Button onClick={() => setOrphanDialogOpen(false)} className="rounded-xl bg-[#0c241f] px-6 font-bold text-white hover:bg-[#071916]">
               Fermer
             </Button>
           </div>

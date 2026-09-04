@@ -26,6 +26,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import type { LucideIcon } from 'lucide-react'
 
+import logoSrc from '@/assets/logo.png'
+
 export type { PageName }
 
 interface Etablissement {
@@ -163,7 +165,7 @@ export default function Sidebar({ etablissements }: SidebarProps) {
         transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
         className={`
           fixed top-0 left-0 z-50 h-screen flex flex-col
-          bg-[#1e3a8a] border-r border-emerald-900/40 shadow-xl
+          bg-[#0c241f] border-r border-emerald-900/40 shadow-xl
           ${sidebarOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}
           md:translate-x-0 transition-transform duration-200
         `}
@@ -187,7 +189,13 @@ export default function Sidebar({ etablissements }: SidebarProps) {
                   className="object-contain"
                 />
               ) : (
-                <GraduationCap className="h-5 w-5" style={{ color: accentColor }} />
+                <Image
+                  src={logoSrc}
+                  alt="Logo"
+                  width={32}
+                  height={32}
+                  className="object-contain"
+                />
               )}
             </div>
             <AnimatePresence>

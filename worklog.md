@@ -2,6 +2,44 @@ Password : cK2UXZ4eCfsFwtZV
 user
 
 ---
+Task ID: 10
+Agent: main
+Task: Retour à Bon Berger (branding) en conservant les nouveautés utiles
+
+Work Log:
+- Contexte : l'utilisateur a poussé son propre commit « un peu » (16e6c4a) puis un
+  merge (0e10a4c) : base locale renommée sgfs-b.db, identifiant com.sgfs-b.me,
+  productName/titre « bon berger Kahinda Dav ». Ce dépôt est donc l'app
+  Bon Berger (AGAPE sera une autre app/base). Décisions de l'utilisateur :
+  revenir au branding Bon Berger EN GARDANT les nouveautés utiles (upload logo,
+  position du logo sur le reçu, niveau Humanités, nouveau dashboard) et en
+  RESTAURANT les photos de Jésus.
+- Déroulé (sur 0e10a4c) :
+  - git revert --no-commit 15eb74e : inverse le « style(agape): unifie #1e3a8a »
+    → les 14 fichiers repassent au vert sombre d'origine (#0c241f / #071916).
+  - Restauration depuis 36f3f90 (état Bon Berger d'origine) :
+    src/components/page.tsx (accueil), LoginPage.tsx, EcheancesPage.tsx
+    (constantes SMS/relance), et les assets bg-jesus.png, Jesus.jpeg, logo.png.
+  - store.ts : DEFAULT_COLOR #1e3a8a → #0c241f (était resté bleu car changé par
+    96f176b, hors du revert).
+  - Remplacement des derniers #1e3a8a / #172554 manuels (Dashboard palette,
+    ReceiptPOS bouton, ParametresPage) et des placeholders « Complexe Scolaire
+    AGAPE » → « Le Bon Berger ». bg-blue-50 → bg-emerald-50 sur les sélecteurs.
+  - Sidebar : le fallback du logo redevient logo.png (Bon Berger) quand aucun
+    logoUrl personnalisé n'est défini ; logoUrl reste prioritaire (nouveauté).
+  - tools/reactiver_eleves.py et tools/diagnostic_sync.py : chemin par défaut
+    sgfs.db → sgfs-b.db (aligné sur la base Bon Berger actuelle).
+- Conservé (nouveautés) : upload du logo fonctionnel + position gauche/centre/
+  droite sur le reçu (commandes get/save_receipt_logo_position), niveau
+  HUMANITE (classes + types d'établissement), dashboard moderne dont les
+  dégradés suivent accentColor (désormais vert Bon Berger par défaut).
+
+Stage Summary:
+- Application de nouveau au branding Bon Berger (vert sombre + photos de Jésus +
+  logo Bon Berger) tout en gardant les fonctionnalités ajoutées pour AGAPE.
+  Tauri.conf.json / sgfs-b.db / com.sgfs-b.me inchangés (choix utilisateur).
+
+---
 Task ID: 9
 Agent: main
 Task: Version AGAPE — branding bleu, suppression photos Jésus, humanités, logo reçu, dashboard moderne

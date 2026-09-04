@@ -45,7 +45,7 @@ export default function ParametresPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [identiteForm, setIdentiteForm] = useState({ logo: '', couleurPrimaire: '#1e3a8a' })
+  const [identiteForm, setIdentiteForm] = useState({ logo: '', couleurPrimaire: '#0c241f' })
   const [logoPosition, setLogoPosition] = useState<'left' | 'center' | 'right'>('center')
   const logoInputRef = useRef<HTMLInputElement | null>(null)
   const [contactForm, setContactForm] = useState({ nom: '', telephone: '', email: '', adresse: '', rccm: '', idNat: '' })
@@ -198,7 +198,7 @@ export default function ParametresPage() {
     if (ecole) {
       setIdentiteForm({
         logo: ecole.logoUrl || '',
-        couleurPrimaire: ecole.couleurPrincipale || '#1e3a8a'
+        couleurPrimaire: ecole.couleurPrincipale || '#0c241f'
       })
       setContactForm({
         nom: ecole.nom || '', telephone: ecole.telephone || '', email: ecole.email || '',
@@ -363,19 +363,19 @@ export default function ParametresPage() {
       <motion.div variants={itemVariants}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6 bg-stone-100 p-1 rounded-xl border border-stone-200">
-            <TabsTrigger value="identite" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">
+            <TabsTrigger value="identite" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <Palette className="w-4 h-4 hidden sm:block" /> Identité visuelle
             </TabsTrigger>
-            <TabsTrigger value="coordonnees" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">
+            <TabsTrigger value="coordonnees" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <MapPin className="w-4 h-4 hidden sm:block" /> Coordonnées
             </TabsTrigger>
-            <TabsTrigger value="annees" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">
+            <TabsTrigger value="annees" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <CalendarDays className="w-4 h-4 hidden sm:block" /> Années scolaires
             </TabsTrigger>
-            <TabsTrigger value="configuration" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">
+            <TabsTrigger value="configuration" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <Settings className="w-4 h-4 hidden sm:block" /> Configuration
             </TabsTrigger>
-            <TabsTrigger value="synchronisation" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-amber-400">
+            <TabsTrigger value="synchronisation" className="gap-1.5 text-xs sm:text-sm rounded-lg font-bold data-[state=active]:bg-[#0c241f] data-[state=active]:text-amber-400">
               <RefreshCw className="w-4 h-4 hidden sm:block" /> Synchronisation
             </TabsTrigger>
           </TabsList>
@@ -384,7 +384,7 @@ export default function ParametresPage() {
           <TabsContent value="identite">
             <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
               <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                <CardTitle className="text-sm font-bold text-[#1e3a8a] flex items-center gap-2">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
                   <Palette className="w-5 h-5 text-amber-600" /> Identité Visuelle & Couleurs
                 </CardTitle>
               </CardHeader>
@@ -404,7 +404,7 @@ export default function ParametresPage() {
                       />
                       <div
                         onClick={() => logoInputRef.current?.click()}
-                        className="border-2 border-dashed border-stone-300 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-[#1e3a8a] transition-colors cursor-pointer bg-stone-50/50 mt-1"
+                        className="border-2 border-dashed border-stone-300 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-[#0c241f] transition-colors cursor-pointer bg-stone-50/50 mt-1"
                       >
                         {identiteForm.logo ? (
                           <div className="flex flex-col items-center gap-3">
@@ -448,7 +448,7 @@ export default function ParametresPage() {
                             onClick={() => setLogoPosition(val)}
                             className={`flex-1 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
                               logoPosition === val
-                                ? 'border-[#1e3a8a] bg-blue-50 text-[#1e3a8a] shadow-sm'
+                                ? 'border-[#0c241f] bg-emerald-50 text-[#0c241f] shadow-sm'
                                 : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50'
                             }`}
                           >
@@ -462,7 +462,7 @@ export default function ParametresPage() {
                       <Label htmlFor="couleurPrimaire" className="text-xs font-semibold text-stone-600">Couleur thématique principale</Label>
                       <div className="flex items-center gap-3 mt-1">
                         <input id="couleurPrimaire" type="color" value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-14 h-10 rounded-xl cursor-pointer border border-stone-200 bg-transparent p-1" />
-                        <Input value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-36 font-mono font-bold rounded-xl border-stone-200" placeholder="#1e3a8a" />
+                        <Input value={identiteForm.couleurPrimaire} onChange={(e) => setIdentiteForm({ ...identiteForm, couleurPrimaire: e.target.value })} className="w-36 font-mono font-bold rounded-xl border-stone-200" placeholder="#0c241f" />
                       </div>
                     </div>
                     <div>
@@ -476,7 +476,7 @@ export default function ParametresPage() {
                       </div>
                     </div>
                     <div className="flex justify-end pt-2 border-t border-stone-100">
-                      <Button onClick={saveIdentite} disabled={saving} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md gap-2">
+                      <Button onClick={saveIdentite} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md gap-2">
                         <Save className="w-4 h-4 text-amber-400" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
                       </Button>
                     </div>
@@ -490,7 +490,7 @@ export default function ParametresPage() {
           <TabsContent value="coordonnees">
             <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
               <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                <CardTitle className="text-sm font-bold text-[#1e3a8a] flex items-center gap-2">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-amber-600" /> Coordonnées Officielles
                 </CardTitle>
               </CardHeader>
@@ -503,7 +503,7 @@ export default function ParametresPage() {
                   <div className="space-y-4">
                     <div>
                       <Label htmlFor="nom-etab" className="text-xs font-semibold text-stone-600">Nom de l&apos;établissement *</Label>
-                      <Input id="nom-etab" placeholder="Ex: Complexe Scolaire AGAPE" value={contactForm.nom} onChange={(e) => setContactForm({ ...contactForm, nom: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold mt-1" />
+                      <Input id="nom-etab" placeholder="Ex: Complexe Scolaire Le Bon Berger" value={contactForm.nom} onChange={(e) => setContactForm({ ...contactForm, nom: e.target.value })} className="rounded-xl border-stone-200 bg-white font-bold mt-1" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
@@ -530,7 +530,7 @@ export default function ParametresPage() {
                       </div>
                     </div>
                     <div className="flex justify-end pt-3 border-t border-stone-100">
-                      <Button onClick={saveContact} disabled={saving} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md gap-2">
+                      <Button onClick={saveContact} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md gap-2">
                         <Save className="w-4 h-4 text-amber-400" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
                       </Button>
                     </div>
@@ -544,10 +544,10 @@ export default function ParametresPage() {
           <TabsContent value="annees">
             <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
               <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-bold text-[#1e3a8a] flex items-center gap-2">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
                   <CalendarDays className="w-5 h-5 text-amber-600" /> Années Scolaires Configuées
                 </CardTitle>
-                <Button onClick={() => setAnneeDialogOpen(true)} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl gap-2" size="sm">
+                <Button onClick={() => setAnneeDialogOpen(true)} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl gap-2" size="sm">
                   <Plus className="w-4 h-4 text-amber-400" /> Nouvelle année
                 </Button>
               </CardHeader>
@@ -561,8 +561,8 @@ export default function ParametresPage() {
                   </div>
                 ) : (
                   <Table>
-                    <TableHeader className="bg-[#1e3a8a] text-white">
-                      <TableRow className="hover:bg-[#1e3a8a]">
+                    <TableHeader className="bg-[#0c241f] text-white">
+                      <TableRow className="hover:bg-[#0c241f]">
                         <TableHead className="text-amber-300 font-bold">Année Scolaire</TableHead>
                         <TableHead className="text-white font-bold">Date Début</TableHead>
                         <TableHead className="text-white font-bold">Date Fin</TableHead>
@@ -599,7 +599,7 @@ export default function ParametresPage() {
           <TabsContent value="configuration">
             <Card className="rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
               <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                <CardTitle className="text-sm font-bold text-[#1e3a8a] flex items-center gap-2">
+                <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
                   <Settings className="w-5 h-5 text-amber-600" /> Configuration des Reçus & Impresse
                 </CardTitle>
               </CardHeader>
@@ -636,7 +636,7 @@ export default function ParametresPage() {
                       <textarea id="pied-page" className="flex min-h-[80px] w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs font-medium mt-1" placeholder="Texte affiché en bas des reçus..." value={configForm.piedPageRecu} onChange={(e) => setConfigForm({ ...configForm, piedPageRecu: e.target.value })} />
                     </div>
                     <div className="flex justify-end pt-3 border-t border-stone-100">
-                      <Button onClick={saveConfig} disabled={saving} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md gap-2">
+                      <Button onClick={saveConfig} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md gap-2">
                         <Save className="w-4 h-4 text-amber-400" /> {saving ? 'Enregistrement...' : 'Sauvegarder'}
                       </Button>
                     </div>
@@ -652,7 +652,7 @@ export default function ParametresPage() {
               {/* Configuration Column */}
               <Card className="lg:col-span-1 rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                  <CardTitle className="text-sm font-bold text-[#1e3a8a] flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
                     <Globe className="w-5 h-5 text-amber-600" /> Connexion Supabase
                   </CardTitle>
                 </CardHeader>
@@ -679,7 +679,7 @@ export default function ParametresPage() {
                   <Button
                     onClick={handleSaveSyncConfig}
                     disabled={saving || syncing}
-                    className="w-full bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl h-11 shadow-md gap-2"
+                    className="w-full bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl h-11 shadow-md gap-2"
                   >
                     <Save className="w-4 h-4 text-amber-400" /> Enregistrer les Identifiants
                   </Button>
@@ -689,7 +689,7 @@ export default function ParametresPage() {
               {/* Status and Action Column */}
               <Card className="lg:col-span-2 rounded-2xl border-stone-200/80 shadow-sm overflow-hidden">
                 <CardHeader className="bg-stone-50/50 border-b border-stone-100 px-6 py-4">
-                  <CardTitle className="text-sm font-bold text-[#1e3a8a] flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold text-[#0c241f] flex items-center gap-2">
                     <RefreshCw className="w-5 h-5 text-amber-600" /> Synchronisation Bidirectionnelle
                   </CardTitle>
                 </CardHeader>
@@ -767,11 +767,11 @@ export default function ParametresPage() {
                   {/* Sync Summary Section */}
                   {syncSummary && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                      <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5"><Database className="w-4 h-4 text-[#1e3a8a]" /> Rapport de synchronisation</h3>
+                      <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5"><Database className="w-4 h-4 text-[#0c241f]" /> Rapport de synchronisation</h3>
                       <div className="max-h-[220px] overflow-y-auto border border-stone-200 rounded-2xl overflow-hidden">
                         <Table>
-                          <TableHeader className="sticky top-0 bg-[#1e3a8a] text-white z-10">
-                            <TableRow className="hover:bg-[#1e3a8a]">
+                          <TableHeader className="sticky top-0 bg-[#0c241f] text-white z-10">
+                            <TableRow className="hover:bg-[#0c241f]">
                               <TableHead className="text-amber-300 font-bold">Table</TableHead>
                               <TableHead className="text-center text-sky-300 font-bold">Poussés ↑</TableHead>
                               <TableHead className="text-center text-emerald-300 font-bold">Rapatriés ↓</TableHead>
@@ -802,11 +802,11 @@ export default function ParametresPage() {
         <DialogContent className="max-w-md bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xl">
           <DialogHeader className="border-b border-stone-100 pb-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-[#1e3a8a] text-amber-400">
+              <div className="p-2.5 rounded-2xl bg-[#0c241f] text-amber-400">
                 <CalendarDays className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-extrabold text-[#1e3a8a]">Nouvelle année scolaire</DialogTitle>
+                <DialogTitle className="text-xl font-extrabold text-[#0c241f]">Nouvelle année scolaire</DialogTitle>
                 <p className="text-xs text-stone-500 font-medium">Définissez la période scolaire.</p>
               </div>
             </div>
@@ -828,7 +828,7 @@ export default function ParametresPage() {
             </div>
             <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
               <Button variant="outline" className="rounded-xl border-stone-200" onClick={() => setAnneeDialogOpen(false)}>Annuler</Button>
-              <Button onClick={createAnnee} disabled={saving} className="bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold rounded-xl px-6 shadow-md">
+              <Button onClick={createAnnee} disabled={saving} className="bg-[#0c241f] hover:bg-[#071916] text-white font-bold rounded-xl px-6 shadow-md">
                 {saving ? 'Création...' : 'Créer l’année'}
               </Button>
             </div>
