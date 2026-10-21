@@ -1,0 +1,230 @@
+@startuml diagramme-cas-utilisation-agape
+' ============================================================================
+'  DIAGRAMME DE CAS D'UTILISATION — SGFS-ME pour le Complexe Scolaire AGAPE
+'  Genere a partir du code reel du projet :
+'    - Roles & permissions : src/lib/store.ts, src/lib/permission.ts,
+'      src/components/sgfs/layout/Sidebar.tsx,
+'      src/components/sgfs/utilisateurs/UtilisateursPage.tsx
+'    - Pages / modules     : src/components/sgfs/*/*.tsx
+'    - Commandes Tauri     : src-tauri/src/commands/*.rs
+'  Couleur AGAPE : bleu #1e3a8a.
+' ============================================================================
+
+title **Diagramme de cas d'utilisation — SGFS-ME / Complexe Scolaire AGAPE**\n<i>Gestion financière et scolaire (desktop Tauri, SQLite local + Supabase cloud)</i>
+
+left to right direction
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 10
+
+skinparam actor {
+  BackgroundColor #DBEAFE
+  BorderColor #1E3A8A
+  FontColor #172554
+  FontStyle bold
+}
+skinparam usecase {
+  BackgroundColor #EFF6FF
+  BorderColor #1D4ED8
+  FontColor #172554
+  ArrowColor #1E3A8A
+}
+skinparam rectangle {
+  BorderColor #1E3A8A
+  FontColor #1E3A8A
+  FontStyle bold
+  RoundCorner 12
+}
+skinparam package {
+  BackgroundColor #F8FAFC
+  BorderColor #93C5FD
+  FontColor #1E3A8A
+  FontStyle bold
+}
+skinparam note {
+  BackgroundColor #FEF9C3
+  BorderColor #CA8A04
+  FontColor #713F12
+}
+skinparam legend {
+  BackgroundColor #EFF6FF
+  BorderColor #1E3A8A
+  FontColor #172554
+}
+
+legend bottom left
+  **Légende**
+  - Acteur général « Utilisateur » : regroupe le Coordonnateur et les Secrétaires
+  - <<include>> : comportement obligatoire, toujours exécuté
+  - <<extend>>  : comportement optionnel, sous condition
+  - Tous les cas (hors consultation par le parent) exigent **S'authentifier**
+endlegend
+
+' ============================================================================
+'  ACTEURS (cote gauche : personnel de l'ecole)
+' ============================================================================
+actor "Utilisateur\n<<acteur général>>" as Utilisateur
+actor "Coordonnateur\n(COORDINATEUR)" as Coordonnateur
+actor "Secrétaire\n<<acteur général>>" as Secretaire
+actor "Secrétaire\nMaternelle" as SecMaternelle
+actor "Secrétaire\nPrimaire" as SecPrimaire
+actor "Secrétaire Secondaire\n& Humanités" as SecSecondaire
+
+Coordonnateur --|> Utilisateur
+Secretaire --|> Utilisateur
+SecMaternelle --|> Secretaire
+SecPrimaire --|> Secretaire
+SecSecondaire --|> Secretaire
+
+' ============================================================================
+'  ACTEURS SECONDAIRES (cote droit : externes au logiciel)
+' ============================================================================
+actor "Parent / Tuteur" as Parent <<secondaire>>
+actor "Imprimante POS\n(reçus & rapports)" as Imprimante <<secondaire>>
+actor "WhatsApp\n(relances wa.me)" as WhatsApp <<secondaire>>
+actor "Supabase Cloud\n(PostgreSQL)" as Supabase <<secondaire>>
+
+' ============================================================================
+'  SYSTEME
+' ============================================================================
+rectangle "SGFS-ME — Complexe Scolaire AGAPE" {
+
+  package "Authentification" {
+    usecase "S'authentifier" as UC_Auth
+    usecase "Vérifier les identifiants\n(username / mot de passe)" as UC_VerifId
+  }
+
+  package "Administration (Coordonnateur uniquement)" {
+    usecase "Gérer les établissements" as UC_GerEtab
+    usecase "Gérer les années scolaires\n(créer, activer l'année en cours)" as UC_GerAnnees
+    usecase "Gérer les classes\n(Maternelle → Humanités)" as UC_GerClasses
+    usecase "Gérer les comptes utilisateurs\n(rôles, activation)" as UC_GerUsers
+    usecase "Configurer les paramètres de l'école\n(logo AGAPE, reçu, taux de change,\nimprimante, mentions légales)" as UC_Config
+    usecase "Consulter le journal d'audit" as UC_Audit
+    usecase "Configurer la synchronisation\n(URL & clé Supabase)" as UC_ConfigSync
+  }
+
+  package "Scolarité — Élèves" {
+    usecase "Inscrire un élève" as UC_Inscrire
+    usecase "Associer un tuteur à l'élève" as UC_Tuteur
+    usecase "Affecter l'élève à une classe" as UC_Affecter
+    usecase "Consulter / rechercher un élève\n(fiche, solde, historique)" as UC_ConsultEleve
+    usecase "Modifier un élève" as UC_ModEleve
+    usecase "Changer un élève de classe" as UC_ChangerClasse
+    usecase "Archiver un élève\n(statut : Transféré)" as UC_Archiver
+  }
+
+  package "Frais & Échéances" {
+    usecase "Définir les frais scolaires\n(tranches, dates d'échéance)" as UC_DefFrais
+    usecase "Affecter les frais aux classes" as UC_AffectFrais
+    usecase "Suivre les échéances et les soldes\n(par élève, par classe)" as UC_SuiviEch
+    usecase "Relancer les parents en retard\n(avis imprimé ou WhatsApp)" as UC_Relance
+  }
+
+  package "Encaissements" {
+    usecase "Encaisser un paiement\n(espèces, chèque, virement)" as UC_Encaisser
+    usecase "Mettre à jour l'échéance\n(montant payé, statut)" as UC_MajEch
+    usecase "Imprimer le reçu POS\n(n° de reçu, code-barres, logo)" as UC_ImprRecu
+    usecase "Consulter l'historique\ndes encaissements" as UC_HistoEnc
+    usecase "Annuler un reçu\n(avec motif obligatoire)" as UC_Annuler
+    usecase "Journaliser l'opération\n(audit)" as UC_Journaliser
+  }
+
+  package "Dépenses, Pilotage & Rapports" {
+    usecase "Enregistrer une dépense" as UC_Depense
+    usecase "Consulter le tableau de bord\n(effectifs, encaissements, retards)" as UC_Dashboard
+    usecase "Produire les rapports\n(financier, élèves, journalier)" as UC_Rapports
+    usecase "Exporter en Excel / Imprimer (PDF)" as UC_Export
+  }
+
+  package "Synchronisation" {
+    usecase "Synchroniser les données\navec le cloud (Push / Pull)" as UC_Sync
+  }
+}
+
+' ============================================================================
+'  ASSOCIATIONS ACTEURS -> CAS D'UTILISATION
+' ============================================================================
+' --- Cas communs a tout utilisateur authentifie ----------------------------
+Utilisateur --> UC_Auth
+Utilisateur --> UC_Inscrire
+Utilisateur --> UC_ConsultEleve
+Utilisateur --> UC_ModEleve
+Utilisateur --> UC_SuiviEch
+Utilisateur --> UC_Encaisser
+Utilisateur --> UC_HistoEnc
+Utilisateur --> UC_Depense
+Utilisateur --> UC_Dashboard
+Utilisateur --> UC_Rapports
+Utilisateur --> UC_Sync
+
+note right of Utilisateur
+  Chaque **Secrétaire** n'accède qu'à
+  son établissement et à son niveau :
+  maternelle, primaire, ou
+  secondaire & Humanités.
+  Le **Coordonnateur** voit tout AGAPE
+  (et les autres établissements).
+end note
+
+' --- Cas reserves au Coordonnateur ------------------------------------------
+Coordonnateur --> UC_GerEtab
+Coordonnateur --> UC_GerAnnees
+Coordonnateur --> UC_GerClasses
+Coordonnateur --> UC_GerUsers
+Coordonnateur --> UC_Config
+Coordonnateur --> UC_Audit
+Coordonnateur --> UC_ConfigSync
+Coordonnateur --> UC_DefFrais
+
+' --- Acteurs secondaires ------------------------------------------------------
+Parent --> UC_Encaisser : paie les frais,\nreçoit le reçu
+UC_Relance --> Parent : reçoit l'avis\nde relance
+UC_ImprRecu --> Imprimante
+UC_Relance --> Imprimante : avis papier
+UC_Relance --> WhatsApp : message\nde relance
+UC_Sync --> Supabase
+
+' ============================================================================
+'  RELATIONS <<include>> ET <<extend>>
+' ============================================================================
+UC_Auth ..> UC_VerifId : <<include>>
+
+UC_Inscrire ..> UC_Tuteur : <<include>>
+UC_Inscrire ..> UC_Affecter : <<include>>
+
+UC_DefFrais ..> UC_AffectFrais : <<include>>
+
+UC_Encaisser ..> UC_MajEch : <<include>>
+UC_Encaisser ..> UC_ImprRecu : <<include>>
+UC_Encaisser ..> UC_Journaliser : <<include>>
+
+UC_Annuler ..> UC_HistoEnc : <<extend>>\n[reçu non encore annulé]
+UC_Annuler ..> UC_Journaliser : <<include>>
+note bottom of UC_Annuler
+  L'annulation crée un **AnnulationReçu**,
+  marque le paiement « annulé » et déduit
+  le montant de l'échéance. Elle est tracée
+  dans le journal d'audit.
+end note
+
+UC_ChangerClasse ..> UC_ModEleve : <<extend>>
+UC_ChangerClasse ..> UC_Affecter : <<include>>
+UC_Archiver ..> UC_ModEleve : <<extend>>\n[départ / transfert de l'élève]
+
+UC_Relance ..> UC_SuiviEch : <<extend>>\n[échéance en retard,\nsolde restant > 0]
+
+UC_Export ..> UC_Rapports : <<extend>>
+UC_ConfigSync ..> UC_Config : <<extend>>
+
+note bottom of UC_Sync
+  Synchronisation **bidirectionnelle** :
+  Pull (cloud → SQLite) puis Push (SQLite → cloud),
+  table par table, avec réparation de cohérence.
+  Déclenchée manuellement ou automatiquement
+  à la connexion. L'application reste utilisable
+  **hors ligne** entre deux synchronisations.
+end note
+
+@enduml

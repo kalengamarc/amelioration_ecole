@@ -1,0 +1,538 @@
+@startuml diagramme-classes-agape
+' ============================================================================
+'  DIAGRAMME DE CLASSES — SGFS-ME pour le Complexe Scolaire AGAPE
+'  Genere a partir du code reel du projet :
+'    - Backend Rust/Tauri : src-tauri/src/db/models.rs, src-tauri/src/db/mod.rs
+'    - Commandes Tauri    : src-tauri/src/commands/*.rs  (methodes)
+'    - Schéma cloud       : supabase_schema.sql (Supabase / PostgreSQL)
+'  Application desktop multi-établissements ; pour AGAPE, un seul
+'  établissement de type COMPLEXE avec les niveaux :
+'  MATERNELLE, PRIMAIRE, SECONDAIRE et HUMANITE.
+'  Couleur AGAPE : bleu #1e3a8a (voir worklog.md, tache 9).
+' ============================================================================
+
+title **Diagramme de classes — SGFS-ME / Complexe Scolaire AGAPE**\n<i>Système de gestion financière et scolaire (SQLite local + Supabase cloud)</i>
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam linetype ortho
+skinparam roundcorner 8
+
+skinparam class {
+  BackgroundColor #EFF6FF
+  BorderColor #1E3A8A
+  HeaderBackgroundColor #1E3A8A
+  HeaderFontColor #FFFFFF
+  HeaderFontStyle bold
+  FontColor #172554
+  AttributeFontColor #172554
+  ArrowColor #1E3A8A
+}
+skinparam package {
+  BackgroundColor #F8FAFC
+  BorderColor #1D4ED8
+  FontColor #1E3A8A
+  FontStyle bold
+}
+skinparam enum {
+  BackgroundColor #FFFBEB
+  BorderColor #D97706
+  HeaderBackgroundColor #F59E0B
+  HeaderFontColor #FFFFFF
+}
+skinparam note {
+  BackgroundColor #FEF9C3
+  BorderColor #CA8A04
+  FontColor #713F12
+}
+skinparam legend {
+  BackgroundColor #EFF6FF
+  BorderColor #1E3A8A
+  FontColor #172554
+}
+
+legend bottom left
+  **Légende**
+  - Attribut noté « {PK} » : clé primaire (identifiant texte, CUID en base SQLite)
+  - Attribut noté « / » : valeur dérivée / calculée (ex. /montantRestant, /effectifActuel)
+  - Les clés étrangères (*_id en base) sont représentées par les associations
+  - Association en pointillés : lien dénormalisé (filtre par établissement / année,
+    recopié sur les transactions pour les rapports et la synchronisation)
+  - Classes d'association : **Inscription** (EleveClasse), **LienTuteurEleve**, **FraisClasse**
+endlegend
+
+' ============================================================================
+'  PACKAGE 1 — STRUCTURE DE L'ECOLE
+' ============================================================================
+package "Structure de l'école" {
+
+  class "Établissement" as Etablissement {
+    - id : String {PK}
+    - nom : String
+    - type : TypeEtablissement
+    - adresse : String
+    - telephone : String
+    - email : String
+    - logoUrl : String
+    - couleurPrincipale : String
+    - rccm : String
+    - idNat : String
+    - devise : String
+    - actif : Boolean
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + creer() : Etablissement
+    + modifier() : void
+    + desactiver() : void
+    + listerEtablissements() : List<Etablissement>
+  }
+
+  class "AnnéeScolaire" as AnneeScolaire {
+    - id : String {PK}
+    - libelle : String
+    - dateDebut : Date
+    - dateFin : Date
+    - active : Boolean
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + creer() : AnneeScolaire
+    + activer() : void
+    + modifier() : void
+    + supprimer() : void
+  }
+
+  class "Classe" as Classe {
+    - id : String {PK}
+    - nom : String
+    - niveau : NiveauClasse
+    - effectifMax : Integer
+    - actif : Boolean
+    - /effectifActuel : Integer
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + creer() : Classe
+    + modifier() : void
+    + supprimer() : void
+    + compterEleveesActifs() : Integer
+  }
+}
+note bottom of Etablissement
+  Entité racine du système multi-établissements.
+  Pour **AGAPE** : un établissement de type COMPLEXE
+  (logo et couleur #1e3a8a personnalisables,
+  utilisés sur le tableau de bord et les reçus).
+end note
+
+' ============================================================================
+'  PACKAGE 2 — PERSONNES
+' ============================================================================
+package "Personnes" {
+
+  class "Utilisateur" as Utilisateur {
+    - id : String {PK}
+    - username : String {unique}
+    - passwordHash : String
+    - nomComplet : String
+    - role : RoleUtilisateur
+    - actif : Boolean
+    - dernierLogin : DateTime
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + sAuthentifier() : Session
+    + creerCompte() : Utilisateur
+    + modifierCompte() : void
+    + desactiverCompte() : void
+    + estCoordinateur() : Boolean
+  }
+
+  class "Élève" as Eleve {
+    - id : String {PK}
+    - matricule : String {unique}
+    - nom : String
+    - prenom : String
+    - dateNaissance : Date
+    - lieuNaissance : String
+    - sexe : String
+    - adresse : String
+    - ecoleDeProvenance : String
+    - photoUrl : String
+    - statut : StatutEleve
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + inscrire() : Eleve
+    + modifier() : void
+    + archiver() : void
+    + changerDeClasse(nouvelleClasse : Classe) : void
+    + recupererSolde() : Decimal
+  }
+
+  class "Tuteur" as Tuteur {
+    - id : String {PK}
+    - nom : String
+    - prenom : String
+    - telephone : String
+    - telephone2 : String
+    - adresse : String
+    - profession : String
+    - relation : String
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + ajouter() : Tuteur
+    + modifier() : void
+  }
+
+  class "Inscription\n<<EleveClasse>>" as EleveClasse <<classe d'association>> {
+    - dateInscription : DateTime
+    - dateSortie : DateTime
+    - statut : StatutInscription
+    --
+    + activer() : void
+    + cloturer(dateSortie : DateTime) : void
+  }
+
+  class "LienTuteurÉlève\n<<TuteurEleve>>" as TuteurEleve <<classe d'association>> {
+    - isPrincipal : Boolean
+    - createdAt : DateTime
+  }
+}
+
+' ============================================================================
+'  PACKAGE 3 — FINANCES (FRAIS, ECHEANCES, ENCAISSEMENTS, DEPENSES)
+' ============================================================================
+package "Finances" {
+
+  class "FraisScolaire" as FraisScolaire {
+    - id : String {PK}
+    - libelle : String
+    - type : TypeFrais
+    - montant : Decimal
+    - devise : String
+    - tranche : Integer
+    - dateEcheance : Date
+    - actif : Boolean
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + definirFrais() : FraisScolaire
+    + affecterAuxClasses(classes : List<Classe>) : void
+    + modifier() : void
+    + supprimer() : void
+  }
+
+  class "FraisClasse" as FraisClasse <<classe d'association>> {
+    - createdAt : DateTime
+  }
+
+  class "Échéance" as Echeance {
+    - id : String {PK}
+    - montantDu : Decimal
+    - montantPaye : Decimal
+    - /montantRestant : Decimal
+    - statut : StatutEcheance
+    - dateEcheance : Date
+    - datePaiementComplet : DateTime
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + recalculerMontantPaye() : void
+    + calculerStatut() : StatutEcheance
+    + estEnRetard() : Boolean
+  }
+  note right of Echeance
+    Dette individuelle d'un élève pour un frais
+    donné : **UNIQUE(eleve, frais)** en base.
+    Matérialisée par élève × frais applicable
+    à sa classe ; sinon reconstruite à la volée.
+    Le statut est recalculé (EN_RETARD si
+    date dépassée et solde > 0).
+  end note
+
+  class "Paiement" as Paiement {
+    - id : String {PK}
+    - numeroRecu : String {unique}
+    - motif : String
+    - montant : Decimal
+    - devise : String
+    - montantAffecte : Decimal
+    - deviseEcheance : String
+    - modePaiement : ModePaiement
+    - referencePaiement : String
+    - tauxChange : Decimal
+    - montantOriginal : Decimal
+    - annule : Boolean
+    - dateAnnulation : DateTime
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + encaisser() : Paiement
+    + imprimerRecuPOS() : void
+    + modifier() : void
+    + annuler(motif : String) : void
+  }
+
+  class "AnnulationReçu" as AnnulationRecu {
+    - id : String {PK}
+    - motif : String
+    - dateAnnulation : DateTime
+    - createdAt : DateTime
+    --
+    + enregistrerAnnulation() : void
+  }
+
+  class "Dépense" as Depense {
+    - id : String {PK}
+    - categorie : CategorieDepense
+    - libelle : String
+    - montant : Decimal
+    - devise : String
+    - beneficiaire : String
+    - dateDepense : Date
+    - referencePiece : String
+    - justificatifUrl : String
+    - statut : StatutDepense
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + enregistrer() : Depense
+    + modifier() : void
+    + supprimer() : void
+  }
+}
+
+' ============================================================================
+'  PACKAGE 4 — ADMINISTRATION & TECHNIQUE
+' ============================================================================
+package "Administration & technique" {
+
+  class "ParamètreÉtablissement" as ParametreEtablissement {
+    - id : String {PK}
+    - mentionsLegales : String
+    - piedPageRecu : String
+    - nomImprimante : String
+    - tauxChangeUsdBif : Decimal
+    - deviseDefaut : String
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + configurer() : void
+    + definirPositionLogoRecu(position : String) : void
+  }
+
+  class "JournalAudit\n<<AuditLog>>" as AuditLog {
+    - id : String {PK}
+    - action : ActionAudit
+    - entite : String
+    - entiteId : String
+    - details : String
+    - adresseIp : String
+    - createdAt : DateTime
+    --
+    + journaliser(action, entite, details) : void
+    + consulterJournal() : List<AuditLog>
+  }
+
+  class "ConfigurationSystème\n<<ConfigSysteme>>" as ConfigSysteme {
+    - id : String {PK}
+    - cle : String {unique}
+    - valeur : String
+    - createdAt : DateTime
+    - updatedAt : DateTime
+    --
+    + lire(cle : String) : String
+    + ecrire(cle : String, valeur : String) : void
+  }
+
+  class "JournalSynchronisation\n<<SyncLog>>" as SyncLog {
+    - id : String {PK}
+    - nomTable : String
+    - derniereSynchroLe : DateTime
+    - direction : DirectionSynchro
+    - statut : String
+    - details : String
+    - createdAt : DateTime
+  }
+
+  class "ServiceSynchronisation" as ServiceSynchronisation <<service>> {
+    + pousserVersCloud() : RapportSynchro
+    + tirerDepuisCloud() : RapportSynchro
+    + synchroniser() : RapportSynchro
+    + verifierCoherence() : void
+    + propagerSuppressions() : void
+  }
+}
+
+' ============================================================================
+'  ASSOCIATIONS — structure de l'école
+' ============================================================================
+Etablissement "1" o-- "0..*" AnneeScolaire : organise >
+Etablissement "1" o-- "0..*" Classe : possède >
+AnneeScolaire "1" o-- "0..*" Classe : regroupe >
+Etablissement "1" o-- "0..*" Eleve : scolarise >
+AnneeScolaire "0..1" -- "0..*" Eleve : année en cours >
+Etablissement "0..1" -- "0..*" Utilisateur : affecte >
+
+note bottom of Utilisateur
+  Si l'établissement est vide (coordonnateur),
+  l'utilisateur accède à **toutes** les écoles ;
+  un secrétaire est limité à son établissement
+  et à son niveau (maternelle / primaire /
+  secondaire — Humanités incluses).
+end note
+
+' --- Inscriptions et tuteurs (classes d'association) ----------------------
+Eleve "0..*" -- "0..*" Classe : est inscrit dans >
+(Eleve, Classe) .. EleveClasse
+note bottom of EleveClasse
+  {contrainte} Au plus **une** inscription
+  au statut ACTIF par élève à un instant donné.
+  Un changement de classe clôt l'ancienne
+  inscription (TRANSFERE + dateSortie) et
+  en ouvre une nouvelle (ACTIF).
+end note
+
+Eleve "0..*" -- "0..*" Tuteur : est représenté par >
+(Eleve, Tuteur) .. TuteurEleve
+
+' --- Frais, échéances, encaissements --------------------------------------
+Etablissement "1" o-- "0..*" FraisScolaire : définit >
+AnneeScolaire "1" o-- "0..*" FraisScolaire : vaut pour >
+FraisScolaire "0..*" -- "0..*" Classe : s'applique à >
+(FraisScolaire, Classe) .. FraisClasse
+
+Eleve "1" o-- "0..*" Echeance : doit >
+FraisScolaire "1" o-- "0..*" Echeance : génère >
+Etablissement "1" .. "0..*" Echeance : <<FK dénormalisée>>
+AnneeScolaire "1" .. "0..*" Echeance : <<FK dénormalisée>>
+
+Eleve "1" o-- "0..*" Paiement : effectue >
+Echeance "0..1" -- "0..*" Paiement : est réglée par >
+Utilisateur "1" -- "0..*" Paiement : encaisse >
+Etablissement "1" .. "0..*" Paiement : <<FK dénormalisée>>
+AnneeScolaire "1" .. "0..*" Paiement : <<FK dénormalisée>>
+
+Paiement "1" -- "0..1" AnnulationRecu : peut être annulé par >
+Utilisateur "1" -- "0..*" AnnulationRecu : prononce >
+
+' --- Dépenses ---------------------------------------------------------------
+Etablissement "1" o-- "0..*" Depense : engage >
+AnneeScolaire "1" o-- "0..*" Depense : impute >
+Utilisateur "0..1" -- "0..*" Depense : saisit >
+
+' --- Paramètres, audit, synchronisation ------------------------------------
+Etablissement "1" -- "1" ParametreEtablissement : est configuré par >
+AnneeScolaire "0..1" -- "0..1" ParametreEtablissement : paramétrage annuel >
+Utilisateur "0..1" -- "0..*" AuditLog : déclenche >
+ServiceSynchronisation ..> SyncLog : consigne dans >
+ServiceSynchronisation ..> ConfigSysteme : lit URL / clé Supabase >
+ServiceSynchronisation ..> AuditLog : propage les suppressions >
+
+' ============================================================================
+'  ENUMERATIONS (valeurs stockees en TEXT dans SQLite / PostgreSQL)
+' ============================================================================
+package "Énumérations" {
+
+  enum "TypeÉtablissement" as TypeEtablissement {
+    MATERNELLE
+    PRIMAIRE
+    SECONDAIRE
+    HUMANITE
+    COMPLEXE
+  }
+
+  enum "NiveauClasse" as NiveauClasse {
+    MATERNELLE
+    PRIMAIRE
+    SECONDAIRE
+    HUMANITE
+  }
+
+  enum "RôleUtilisateur" as RoleUtilisateur {
+    COORDINATEUR
+    SECRETAIRE_MATERNELLE
+    SECRETAIRE_PRIMAIRE
+    SECRETAIRE_SECONDAIRE
+  }
+
+  enum "StatutÉlève" as StatutEleve {
+    INSCRIT
+    ACTIF
+    SUSPENDU
+    TRANSFERE
+  }
+
+  enum "StatutInscription" as StatutInscription {
+    ACTIF
+    SUSPENDU
+    TRANSFERE
+  }
+
+  enum "TypeFrais" as TypeFrais {
+    SCOLARITE
+    INSCRIPTION
+    ANNEXE
+  }
+
+  enum "StatutÉchéance" as StatutEcheance {
+    EN_ATTENTE
+    PARTIELLEMENT_PAYE
+    PAYE
+    EN_RETARD
+  }
+
+  enum "ModePaiement" as ModePaiement {
+    ESPECES
+    CHEQUE
+    VIREMENT
+  }
+
+  enum "CatégorieDépense" as CategorieDepense {
+    SALAIRES
+    FOURNITURES
+    REPARATIONS
+    LOYER
+    ENERGIE
+    AUTRE
+  }
+
+  enum "StatutDépense" as StatutDepense {
+    EN_ATTENTE
+    VALIDE
+    REJETE
+  }
+
+  enum "ActionAudit" as ActionAudit {
+    CREATE
+    UPDATE
+    DELETE
+    LOGIN
+    LOGOUT
+    ANNULATION
+  }
+
+  enum "DirectionSynchro" as DirectionSynchro {
+    PUSH
+    PULL
+    BIDIRECTIONAL
+  }
+}
+
+Etablissement ..> TypeEtablissement
+Classe ..> NiveauClasse
+Utilisateur ..> RoleUtilisateur
+Eleve ..> StatutEleve
+EleveClasse ..> StatutInscription
+FraisScolaire ..> TypeFrais
+Echeance ..> StatutEcheance
+Paiement ..> ModePaiement
+Depense ..> CategorieDepense
+Depense ..> StatutDepense
+AuditLog ..> ActionAudit
+SyncLog ..> DirectionSynchro
+
+@enduml
